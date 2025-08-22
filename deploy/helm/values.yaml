@@ -1,0 +1,225 @@
+# Default values for localization-app Helm chart
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  imageRegistry: "ghcr.io"
+  imagePullSecrets: []
+
+# Application configuration
+app:
+  name: localization-app
+  image:
+    repository: your-org/localization-app
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 3
+  
+  # Environment variables
+  env:
+    NODE_ENV: production
+    PORT: "3000"
+    MAX_UPLOAD_MB: "25"
+    LOG_LEVEL: info
+    
+    # Timeout configurations
+    OPENAI_TIMEOUT: "30000"
+    OPENAI_BATCH_TIMEOUT: "120000"
+    OPENAI_LONG_TIMEOUT: "300000"
+    
+    # Circuit breaker configurations
+    OPENAI_ERROR_THRESHOLD: "50"
+    OPENAI_RESET_TIMEOUT: "60000"
+    OPENAI_VOLUME_THRESHOLD: "10"
+    OPENAI_CAPACITY: "100"
+    OPENAI_CIRCUIT_BREAKER_ENABLED: "true"
+    
+    # Queue worker concurrency
+    TRANSLATION_LONG_WORKER_CONCURRENCY: "2"
+    FILE_PROCESSING_WORKER_CONCURRENCY: "1"
+    BATCH_TRANSLATION_WORKER_CONCURRENCY: "3"
+    
+    # File retention
+    DEFAULT_FILE_TTL_HOURS: "24"
+    BACKUP_RETENTION_DAYS: "30"
+
+  # Secrets (to be set via external secret management)
+  secrets:
+    openaiApiKey: ""
+    sessionSecret: ""
+    jwtSecret: ""
+    sentryDsn: ""
+    
+  # Resource limits
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 1
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+  hosts:
+    - host: your-domain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: localization-app-tls
+      hosts:
+        - your-domain.com
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Storage
+persistence:
+  uploads:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+    accessMode: ReadWriteMany
+  
+  userdb:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteMany
+  
+  backup:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+    accessMode: ReadWriteMany
+
+# Redis configuration
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
+  replica:
+    replicaCount: 1
+    persistence:
+      enabled: true
+      size: 2Gi
+
+# Monitoring
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      path: /metrics
+  grafana:
+    enabled: false
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+  egress:
+    - to: []
+
+# Pod security policy
+podSecurityPolicy:
+  enabled: false
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - localization-app
+          topologyKey: kubernetes.io/hostname

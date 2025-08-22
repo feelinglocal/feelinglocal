@@ -1,0 +1,8 @@
+# Kubernetes namespace for the localization app
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: localization-app
+  labels:
+    app: localization-app
+    environment: production

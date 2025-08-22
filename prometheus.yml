@@ -1,0 +1,55 @@
+# Prometheus configuration for monitoring localization app
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Localization App
+  - job_name: 'localization-app'
+    static_configs:
+      - targets: ['app:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Redis monitoring
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Node.js application metrics
+  - job_name: 'localization-app-detailed'
+    static_configs:
+      - targets: ['app:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    metric_relabel_configs:
+      # Keep only relevant metrics
+      - source_labels: [__name__]
+        regex: 'localization_.*'
+        action: keep
+
+  # Health check monitoring
+  - job_name: 'localization-app-health'
+    static_configs:
+      - targets: ['app:3000']
+    metrics_path: '/api/health'
+    scrape_interval: 30s
+    params:
+      format: ['prometheus']

@@ -1,0 +1,93 @@
+# Prometheus alerting rules for localization app
+groups:
+- name: localization-app
+  rules:
+  # High error rate
+  - alert: HighErrorRate
+    expr: rate(localization_http_requests_total{status_code=~"5.."}[5m]) / rate(localization_http_requests_total[5m]) > 0.05
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High error rate detected"
+      description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.route }}"
+
+  # High response time
+  - alert: HighResponseTime
+    expr: histogram_quantile(0.95, rate(localization_http_request_duration_seconds_bucket[5m])) > 2
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High response time"
+      description: "95th percentile response time is {{ $value }}s"
+
+  # Circuit breaker open
+  - alert: CircuitBreakerOpen
+    expr: localization_circuit_breaker_state == 1
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Circuit breaker is open"
+      description: "Circuit breaker {{ $labels.breaker_name }} is open"
+
+  # High queue depth
+  - alert: HighQueueDepth
+    expr: localization_queue_depth{state="waiting"} > 100
+    for: 3m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High queue depth"
+      description: "Queue {{ $labels.queue_name }} has {{ $value }} waiting jobs"
+
+  # Failed jobs
+  - alert: HighJobFailureRate
+    expr: rate(localization_jobs_processed_total{status="failed"}[5m]) / rate(localization_jobs_processed_total[5m]) > 0.1
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High job failure rate"
+      description: "Job failure rate is {{ $value | humanizePercentage }} in queue {{ $labels.queue_name }}"
+
+  # Application down
+  - alert: ApplicationDown
+    expr: up{job="localization-app"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Application is down"
+      description: "Localization app instance {{ $labels.instance }} is down"
+
+  # High memory usage
+  - alert: HighMemoryUsage
+    expr: (process_resident_memory_bytes / process_virtual_memory_max_bytes) > 0.9
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High memory usage"
+      description: "Memory usage is {{ $value | humanizePercentage }}"
+
+  # Redis down
+  - alert: RedisDown
+    expr: up{job="redis"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Redis is down"
+      description: "Redis instance is not responding"
+
+  # High OpenAI timeout rate
+  - alert: HighOpenAITimeoutRate
+    expr: rate(localization_circuit_breaker_calls_total{breaker_name=~"openai:.*",result="timeout"}[5m]) / rate(localization_circuit_breaker_calls_total{breaker_name=~"openai:.*"}[5m]) > 0.1
+    for: 3m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High OpenAI timeout rate"
+      description: "OpenAI timeout rate is {{ $value | humanizePercentage }}"

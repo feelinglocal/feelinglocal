@@ -1,0 +1,68 @@
+# Persistent Volume Claims for the localization app
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: localization-app-uploads
+  namespace: localization-app
+  labels:
+    app: localization-app
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteMany  # Multiple pods need access
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard  # Replace with your storage class
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: localization-app-userdb
+  namespace: localization-app
+  labels:
+    app: localization-app
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: localization-app-backup
+  namespace: localization-app
+  labels:
+    app: localization-app
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard
+
+---
+# Redis persistent storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: localization-app
+  labels:
+    app: redis
+    component: cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: standard
