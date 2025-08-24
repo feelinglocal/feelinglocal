@@ -70,6 +70,7 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-local": "^1.0.0",
     "passport-microsoft": "^2.1.0",
+    "jose": "^5.9.3",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.17.1",
     "pino": "^9.9.0",
