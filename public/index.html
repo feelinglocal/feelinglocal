@@ -6,7 +6,13 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
     const SUPABASE_URL = 'https://tqdmrzcnnciatviwogpa.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxZG1yemNubmNpYXR2aXdvZ3BhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMTM1MDcsImV4cCI6MjA3MTU4OTUwN30.I1D_7G9rshIHeA82VQ0Q-GD7oC3ovypkas7LG3FTDbo';
-    window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
 
     // Keep auth token/user in localStorage so existing fetches work
     supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -18,7 +24,46 @@
       } : null;
       if (token) localStorage.setItem('authToken', token); else localStorage.removeItem('authToken');
       if (user) localStorage.setItem('user', JSON.stringify(user)); else localStorage.removeItem('user');
+      // Fetch server-side profile to get authoritative tier
+      try{
+        if (token) {
+          const res = await fetch('/api/profile', { headers: { 'Authorization': `Bearer ${token}` } });
+          if (res.ok) {
+            const p = await res.json();
+            const u = JSON.parse(localStorage.getItem('user')||'{}');
+            u.tier = p.tier || u.tier; localStorage.setItem('user', JSON.stringify(u));
+            // refresh UI and phrasebook
+            renderAuthHeader();
+            try{ if (typeof renderSavedPhrasebookAll==='function') await renderSavedPhrasebookAll(); }catch{}
+          }
+        }
+      }catch(e){ console.warn('profile fetch failed', e); }
     });
+
+    // On initial load, recover session immediately (covers OAuth redirect)
+    (async () => {
+      try{
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          const user = session.user ? {
+            id: session.user.id,
+            email: session.user.email,
+            name: (session.user.user_metadata && session.user.user_metadata.name) ? session.user.user_metadata.name : (session.user.email||'').split('@')[0]
+          } : null;
+          localStorage.setItem('authToken', token);
+          if (user) localStorage.setItem('user', JSON.stringify(user));
+          try{
+            const res = await fetch('/api/profile', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (res.ok) {
+              const p = await res.json();
+              const u = JSON.parse(localStorage.getItem('user')||'{}');
+              u.tier = p.tier || u.tier; localStorage.setItem('user', JSON.stringify(u));
+            }
+          }catch{}
+        }
+      }catch{}
+    })();
 
     window.getAuthToken = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -401,6 +446,8 @@
         </button>
         <!-- New Tab button moved here (next to language) -->
         <button id="addTextTabBtn" class="btn" title="New tab" data-i18n="new_tab">New Tab</button>
+        <!-- Tier badge -->
+        <span id="tierBadge" class="btn" style="display:none; background:#eef3ff; color:#1e40af; border-color:#c7d2fe"></span>
         <!-- Auth: Sign in (Supabase) / Sign out -->
         <button id="signInBtn" class="btn" type="button">Sign in</button>
         <button id="signOutBtnTop" class="btn" type="button" style="display:none">Sign out</button>
@@ -4061,7 +4108,7 @@ ${lines.join('\n')}`);
     const authGoogle = document.getElementById('authGoogle');
     if (authGoogle) authGoogle.addEventListener('click', async ()=>{
       try{
-        const redirectTo = location.origin;
+        const redirectTo = location.origin.replace(/\/$/,'') + '/';
         const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
         if (error) throw error;
       }catch(e){ console.error('Google sign-in failed', e); showToast('Google sign-in failed'); }
@@ -4092,12 +4139,21 @@ ${lines.join('\n')}`);
     function renderAuthHeader(){
       try{
         const hasToken = !!localStorage.getItem('authToken');
+        const u = JSON.parse(localStorage.getItem('user')||'{}');
+        const badge = document.getElementById('tierBadge');
         if (hasToken){
           if (signInBtn) signInBtn.style.display='none';
           if (signOutBtnTop) signOutBtnTop.style.display='inline-block';
+          // Optionally reflect tier in title tooltip
+          if (signOutBtnTop && u.tier) signOutBtnTop.title = `Tier: ${u.tier}`;
+          if (badge){
+            if (u.tier){ badge.style.display='inline-block'; badge.textContent = String(u.tier).toUpperCase(); }
+            else { badge.style.display='none'; }
+          }
         } else {
           if (signOutBtnTop) signOutBtnTop.style.display='none';
           if (signInBtn) signInBtn.style.display='inline-block';
+          if (badge) badge.style.display='none';
         }
       }catch{}
     }

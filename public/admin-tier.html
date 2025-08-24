@@ -36,7 +36,11 @@
     const headers = { 'Content-Type': 'application/json' };
     if (adminKey) headers['x-admin-key'] = adminKey;
     try{
-      const res = await fetch('/admin/profile/tier', { method:'POST', headers, body: JSON.stringify({ email, userId, tier }) });
+      // Try primary path, then /api prefix if the first fails
+      let res = await fetch('/admin/profile/tier', { method:'POST', headers, body: JSON.stringify({ email, userId, tier }) });
+      if (!res.ok && res.status === 404) {
+        res = await fetch('/api/admin/profile/tier', { method:'POST', headers, body: JSON.stringify({ email, userId, tier }) });
+      }
       const ct = (res.headers.get('content-type') || '').toLowerCase();
       let payload;
       if (ct.includes('application/json')) payload = await res.json();
