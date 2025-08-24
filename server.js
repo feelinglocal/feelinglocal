@@ -4868,20 +4868,29 @@ function getUID(req){ return req.headers['x-uid'] || req.query.uid || 'anon'; }
 app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
-    if (prisma) {
-      const rows = await prisma.$queryRaw`select id, src_text, tgt_text, src_lang, tgt_lang, extract(epoch from created_at)*1000 as created_ms from public.phrasebook_items where user_id = ${userId} order by created_at desc`;
+    // Prefer Supabase REST with service role to avoid RLS issues on direct PG
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/phrasebook_items`);
+      url.searchParams.set('user_id', `eq.${userId}`);
+      url.searchParams.set('select', 'id,src_text,tgt_text,src_lang,tgt_lang,created_at');
+      url.searchParams.set('order', 'created_at.desc');
+      const r = await fetch(url.toString(), {
+        headers: {
+          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
+        }
+      });
+      if (!r.ok) throw new Error(`supabase rest list ${r.status}`);
+      const rows = await r.json();
       const items = (rows||[]).map(r=>({
-        id: String(r.id),
-        srcLang: String(r.src_lang||''),
-        tgtLang: String(r.tgt_lang||''),
-        srcText: String(r.src_text||''),
-        tgtText: String(r.tgt_text||''),
-        createdAt: Number(r.created_ms)||Date.now()
+        id: String(r.id), srcLang: r.src_lang||'', tgtLang: r.tgt_lang||'', srcText: r.src_text||'', tgtText: r.tgt_text||'', createdAt: new Date(r.created_at).getTime()||Date.now()
       }));
       return res.json({ items });
     }
-    const data = pbRead(userId);
-    return res.json({ items: Array.isArray(data.items)?data.items:[] });
+    // Fallback to PG (dev/local)
+    const rows = await prisma.$queryRaw`select id, src_text, tgt_text, src_lang, tgt_lang, extract(epoch from created_at)*1000 as created_ms from public.phrasebook_items where user_id = ${userId} order by created_at desc`;
+    const items = (rows||[]).map(r=>({ id: String(r.id), srcLang: String(r.src_lang||''), tgtLang: String(r.tgt_lang||''), srcText: String(r.src_text||''), tgtText: String(r.tgt_text||''), createdAt: Number(r.created_ms)||Date.now() }));
+    return res.json({ items });
   }catch(e){ console.error('pb list', e?.message||e); res.status(500).json({ items: [] }); }
 });
 
@@ -4890,11 +4899,27 @@ app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), asyn
     const userId = req.user?.id || getUID(req);
     const it = req.body?.item || {};
     if(!it) return res.status(400).json({ ok:false, error:'Bad item.' });
-    if (prisma) {
-      const rows = await prisma.$queryRaw`insert into public.phrasebook_items (user_id, src_text, tgt_text, src_lang, tgt_lang) values (${userId}, ${String(it.srcText||'')}, ${String(it.tgtText||'')}, ${String(it.srcLang||'Auto')}, ${String(it.tgtLang||'')}) returning id, extract(epoch from created_at)*1000 as created_ms`;
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const url = `${process.env.SUPABASE_URL}/rest/v1/phrasebook_items`;
+      const r = await fetch(url, {
+        method:'POST',
+        headers: {
+          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type':'application/json',
+          'Prefer':'return=representation'
+        },
+        body: JSON.stringify({ user_id: userId, src_text: String(it.srcText||''), tgt_text: String(it.tgtText||''), src_lang: String(it.srcLang||'Auto'), tgt_lang: String(it.tgtLang||'') })
+      });
+      if (!r.ok) throw new Error(`supabase rest insert ${r.status}`);
+      const rows = await r.json();
       const created = Array.isArray(rows)&&rows[0]?rows[0]:{};
-      return res.json({ ok:true, id: String(created.id||''), createdAt: Number(created.created_ms)||Date.now() });
+      return res.json({ ok:true, id: String(created.id||''), createdAt: new Date(created.created_at||Date.now()).getTime() });
     }
+    // Fallback PG
+    const rows = await prisma.$queryRaw`insert into public.phrasebook_items (user_id, src_text, tgt_text, src_lang, tgt_lang) values (${userId}, ${String(it.srcText||'')}, ${String(it.tgtText||'')}, ${String(it.srcLang||'Auto')}, ${String(it.tgtLang||'')}) returning id, extract(epoch from created_at)*1000 as created_ms`;
+    const created = Array.isArray(rows)&&rows[0]?rows[0]:{};
+    return res.json({ ok:true, id: String(created.id||''), createdAt: Number(created.created_ms)||Date.now() });
     const data = pbRead(userId);
     data.items = Array.isArray(data.items)?data.items:[];
     const withId = it.id ? it : { ...it, id: 'pb_'+Date.now().toString(36)+Math.random().toString(36).slice(2) };
