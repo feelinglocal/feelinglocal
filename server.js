@@ -164,13 +164,19 @@ try {
 }
 
 // Ensure a profile row exists for the authenticated user (defaults tier to 'free')
-function ensureProfile(req, res, next) {
+async function ensureProfile(req, res, next) {
   if (!prisma || !req.user?.id) return next();
-  prisma.profiles.upsert({
-    where: { id: req.user.id },
-    update: {},
-    create: { id: req.user.id, name: req.user.email || null, tier: 'free' }
-  }).then(() => next()).catch((e) => { console.warn('ensureProfile', e?.message || e); next(); });
+  try {
+    await prisma.$executeRawUnsafe(
+      'insert into public.profiles (id, name, tier) values ($1, $2, $3) on conflict (id) do nothing',
+      req.user.id,
+      req.user.email || null,
+      'free'
+    );
+  } catch (e) {
+    console.warn('ensureProfile', e?.message || e);
+  }
+  next();
 }
 
 // Usage metering: upsert monthly aggregates if Prisma is available
@@ -5051,9 +5057,10 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
 app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
   try {
     if (!prisma) return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: 'free' });
-    const row = await prisma.profiles.findUnique({ where: { id: req.user.id } });
-    res.json({ id: req.user.id, email: req.user.email || null, tier: row?.tier || 'free' });
-  } catch (e) { console.error('profile', e); res.status(500).json({ error: 'Failed to get profile' }); }
+    const rows = await prisma.$queryRawUnsafe('select tier from public.profiles where id = $1 limit 1', req.user.id);
+    const tier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier) : 'free';
+    res.json({ id: req.user.id, email: req.user.email || null, tier });
+  } catch (e) { console.error('profile', e?.message || e); res.status(500).json({ error: 'Failed to get profile' }); }
 });
 // Lightweight helper UI for setting tier (GET in browser)
 app.get('/admin/profile/tier', (req, res) => {
