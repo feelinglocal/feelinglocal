@@ -2,6 +2,29 @@
 <html lang="en">
 <head>
   <script src="localization-client.js"></script>
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+    const SUPABASE_URL = 'https://tqdmrzcnnciatviwogpa.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxZG1yemNubmNpYXR2aXdvZ3BhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMTM1MDcsImV4cCI6MjA3MTU4OTUwN30.I1D_7G9rshIHeA82VQ0Q-GD7oC3ovypkas7LG3FTDbo';
+    window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Keep auth token/user in localStorage so existing fetches work
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      const token = session?.access_token || '';
+      const user = session?.user ? {
+        id: session.user.id,
+        email: session.user.email,
+        name: (session.user.user_metadata && session.user.user_metadata.name) ? session.user.user_metadata.name : (session.user.email||'').split('@')[0]
+      } : null;
+      if (token) localStorage.setItem('authToken', token); else localStorage.removeItem('authToken');
+      if (user) localStorage.setItem('user', JSON.stringify(user)); else localStorage.removeItem('user');
+    });
+
+    window.getAuthToken = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.access_token || '';
+    };
+  </script>
   <meta charset="UTF-8" />
   <title>AI Localization Prototype</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -349,9 +372,10 @@
         <button id="authClose" class="btn" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
-        <div style="display:flex;gap:8px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
           <button id="authTabLogin" class="btn" style="flex:1;background:#111;color:#fff">Login</button>
           <button id="authTabRegister" class="btn" style="flex:1">Register</button>
+          <button id="authGoogle" class="btn" style="flex:1;min-width:220px">Continue with Google</button>
         </div>
         <form id="authForm" style="display:grid;gap:8px">
           <input id="authName" placeholder="Full name" style="display:none;padding:10px;border:1px solid var(--border);border-radius:10px" />
@@ -377,9 +401,9 @@
         </button>
         <!-- New Tab button moved here (next to language) -->
         <button id="addTextTabBtn" class="btn" title="New tab" data-i18n="new_tab">New Tab</button>
-        <!-- Auth: Sign in (production) / Quick Login (localhost only) -->
+        <!-- Auth: Sign in (Supabase) / Sign out -->
+        <button id="signInBtn" class="btn" type="button">Sign in</button>
         <button id="signOutBtnTop" class="btn" type="button" style="display:none">Sign out</button>
-        <button id="quickLoginBtn" class="btn" title="Quick Login (Admin)" style="background:#ef4444;color:white;display:none">🔑 Login</button>
       </div>
     </div>
 
@@ -3510,7 +3534,9 @@ ${lines.join('\n')}`);
 
   /* ---------- Phrasebook (server-backed “Saved”) ---------- */
   async function pbAPI(path, method='GET', body=null){
-    const headers={'Content-Type':'application/json','X-UID':getUID(),'Cache-Control':'no-cache'};
+    const headers={'Content-Type':'application/json','Cache-Control':'no-cache'};
+    const token = localStorage.getItem('authToken');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(path,{method,headers,body:body?JSON.stringify(body):undefined});
     if(!res.ok) throw new Error('PB '+res.status);
     return await res.json();
@@ -4025,7 +4051,21 @@ ${lines.join('\n')}`);
       setTimeout(()=>authEmail.focus(),0);
     }
     function closeAuth(){ authModal.style.display='none'; }
-    if (signInBtn) signInBtn.addEventListener('click', ()=>openAuth('login'));
+    if (signInBtn) signInBtn.addEventListener('click', async ()=>{
+      try{
+        openAuth('login');
+      }catch(e){ console.error(e); }
+    });
+
+    // Google button inside modal
+    const authGoogle = document.getElementById('authGoogle');
+    if (authGoogle) authGoogle.addEventListener('click', async ()=>{
+      try{
+        const redirectTo = location.origin;
+        const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+        if (error) throw error;
+      }catch(e){ console.error('Google sign-in failed', e); showToast('Google sign-in failed'); }
+    });
     if (authClose) authClose.addEventListener('click', closeAuth);
     if (authTabLogin) authTabLogin.addEventListener('click', ()=>openAuth('login'));
     if (authTabRegister) authTabRegister.addEventListener('click', ()=>openAuth('register'));
@@ -4038,14 +4078,11 @@ ${lines.join('\n')}`);
       const name = authName.style.display==='none' ? undefined : authName.value.trim();
       try{
         if (name) {
-          const r = await fetch('/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,name,tier:'team'})});
-          if(!r.ok) throw new Error((await r.json()).error||'Register failed');
+          const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, tier: 'team' } } });
+          if (error) throw error;
         }
-        const res = await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
-        const d = await res.json();
-        if(!res.ok || !d.token) throw new Error(d.error||'Login failed');
-        localStorage.setItem('authToken', d.token);
-        localStorage.setItem('user', JSON.stringify(d.user||{}));
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
         closeAuth();
         location.reload();
       }catch(err){ authMsg.textContent=err.message||String(err); }
@@ -4054,9 +4091,8 @@ ${lines.join('\n')}`);
     // Render header auth state
     function renderAuthHeader(){
       try{
-        const user = JSON.parse(localStorage.getItem('user')||'null');
         const hasToken = !!localStorage.getItem('authToken');
-        if (user && hasToken){
+        if (hasToken){
           if (signInBtn) signInBtn.style.display='none';
           if (signOutBtnTop) signOutBtnTop.style.display='inline-block';
         } else {
@@ -4068,7 +4104,8 @@ ${lines.join('\n')}`);
     renderAuthHeader();
 
     // Sign out (top button)
-    if (signOutBtnTop) signOutBtnTop.addEventListener('click',()=>{
+    if (signOutBtnTop) signOutBtnTop.addEventListener('click',async ()=>{
+      try{ await supabase.auth.signOut(); }catch{}
       localStorage.removeItem('authToken');
       localStorage.removeItem('user');
       renderAuthHeader();

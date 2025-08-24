@@ -153,6 +153,55 @@ const { initTranslationMemory, translationMemory, translationMemoryMiddleware } 
   translationMemoryMiddleware: (req, res, next) => { req.tm = {}; next(); }
 });
 
+// Prisma Client (optional at startup; load if available)
+let prisma = null;
+try {
+  const { PrismaClient } = require('@prisma/client');
+  prisma = new PrismaClient();
+  console.log('✅ Prisma client initialized');
+} catch (e) {
+  console.warn('⚠️ Prisma client not initialized yet (will use JSON fallback for phrasebook).');
+}
+
+// Ensure a profile row exists for the authenticated user (defaults tier to 'free')
+function ensureProfile(req, res, next) {
+  if (!prisma || !req.user?.id) return next();
+  prisma.profiles.upsert({
+    where: { id: req.user.id },
+    update: {},
+    create: { id: req.user.id, name: req.user.email || null, tier: 'free' }
+  }).then(() => next()).catch((e) => { console.warn('ensureProfile', e?.message || e); next(); });
+}
+
+// Usage metering: upsert monthly aggregates if Prisma is available
+function monthStartISO(date = new Date()) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+async function updateMonthlyUsage({ userId, requests = 1, inputChars = 0, outputChars = 0 }) {
+  if (!prisma || !userId) return; // quietly skip if not available
+  try {
+    const month = monthStartISO();
+    const inputTokens = Math.ceil((inputChars || 0) / CHARS_PER_TOKEN);
+    const outputTokens = Math.ceil((outputChars || 0) / CHARS_PER_TOKEN);
+
+    // Use raw SQL to avoid depending on generated model/compound unique naming
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO public.usage_monthly (user_id, month, requests, input_tokens, output_tokens)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, month)
+       DO UPDATE SET
+         requests = usage_monthly.requests + EXCLUDED.requests,
+         input_tokens = usage_monthly.input_tokens + EXCLUDED.input_tokens,
+         output_tokens = usage_monthly.output_tokens + EXCLUDED.output_tokens`,
+      userId, month, requests, inputTokens, outputTokens
+    );
+  } catch (e) {
+    console.warn('usage_monthly upsert failed (non-fatal):', e?.message || e);
+  }
+}
+
 // Environment variables with defaults
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -304,12 +353,14 @@ initializeM5Services();
 // Initialize Advanced Features  
 initializeAdvancedFeatures();
 
-// Migrate existing phrasebooks (delayed to ensure database is ready)
-setTimeout(() => {
-  PhrasebookService.migrateJsonPhrasebooks().catch(err => {
-    log.error('Phrasebook migration failed', { error: err.message });
-  });
-}, 2000); // Wait 2 seconds for database to be fully ready
+// Optional: migrate legacy local JSON phrasebooks (disabled by default)
+if (process.env.MIGRATE_LEGACY_PB === 'true') {
+  setTimeout(() => {
+    PhrasebookService.migrateJsonPhrasebooks().catch(err => {
+      log.error('Phrasebook migration failed', { error: err.message });
+    });
+  }, 2000);
+}
 
 log.info('Application starting', {
   nodeEnv: NODE_ENV,
@@ -4386,6 +4437,7 @@ app.post('/api/download-zip',
 /** ------------------------- API: translate ------------------------- */
 // Apply authentication (either JWT or API key), rate limiting, quota, and input validation
 app.post('/api/translate', 
+  ensureProfile,
   (req, res, next) => {
     // Development bypass if enabled
     if (NODE_ENV === 'development' && process.env.DEV_AUTH_BYPASS === 'true') {
@@ -4431,6 +4483,7 @@ app.post('/api/translate',
     
     // Record usage for analytics and quota tracking
     await recordUsage(req, 'translate', 0, text.length + clean.length);
+    try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: text.length, outputChars: clean.length }); } catch {}
     
     // Record observability metrics
     recordMetrics.translation('single', mode, targetLanguage, req.user?.tier || 'anonymous', true, text.length + clean.length);
@@ -4647,6 +4700,7 @@ async function callOpenAIWithRetry({ messages, temperature }) {
 }
 
 app.post('/api/translate-batch',
+  ensureProfile,
   (req, res, next) => {
     // Development bypass if enabled
     if (NODE_ENV === 'development' && process.env.DEV_AUTH_BYPASS === 'true') {
@@ -4725,8 +4779,10 @@ app.post('/api/translate-batch',
     }
 
     // Record usage for analytics and quota tracking
-    const totalChars = items.join('').length + results.join('').length;
+    const inputChars = items.join('').length; const outputChars = results.join('').length;
+    const totalChars = inputChars + outputChars;
     await recordUsage(req, 'translate-batch', 0, totalChars);
+    try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars, outputChars }); } catch {}
     
     // Record observability metrics
     recordMetrics.translation('batch', mode, targetLanguage, req.user?.tier || 'anonymous', true, totalChars);
@@ -4808,31 +4864,142 @@ function pbRead(uid){
 function pbWrite(uid, data){ try { fs.writeFileSync(pbPath(uid), JSON.stringify(data||{items:[]}), 'utf8'); } catch(e){ console.error('pb save', e); } }
 function getUID(req){ return req.headers['x-uid'] || req.query.uid || 'anon'; }
 
-app.get('/api/phrasebook', (req,res)=>{
-  const uid = getUID(req);
-  const data = pbRead(uid);
-  res.json({ items: Array.isArray(data.items)?data.items:[] });
+app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
+  try{
+    const userId = req.user?.id || getUID(req);
+    if (prisma) {
+      const rows = await prisma.phrasebook_items.findMany({
+        where: { user_id: userId },
+        orderBy: { created_at: 'desc' }
+      });
+      const items = rows.map(r=>({
+        id: r.id,
+        srcLang: r.src_lang,
+        tgtLang: r.tgt_lang,
+        srcText: r.src_text,
+        tgtText: r.tgt_text,
+        createdAt: r.created_at?.getTime?.() || Date.now()
+      }));
+      return res.json({ items });
+    }
+    // Fallback to JSON store if Prisma unavailable
+    const data = pbRead(userId);
+    return res.json({ items: Array.isArray(data.items)?data.items:[] });
+  }catch(e){ console.error('pb list', e); res.status(500).json({ items: [] }); }
 });
 
-app.post('/api/phrasebook/add', express.json(), (req,res)=>{
-  const uid = getUID(req);
-  const data = pbRead(uid);
-  const it = req.body?.item || {};
-  if(!it || !it.id) return res.status(400).json({ ok:false, error:'Bad item.' });
-  data.items = Array.isArray(data.items)?data.items:[];
-  data.items.unshift(it);
-  pbWrite(uid, data);
-  res.json({ ok:true });
+app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), async (req,res)=>{
+  try{
+    const userId = req.user?.id || getUID(req);
+    const it = req.body?.item || {};
+    if(!it) return res.status(400).json({ ok:false, error:'Bad item.' });
+    if (prisma) {
+      const created = await prisma.phrasebook_items.create({ data: {
+        user_id: userId,
+        src_text: String(it.srcText||''),
+        tgt_text: String(it.tgtText||''),
+        src_lang: String(it.srcLang||'Auto'),
+        tgt_lang: String(it.tgtLang||'')
+      }});
+      return res.json({ ok:true, id: created.id, createdAt: created.created_at });
+    }
+    // Fallback JSON
+    const data = pbRead(userId);
+    data.items = Array.isArray(data.items)?data.items:[];
+    const withId = it.id ? it : { ...it, id: 'pb_'+Date.now().toString(36)+Math.random().toString(36).slice(2) };
+    data.items.unshift(withId);
+    pbWrite(userId, data);
+    res.json({ ok:true, id: withId.id });
+  }catch(e){ console.error('pb add', e); res.status(500).json({ ok:false }); }
 });
 
-app.post('/api/phrasebook/delete', express.json(), (req,res)=>{
-  const uid = getUID(req);
-  const id = req.body?.id;
-  if(!id) return res.status(400).json({ ok:false, error:'Missing id.' });
-  const data = pbRead(uid);
-  data.items = (data.items||[]).filter(x=>String(x.id)!==String(id));
-  pbWrite(uid, data);
-  res.json({ ok:true });
+app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), async (req,res)=>{
+  try{
+    const userId = req.user?.id || getUID(req);
+    const id = req.body?.id;
+    if(!id) return res.status(400).json({ ok:false, error:'Missing id.' });
+    if (prisma) {
+      const result = await prisma.phrasebook_items.deleteMany({ where: { id, user_id: userId } });
+      if (result.count === 0) return res.status(404).json({ ok:false, error:'Not found' });
+      return res.json({ ok:true });
+    }
+    const data = pbRead(userId);
+    data.items = (data.items||[]).filter(x=>String(x.id)!==String(id));
+    pbWrite(userId, data);
+    res.json({ ok:true });
+  }catch(e){ console.error('pb del', e); res.status(500).json({ ok:false }); }
+});
+
+/** ------------------------- API: Brand Kits ------------------------- */
+app.get('/api/brand-kits', requireAuth, ensureProfile, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!prisma) return res.json({ items: [] });
+    const rows = await prisma.brand_kits.findMany({ where: { user_id: userId }, orderBy: { created_at: 'desc' } });
+    res.json({ items: rows });
+  } catch (e) { console.error('brand list', e); res.status(500).json({ items: [] }); }
+});
+
+app.post('/api/brand-kits', requireAuth, ensureProfile, express.json(), async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!prisma) return res.status(503).json({ ok:false, error:'DB unavailable' });
+    const { name = 'My Brand', tone = [], forbidden_words = [], style_notes = '' } = req.body || {};
+    const row = await prisma.brand_kits.create({ data: { user_id: userId, name, tone, forbidden_words, style_notes } });
+    res.json({ ok:true, item: row });
+  } catch (e) { console.error('brand create', e); res.status(500).json({ ok:false }); }
+});
+
+app.put('/api/brand-kits/:id', requireAuth, ensureProfile, express.json(), async (req, res) => {
+  try {
+    const userId = req.user?.id; const id = req.params.id;
+    if (!prisma) return res.status(503).json({ ok:false });
+    const { name, tone, forbidden_words, style_notes } = req.body || {};
+    const row = await prisma.brand_kits.update({ where: { id }, data: { name, tone, forbidden_words, style_notes } });
+    res.json({ ok:true, item: row });
+  } catch (e) { console.error('brand update', e); res.status(500).json({ ok:false }); }
+});
+
+app.delete('/api/brand-kits/:id', requireAuth, ensureProfile, async (req, res) => {
+  try { if (!prisma) return res.status(503).json({ ok:false }); await prisma.brand_kits.delete({ where: { id: req.params.id } }); res.json({ ok:true }); }
+  catch (e) { console.error('brand delete', e); res.status(500).json({ ok:false }); }
+});
+
+/** ------------------------- API: Glossary ------------------------- */
+app.get('/api/glossary', requireAuth, ensureProfile, async (req, res) => {
+  try { const userId = req.user?.id; if (!prisma) return res.json({ items: [] }); const rows = await prisma.glossary_terms.findMany({ where: { user_id: userId }, orderBy: { created_at: 'desc' } }); res.json({ items: rows }); }
+  catch (e) { console.error('gloss list', e); res.status(500).json({ items: [] }); }
+});
+
+app.post('/api/glossary', requireAuth, ensureProfile, express.json(), async (req, res) => {
+  try {
+    if (!prisma) return res.status(503).json({ ok:false });
+    const userId = req.user?.id; const { src = '', tgt = '', lock = false, case_hint = null } = req.body || {};
+    const row = await prisma.glossary_terms.create({ data: { user_id: userId, src, tgt, lock, case_hint } });
+    res.json({ ok:true, item: row });
+  } catch (e) { console.error('gloss create', e); res.status(500).json({ ok:false }); }
+});
+
+app.put('/api/glossary/:id', requireAuth, ensureProfile, express.json(), async (req, res) => {
+  try { if (!prisma) return res.status(503).json({ ok:false }); const { src, tgt, lock, case_hint } = req.body || {}; const row = await prisma.glossary_terms.update({ where: { id: req.params.id }, data: { src, tgt, lock, case_hint } }); res.json({ ok:true, item: row }); }
+  catch (e) { console.error('gloss update', e); res.status(500).json({ ok:false }); }
+});
+
+app.delete('/api/glossary/:id', requireAuth, ensureProfile, async (req, res) => {
+  try { if (!prisma) return res.status(503).json({ ok:false }); await prisma.glossary_terms.delete({ where: { id: req.params.id } }); res.json({ ok:true }); }
+  catch (e) { console.error('gloss delete', e); res.status(500).json({ ok:false }); }
+});
+
+/** ------------------------- API: Usage (monthly) ------------------------- */
+app.get('/api/usage/monthly', requireAuth, ensureProfile, async (req, res) => {
+  try {
+    const userId = req.user?.id; if (!prisma) return res.json({ items: [] });
+    const rows = await prisma.$queryRawUnsafe(
+      'SELECT month, requests, input_tokens, output_tokens FROM public.usage_monthly WHERE user_id = $1 ORDER BY month DESC LIMIT 12',
+      userId
+    );
+    res.json({ items: rows });
+  } catch (e) { console.error('usage monthly', e); res.status(500).json({ items: [] }); }
 });
 
 
