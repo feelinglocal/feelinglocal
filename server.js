@@ -4934,10 +4934,24 @@ app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), a
     const userId = req.user?.id || getUID(req);
     const id = req.body?.id;
     if(!id) return res.status(400).json({ ok:false, error:'Missing id.' });
-    if (prisma) {
-      const result = await prisma.$executeRaw`delete from public.phrasebook_items where id = ${id} and user_id = ${userId}`;
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/phrasebook_items`);
+      url.searchParams.set('id', `eq.${id}`);
+      url.searchParams.set('user_id', `eq.${userId}`);
+      const r = await fetch(url.toString(), {
+        method: 'DELETE',
+        headers: {
+          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Prefer': 'return=minimal'
+        }
+      });
+      if (!r.ok) throw new Error(`supabase rest delete ${r.status}`);
       return res.json({ ok:true });
     }
+    // Fallback PG (dev)
+    const result = await prisma.$executeRaw`delete from public.phrasebook_items where id = ${id} and user_id = ${userId}`;
+    return res.json({ ok:true });
     const data = pbRead(userId);
     data.items = (data.items||[]).filter(x=>String(x.id)!==String(id));
     pbWrite(userId, data);
