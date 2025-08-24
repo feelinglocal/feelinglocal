@@ -4963,6 +4963,16 @@ app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), a
 app.get('/api/brand-kits', requireAuth, ensureProfile, async (req, res) => {
   try {
     const userId = req.user?.id;
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/brand_kits`);
+      url.searchParams.set('user_id', `eq.${userId}`);
+      url.searchParams.set('select', '*');
+      url.searchParams.set('order', 'created_at.desc');
+      const r = await fetch(url.toString(), { headers: { 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` } });
+      if (!r.ok) throw new Error(`supabase rest list ${r.status}`);
+      const rows = await r.json();
+      return res.json({ items: rows });
+    }
     if (!prisma) return res.json({ items: [] });
     const rows = await prisma.brand_kits.findMany({ where: { user_id: userId }, orderBy: { created_at: 'desc' } });
     res.json({ items: rows });
@@ -4972,8 +4982,19 @@ app.get('/api/brand-kits', requireAuth, ensureProfile, async (req, res) => {
 app.post('/api/brand-kits', requireAuth, ensureProfile, express.json(), async (req, res) => {
   try {
     const userId = req.user?.id;
-    if (!prisma) return res.status(503).json({ ok:false, error:'DB unavailable' });
     const { name = 'My Brand', tone = [], forbidden_words = [], style_notes = '' } = req.body || {};
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const url = `${process.env.SUPABASE_URL}/rest/v1/brand_kits`;
+      const r = await fetch(url, {
+        method:'POST',
+        headers:{ 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type':'application/json', 'Prefer':'return=representation' },
+        body: JSON.stringify({ user_id: userId, name, tone, forbidden_words, style_notes })
+      });
+      if (!r.ok) throw new Error(`supabase rest create ${r.status}`);
+      const rows = await r.json();
+      return res.json({ ok:true, item: Array.isArray(rows)&&rows[0]?rows[0]:rows });
+    }
+    if (!prisma) return res.status(503).json({ ok:false, error:'DB unavailable' });
     const row = await prisma.brand_kits.create({ data: { user_id: userId, name, tone, forbidden_words, style_notes } });
     res.json({ ok:true, item: row });
   } catch (e) { console.error('brand create', e); res.status(500).json({ ok:false }); }
@@ -4982,16 +5003,41 @@ app.post('/api/brand-kits', requireAuth, ensureProfile, express.json(), async (r
 app.put('/api/brand-kits/:id', requireAuth, ensureProfile, express.json(), async (req, res) => {
   try {
     const userId = req.user?.id; const id = req.params.id;
-    if (!prisma) return res.status(503).json({ ok:false });
     const { name, tone, forbidden_words, style_notes } = req.body || {};
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/brand_kits`);
+      url.searchParams.set('id', `eq.${id}`);
+      url.searchParams.set('user_id', `eq.${userId}`);
+      const r = await fetch(url.toString(), {
+        method:'PATCH',
+        headers:{ 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type':'application/json', 'Prefer':'return=representation' },
+        body: JSON.stringify({ name, tone, forbidden_words, style_notes })
+      });
+      if (!r.ok) throw new Error(`supabase rest update ${r.status}`);
+      const rows = await r.json();
+      return res.json({ ok:true, item: Array.isArray(rows)&&rows[0]?rows[0]:rows });
+    }
+    if (!prisma) return res.status(503).json({ ok:false });
     const row = await prisma.brand_kits.update({ where: { id }, data: { name, tone, forbidden_words, style_notes } });
     res.json({ ok:true, item: row });
   } catch (e) { console.error('brand update', e); res.status(500).json({ ok:false }); }
 });
 
 app.delete('/api/brand-kits/:id', requireAuth, ensureProfile, async (req, res) => {
-  try { if (!prisma) return res.status(503).json({ ok:false }); await prisma.brand_kits.delete({ where: { id: req.params.id } }); res.json({ ok:true }); }
-  catch (e) { console.error('brand delete', e); res.status(500).json({ ok:false }); }
+  try {
+    const userId = req.user?.id; const id = req.params.id;
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/brand_kits`);
+      url.searchParams.set('id', `eq.${id}`);
+      url.searchParams.set('user_id', `eq.${userId}`);
+      const r = await fetch(url.toString(), { method:'DELETE', headers:{ 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'Prefer':'return=minimal' } });
+      if (!r.ok) throw new Error(`supabase rest delete ${r.status}`);
+      return res.json({ ok:true });
+    }
+    if (!prisma) return res.status(503).json({ ok:false });
+    await prisma.brand_kits.delete({ where: { id } });
+    res.json({ ok:true });
+  } catch (e) { console.error('brand delete', e); res.status(500).json({ ok:false }); }
 });
 
 /** ------------------------- API: Glossary ------------------------- */
