@@ -78,18 +78,27 @@ function verifyToken(token) {
 
 // Verify a Supabase JWT using the project's JWKS (robust for production)
 async function verifySupabaseJWT(accessToken) {
+  if (!SUPABASE_URL) return null;
+  // 1) Try RS256 (JWKS) verification first
   try {
-    if (!SUPABASE_URL) return null;
     const { createRemoteJWKSet, jwtVerify } = await import('jose');
     const jwks = createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/keys`));
     const { payload } = await jwtVerify(accessToken, jwks, { algorithms: ['RS256'] });
-    // Normalize shape similar to /auth/v1/user response subset
-    return {
-      id: payload.sub,
-      email: payload.email || payload.user_email || null,
-      user_metadata: payload.user_metadata || {}
-    };
-  } catch (error) {
+    return { id: payload.sub, email: payload.email || payload.user_email || null, user_metadata: payload.user_metadata || {} };
+  } catch (e) {
+    // Fall through to HTTP introspection
+  }
+
+  // 2) Fallback: call Supabase Auth user endpoint with SRK/ANON apikey
+  try {
+    const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'apikey': apiKey }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.id ? data : null;
+  } catch (e2) {
     return null;
   }
 }
