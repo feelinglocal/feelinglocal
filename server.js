@@ -5002,6 +5002,85 @@ app.get('/api/usage/monthly', requireAuth, ensureProfile, async (req, res) => {
   } catch (e) { console.error('usage monthly', e); res.status(500).json({ items: [] }); }
 });
 
+/** ------------------------- Admin: Profile Tier ------------------------- */
+app.post('/admin/profile/tier', express.json(), async (req, res) => {
+  try {
+    const isDev = NODE_ENV !== 'production';
+    const hasAdminKey = req.headers['x-admin-key'] === process.env.ADMIN_KEY;
+    if (!isDev && !hasAdminKey) return res.status(403).json({ error: 'Admin access required' });
+
+    if (!prisma) return res.status(503).json({ error: 'DB unavailable' });
+    const { userId, email, tier } = req.body || {};
+    const allowed = ['free','pro','team'];
+    if (!tier || !allowed.includes(String(tier).toLowerCase())) {
+      return res.status(400).json({ error: `Invalid tier. One of ${allowed.join(', ')}` });
+    }
+
+    // Resolve user id by email if provided
+    let id = userId;
+    if (!id && email) {
+      const row = await prisma.users.findFirst({ where: { email } });
+      if (!row) return res.status(404).json({ error: 'User not found' });
+      id = row.id;
+    }
+    if (!id) return res.status(400).json({ error: 'userId or email required' });
+
+    await prisma.profiles.upsert({
+      where: { id },
+      update: { tier: tier.toLowerCase() },
+      create: { id, tier: tier.toLowerCase() }
+    });
+
+    res.json({ ok:true, userId: id, tier: tier.toLowerCase() });
+  } catch (e) {
+    console.error('admin set tier', e);
+    res.status(500).json({ error: 'Failed to set tier' });
+  }
+});
+
+// Lightweight helper UI for setting tier (GET in browser)
+app.get('/admin/profile/tier', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.end(`<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin: Set User Tier</title>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;line-height:1.5}label{display:block;margin:.5rem 0 .25rem}input,select,button{padding:.5rem .6rem;border:1px solid #ddd;border-radius:8px}button{cursor:pointer;background:#111;color:#fff}pre{background:#f7f7f7;padding:12px;border-radius:8px;white-space:pre-wrap}</style>
+<h2>Admin: Set User Tier</h2>
+<p>POST helper for <code>/admin/profile/tier</code>. In production you must provide your <code>x-admin-key</code>.</p>
+<div>
+  <label>Email (optional)</label>
+  <input id="email" placeholder="user@example.com" style="min-width:320px" />
+  <label>User ID (optional if email set)</label>
+  <input id="userId" placeholder="auth user id (uuid)" style="min-width:320px" />
+  <label>Tier</label>
+  <select id="tier">
+    <option value="free">free</option>
+    <option value="pro">pro</option>
+    <option value="team">team</option>
+  </select>
+  <label>Admin Key (required in production)</label>
+  <input id="adminKey" placeholder="ADMIN_KEY" style="min-width:320px" />
+  <div style="margin-top:12px"><button id="go">Update Tier</button></div>
+  <h4>Result</h4>
+  <pre id="out">(no request yet)</pre>
+</div>
+<script>
+  document.getElementById('go').addEventListener('click', async () => {
+    const email = document.getElementById('email').value.trim();
+    const userId = document.getElementById('userId').value.trim();
+    const tier = document.getElementById('tier').value;
+    const adminKey = document.getElementById('adminKey').value.trim();
+    const headers = { 'Content-Type': 'application/json' };
+    if (adminKey) headers['x-admin-key'] = adminKey;
+    try{
+      const res = await fetch(location.pathname, { method:'POST', headers, body: JSON.stringify({ email, userId, tier }) });
+      const data = await res.json();
+      document.getElementById('out').textContent = JSON.stringify(data, null, 2);
+    }catch(e){ document.getElementById('out').textContent = 'Error: ' + (e.message||e); }
+  });
+</script>`);
+});
+
 
 // Add Sentry error handler (must be before other error handlers)
 if (sentry) {

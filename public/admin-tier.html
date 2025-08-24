@@ -1,0 +1,49 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin: Set User Tier</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;line-height:1.5}
+  label{display:block;margin:.5rem 0 .25rem}
+  input,select,button{padding:.5rem .6rem;border:1px solid #ddd;border-radius:8px}
+  button{cursor:pointer;background:#111;color:#fff}
+  pre{background:#f7f7f7;padding:12px;border-radius:8px;white-space:pre-wrap}
+</style>
+<h2>Admin: Set User Tier</h2>
+<p>This posts to <code>/admin/profile/tier</code>. In production include your <code>x-admin-key</code>.</p>
+<div>
+  <label>Email (optional)</label>
+  <input id="email" placeholder="user@example.com" style="min-width:320px" />
+  <label>User ID (optional if email set)</label>
+  <input id="userId" placeholder="auth user id (uuid)" style="min-width:320px" />
+  <label>Tier</label>
+  <select id="tier">
+    <option value="free">free</option>
+    <option value="pro">pro</option>
+    <option value="team">team</option>
+  </select>
+  <label>Admin Key (required in production)</label>
+  <input id="adminKey" placeholder="ADMIN_KEY" style="min-width:320px" />
+  <div style="margin-top:12px"><button id="go">Update Tier</button></div>
+  <h4>Result</h4>
+  <pre id="out">(no request yet)</pre>
+</div>
+<script>
+  document.getElementById('go').addEventListener('click', async () => {
+    const email = document.getElementById('email').value.trim();
+    const userId = document.getElementById('userId').value.trim();
+    const tier = document.getElementById('tier').value;
+    const adminKey = document.getElementById('adminKey').value.trim();
+    const headers = { 'Content-Type': 'application/json' };
+    if (adminKey) headers['x-admin-key'] = adminKey;
+    try{
+      const res = await fetch('/admin/profile/tier', { method:'POST', headers, body: JSON.stringify({ email, userId, tier }) });
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      let payload;
+      if (ct.includes('application/json')) payload = await res.json();
+      else payload = await res.text();
+      document.getElementById('out').textContent = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+    }catch(e){ document.getElementById('out').textContent = 'Error: ' + (e.message||e); }
+  });
+</script>
+
+
