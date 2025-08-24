@@ -10,6 +10,10 @@ const db = require('./database');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
+// Supabase configuration (browser uses ANON KEY; server uses URL + ANON to introspect tokens)
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+
 // Tier configurations
 const TIERS = {
   free: {
@@ -67,6 +71,24 @@ function generateToken(user) {
 function verifyToken(token) {
   try {
     return jwt.verify(token, JWT_SECRET);
+  } catch (error) {
+    return null;
+  }
+}
+
+// Verify a Supabase JWT using the project's JWKS (robust for production)
+async function verifySupabaseJWT(accessToken) {
+  try {
+    if (!SUPABASE_URL) return null;
+    const { createRemoteJWKSet, jwtVerify } = await import('jose');
+    const jwks = createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/keys`));
+    const { payload } = await jwtVerify(accessToken, jwks, { algorithms: ['RS256'] });
+    // Normalize shape similar to /auth/v1/user response subset
+    return {
+      id: payload.sub,
+      email: payload.email || payload.user_email || null,
+      user_metadata: payload.user_metadata || {}
+    };
   } catch (error) {
     return null;
   }
@@ -146,20 +168,32 @@ passport.deserializeUser(async (id, done) => {
 });
 
 // Authentication middleware
-const requireAuth = (req, res, next) => {
+const requireAuth = async (req, res, next) => {
   const token = req.headers.authorization?.replace('Bearer ', '') || req.session?.token;
   
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
+  // 1) Try local JWT (legacy)
   const decoded = verifyToken(token);
-  if (!decoded) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+  if (decoded) {
+    req.user = decoded;
+    return next();
   }
 
-  req.user = decoded;
-  next();
+  // 2) Try Supabase JWT introspection
+  const supaUser = await verifySupabaseJWT(token);
+  if (supaUser && supaUser.id) {
+    req.user = {
+      id: supaUser.id,
+      email: supaUser.email,
+      tier: (supaUser.user_metadata && supaUser.user_metadata.tier) ? supaUser.user_metadata.tier : 'team' // default high tier for beta
+    };
+    return next();
+  }
+
+  return res.status(401).json({ error: 'Invalid or expired token' });
 };
 
 // API Key authentication middleware
