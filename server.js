@@ -167,12 +167,7 @@ try {
 async function ensureProfile(req, res, next) {
   if (!prisma || !req.user?.id) return next();
   try {
-    await prisma.$executeRawUnsafe(
-      'insert into public.profiles (id, name, tier) values ($1, $2, $3) on conflict (id) do nothing',
-      req.user.id,
-      req.user.email || null,
-      'free'
-    );
+    await prisma.$executeRaw`insert into public.profiles (id, name, tier) values (${req.user.id}, ${req.user.email || null}, 'free') on conflict (id) do nothing`;
   } catch (e) {
     console.warn('ensureProfile', e?.message || e);
   }
@@ -4874,10 +4869,7 @@ app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
     if (prisma) {
-      const rows = await prisma.$queryRawUnsafe(
-        'select id, src_text, tgt_text, src_lang, tgt_lang, extract(epoch from created_at)*1000 as created_ms from public.phrasebook_items where user_id = $1 order by created_at desc',
-        userId
-      );
+      const rows = await prisma.$queryRaw`select id, src_text, tgt_text, src_lang, tgt_lang, extract(epoch from created_at)*1000 as created_ms from public.phrasebook_items where user_id = ${userId} order by created_at desc`;
       const items = (rows||[]).map(r=>({
         id: String(r.id),
         srcLang: String(r.src_lang||''),
@@ -4899,14 +4891,7 @@ app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), asyn
     const it = req.body?.item || {};
     if(!it) return res.status(400).json({ ok:false, error:'Bad item.' });
     if (prisma) {
-      const rows = await prisma.$queryRawUnsafe(
-        'insert into public.phrasebook_items (user_id, src_text, tgt_text, src_lang, tgt_lang) values ($1,$2,$3,$4,$5) returning id, extract(epoch from created_at)*1000 as created_ms',
-        userId,
-        String(it.srcText||''),
-        String(it.tgtText||''),
-        String(it.srcLang||'Auto'),
-        String(it.tgtLang||'')
-      );
+      const rows = await prisma.$queryRaw`insert into public.phrasebook_items (user_id, src_text, tgt_text, src_lang, tgt_lang) values (${userId}, ${String(it.srcText||'')}, ${String(it.tgtText||'')}, ${String(it.srcLang||'Auto')}, ${String(it.tgtLang||'')}) returning id, extract(epoch from created_at)*1000 as created_ms`;
       const created = Array.isArray(rows)&&rows[0]?rows[0]:{};
       return res.json({ ok:true, id: String(created.id||''), createdAt: Number(created.created_ms)||Date.now() });
     }
@@ -4925,7 +4910,7 @@ app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), a
     const id = req.body?.id;
     if(!id) return res.status(400).json({ ok:false, error:'Missing id.' });
     if (prisma) {
-      const result = await prisma.$executeRawUnsafe('delete from public.phrasebook_items where id = $1 and user_id = $2', id, userId);
+      const result = await prisma.$executeRaw`delete from public.phrasebook_items where id = ${id} and user_id = ${userId}`;
       return res.json({ ok:true });
     }
     const data = pbRead(userId);
