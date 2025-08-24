@@ -3585,7 +3585,12 @@ ${lines.join('\n')}`);
     const token = localStorage.getItem('authToken');
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(path,{method,headers,body:body?JSON.stringify(body):undefined});
-    if(!res.ok) throw new Error('PB '+res.status);
+    if(!res.ok){
+      let detail='';
+      try{ detail = await res.text(); }catch{}
+      console.error('Phrasebook API failure', method, path, res.status, detail);
+      throw new Error('PB '+res.status);
+    }
     return await res.json();
   }
   // Cache for phrasebook data to reduce server calls
