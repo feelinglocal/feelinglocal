@@ -5016,12 +5016,21 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
       return res.status(400).json({ error: `Invalid tier. One of ${allowed.join(', ')}` });
     }
 
-    // Resolve user id by email if provided
+    // Resolve user id
     let id = userId;
     if (!id && email) {
-      const row = await prisma.users.findFirst({ where: { email } });
-      if (!row) return res.status(404).json({ error: 'User not found' });
-      id = row.id;
+      // Prefer Supabase Admin API (works without direct auth.users permission)
+      const SUPABASE_URL = process.env.SUPABASE_URL;
+      const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!SUPABASE_URL || !SRK) return res.status(500).json({ error: 'Missing Supabase service credentials' });
+      const q = new URL(`${SUPABASE_URL}/auth/v1/admin/users`);
+      q.searchParams.set('email', email);
+      const r = await fetch(q.toString(), { headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
+      if (!r.ok) return res.status(404).json({ error: 'User not found' });
+      const list = await r.json();
+      const u = Array.isArray(list?.users) ? list.users[0] : Array.isArray(list) ? list[0] : list;
+      if (!u?.id) return res.status(404).json({ error: 'User not found' });
+      id = u.id;
     }
     if (!id) return res.status(400).json({ error: 'userId or email required' });
 
@@ -5038,6 +5047,14 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
   }
 });
 
+/** ------------------------- API: Profile ------------------------- */
+app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
+  try {
+    if (!prisma) return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: 'free' });
+    const row = await prisma.profiles.findUnique({ where: { id: req.user.id } });
+    res.json({ id: req.user.id, email: req.user.email || null, tier: row?.tier || 'free' });
+  } catch (e) { console.error('profile', e); res.status(500).json({ error: 'Failed to get profile' }); }
+});
 // Lightweight helper UI for setting tier (GET in browser)
 app.get('/admin/profile/tier', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -5079,6 +5096,39 @@ app.get('/admin/profile/tier', (req, res) => {
     }catch(e){ document.getElementById('out').textContent = 'Error: ' + (e.message||e); }
   });
 </script>`);
+});
+
+// Duplicate endpoints under /api prefix (some environments only expose /api/*)
+app.post('/api/admin/profile/tier', express.json(), async (req, res) => {
+  try {
+    const isDev = NODE_ENV !== 'production';
+    const hasAdminKey = req.headers['x-admin-key'] === process.env.ADMIN_KEY;
+    if (!isDev && !hasAdminKey) return res.status(403).json({ error: 'Admin access required' });
+
+    if (!prisma) return res.status(503).json({ error: 'DB unavailable' });
+    const { userId, email, tier } = req.body || {};
+    const allowed = ['free','pro','team'];
+    if (!tier || !allowed.includes(String(tier).toLowerCase())) {
+      return res.status(400).json({ error: `Invalid tier. One of ${allowed.join(', ')}` });
+    }
+    let id = userId;
+    if (!id && email) {
+      const SUPABASE_URL = process.env.SUPABASE_URL;
+      const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!SUPABASE_URL || !SRK) return res.status(500).json({ error: 'Missing Supabase service credentials' });
+      const q = new URL(`${SUPABASE_URL}/auth/v1/admin/users`);
+      q.searchParams.set('email', email);
+      const r = await fetch(q.toString(), { headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
+      if (!r.ok) return res.status(404).json({ error: 'User not found' });
+      const list = await r.json();
+      const u = Array.isArray(list?.users) ? list.users[0] : Array.isArray(list) ? list[0] : list;
+      if (!u?.id) return res.status(404).json({ error: 'User not found' });
+      id = u.id;
+    }
+    if (!id) return res.status(400).json({ error: 'userId or email required' });
+    await prisma.profiles.upsert({ where: { id }, update: { tier: tier.toLowerCase() }, create: { id, tier: tier.toLowerCase() } });
+    res.json({ ok:true, userId: id, tier: tier.toLowerCase() });
+  } catch (e) { console.error('api admin set tier', e); res.status(500).json({ error: 'Failed to set tier' }); }
 });
 
 
