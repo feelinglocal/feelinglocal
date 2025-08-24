@@ -3097,7 +3097,8 @@ window.STYLE_MICROCOPY = {
     });
 
     // Save/reset
-    wrap.querySelector('#bpSave').addEventListener('click',e=>{
+    wrap.querySelector('#bpSave').addEventListener('click', async (e)=>{
+      const btn = e.currentTarget;
       const next={
         name: wrap.querySelector('#bpName').value.trim(),
         tone: Array.from(toneWrap.querySelectorAll('.tone-chip.active')).map(x=>x.dataset.val),
@@ -3106,11 +3107,34 @@ window.STYLE_MICROCOPY = {
         examples: wrap.querySelector('#bpExamples').value.trim(),
         enabled: brandEnabled
       };
+      // Persist locally
       writeJSON(BRAND_KEY,next);
-      // subtle confirmation
-      e.currentTarget.classList.add('flash-save');
-      e.currentTarget.textContent='Saved ✓';
-      setTimeout(()=>{ e.currentTarget.classList.remove('flash-save'); e.currentTarget.textContent='Save'; },900);
+      // Optimistic flash
+      if (btn) { btn.classList.add('flash-save'); btn.textContent='Saved ✓'; }
+      setTimeout(()=>{ if(btn && btn.classList){ btn.classList.remove('flash-save'); btn.textContent='Save'; } },900);
+
+      // Sync to server (upsert first kit for this user)
+      try{
+        const headers = { 'Content-Type':'application/json' };
+        const token = localStorage.getItem('authToken');
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const payload = {
+          name: next.name || 'My Brand',
+          tone: next.tone || [],
+          forbidden_words: (next.dontList||'').split(/[\n,]+/).map(s=>s.trim()).filter(Boolean),
+          style_notes: JSON.stringify({ audience: next.audience||'', examples: next.examples||'', enabled: !!next.enabled })
+        };
+        const list = await fetch('/api/brand-kits', { headers });
+        if (list.ok){
+          const data = await list.json();
+          const exist = (data.items||[])[0];
+          if (exist && exist.id){
+            await fetch(`/api/brand-kits/${exist.id}`, { method:'PUT', headers, body: JSON.stringify(payload) });
+          } else {
+            await fetch('/api/brand-kits', { method:'POST', headers, body: JSON.stringify(payload) });
+          }
+        }
+      }catch(err){ console.warn('Brand kit sync failed', err); }
     });
     wrap.querySelector('#bpReset').addEventListener('click',()=>{
       // Clear all form fields
