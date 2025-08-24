@@ -4874,24 +4874,23 @@ app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
     if (prisma) {
-      const rows = await prisma.phrasebook_items.findMany({
-        where: { user_id: userId },
-        orderBy: { created_at: 'desc' }
-      });
-      const items = rows.map(r=>({
-        id: r.id,
-        srcLang: r.src_lang,
-        tgtLang: r.tgt_lang,
-        srcText: r.src_text,
-        tgtText: r.tgt_text,
-        createdAt: r.created_at?.getTime?.() || Date.now()
+      const rows = await prisma.$queryRawUnsafe(
+        'select id, src_text, tgt_text, src_lang, tgt_lang, extract(epoch from created_at)*1000 as created_ms from public.phrasebook_items where user_id = $1 order by created_at desc',
+        userId
+      );
+      const items = (rows||[]).map(r=>({
+        id: String(r.id),
+        srcLang: String(r.src_lang||''),
+        tgtLang: String(r.tgt_lang||''),
+        srcText: String(r.src_text||''),
+        tgtText: String(r.tgt_text||''),
+        createdAt: Number(r.created_ms)||Date.now()
       }));
       return res.json({ items });
     }
-    // Fallback to JSON store if Prisma unavailable
     const data = pbRead(userId);
     return res.json({ items: Array.isArray(data.items)?data.items:[] });
-  }catch(e){ console.error('pb list', e); res.status(500).json({ items: [] }); }
+  }catch(e){ console.error('pb list', e?.message||e); res.status(500).json({ items: [] }); }
 });
 
 app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), async (req,res)=>{
@@ -4900,23 +4899,24 @@ app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), asyn
     const it = req.body?.item || {};
     if(!it) return res.status(400).json({ ok:false, error:'Bad item.' });
     if (prisma) {
-      const created = await prisma.phrasebook_items.create({ data: {
-        user_id: userId,
-        src_text: String(it.srcText||''),
-        tgt_text: String(it.tgtText||''),
-        src_lang: String(it.srcLang||'Auto'),
-        tgt_lang: String(it.tgtLang||'')
-      }});
-      return res.json({ ok:true, id: created.id, createdAt: created.created_at });
+      const rows = await prisma.$queryRawUnsafe(
+        'insert into public.phrasebook_items (user_id, src_text, tgt_text, src_lang, tgt_lang) values ($1,$2,$3,$4,$5) returning id, extract(epoch from created_at)*1000 as created_ms',
+        userId,
+        String(it.srcText||''),
+        String(it.tgtText||''),
+        String(it.srcLang||'Auto'),
+        String(it.tgtLang||'')
+      );
+      const created = Array.isArray(rows)&&rows[0]?rows[0]:{};
+      return res.json({ ok:true, id: String(created.id||''), createdAt: Number(created.created_ms)||Date.now() });
     }
-    // Fallback JSON
     const data = pbRead(userId);
     data.items = Array.isArray(data.items)?data.items:[];
     const withId = it.id ? it : { ...it, id: 'pb_'+Date.now().toString(36)+Math.random().toString(36).slice(2) };
     data.items.unshift(withId);
     pbWrite(userId, data);
     res.json({ ok:true, id: withId.id });
-  }catch(e){ console.error('pb add', e); res.status(500).json({ ok:false }); }
+  }catch(e){ console.error('pb add', e?.message||e); res.status(500).json({ ok:false }); }
 });
 
 app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), async (req,res)=>{
@@ -4925,15 +4925,14 @@ app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), a
     const id = req.body?.id;
     if(!id) return res.status(400).json({ ok:false, error:'Missing id.' });
     if (prisma) {
-      const result = await prisma.phrasebook_items.deleteMany({ where: { id, user_id: userId } });
-      if (result.count === 0) return res.status(404).json({ ok:false, error:'Not found' });
+      const result = await prisma.$executeRawUnsafe('delete from public.phrasebook_items where id = $1 and user_id = $2', id, userId);
       return res.json({ ok:true });
     }
     const data = pbRead(userId);
     data.items = (data.items||[]).filter(x=>String(x.id)!==String(id));
     pbWrite(userId, data);
     res.json({ ok:true });
-  }catch(e){ console.error('pb del', e); res.status(500).json({ ok:false }); }
+  }catch(e){ console.error('pb del', e?.message||e); res.status(500).json({ ok:false }); }
 });
 
 /** ------------------------- API: Brand Kits ------------------------- */
