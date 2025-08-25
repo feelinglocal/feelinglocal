@@ -203,9 +203,10 @@
     html,body{height:100%}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,system-ui,sans-serif;color:var(--text);background:radial-gradient(80% 100% at 50% -20%,#fff 0,#f6f7fb 60%,var(--bg) 100%)}
     .shell{max-width:1100px;margin:28px auto 48px;padding:0 20px}
-    .titlebar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .titlebar{display:flex;align-items:center;justify-content:space-between;gap:12px; position:relative; z-index:20}
     .title{font-weight:700;letter-spacing:.2px;font-size:28px;margin:6px 0 18px}
-    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .toolbar{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+    .toolbar-row{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
     .btn{appearance:none;border:1px solid var(--border);background:#fafafa;padding:9px 14px;border-radius:12px;font-size:14px;letter-spacing:.2px;transition:transform .12s var(--ease),box-shadow .12s var(--ease),background .12s,border-color .12s,opacity .12s;box-shadow:var(--shadow-soft);user-select:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:36px; transition:
     transform .12s var(--ease),
     box-shadow .18s var(--ease),
@@ -615,31 +616,40 @@
     <div class="titlebar">
       <div class="title" data-i18n="title">AI Localization Prototype</div>
       <div class="toolbar">
-        <button id="toggleSplit" class="btn" type="button" disabled data-i18n="split_view">Split View</button>
-        <button id="clearHl" class="btn" type="button" disabled data-i18n="clear_highlights">Clear Highlights</button>
-        <button id="uiLangBtn" class="btn face-btn" aria-haspopup="dialog" aria-expanded="false" title="Change language">
+        <div class="toolbar-row" id="toolbarRow1">
+          <!-- Row 1 order: New Tab, History (injected), Language, Sign in -->
+          <button id="addTextTabBtn" class="btn" title="New tab" data-i18n="new_tab">New Tab</button>
+          <!-- History button will be injected before Language -->
+          <button id="uiLangBtn" class="btn face-btn" aria-haspopup="dialog" aria-expanded="false" title="Change language">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a12 12 0 0 1 0 18M12 3a12 12 0 0 0 0 18"></path></svg>
           <span>En</span>
-        </button>
-        <!-- New Tab button moved here (next to language) -->
-        <button id="addTextTabBtn" class="btn" title="New tab" data-i18n="new_tab">New Tab</button>
-        <!-- Tier badge -->
-        <span id="tierBadge" class="btn" style="display:none; background:#eef3ff; color:#1e40af; border-color:#c7d2fe"></span>
-        
-        <!-- Character limit indicator -->
-        <div id="charLimitIndicator" class="char-limit-indicator" style="display:none;">
-          <div class="char-limit-content">
-            <div class="char-limit-text">
-              <span id="charUsed">0</span>/<span id="charLimit">1000</span>
-            </div>
-            <div class="char-limit-bar">
-              <div id="charProgress" class="char-limit-progress"></div>
+          </button>
+          <button id="signInBtn" class="btn" type="button">Sign in</button>
+          <button id="signOutBtnTop" class="btn" type="button" style="display:none">Sign out</button>
+        </div>
+        <div class="toolbar-row" id="toolbarRow2">
+          <!-- Row 2 order: Split View, Brand Kit, Advanced Tools, Usage Meter -->
+          <button id="toggleSplit" class="btn" type="button" disabled data-i18n="split_view">Split View</button>
+          
+          <!-- Compact Usage Meter (end of row 2) -->
+          <div id="usageMini" class="usage-mini" role="button" aria-expanded="false" tabindex="0" aria-label="Monthly usage">
+          <div class="usage-mini-main">
+            <span id="usageMiniLabel" class="usage-mini-label">0 / 1,000</span>
+            <div class="usage-mini-track" aria-hidden="true">
+              <div id="usageMiniBar" class="usage-mini-bar"></div>
             </div>
           </div>
+          <div id="usageMiniDropdown" class="usage-mini-dropdown" aria-hidden="true">
+            <div class="usage-mini-panel scrollable">
+              <div class="usage-mini-left">
+                <div id="usageMiniPlan" class="usage-mini-plan">Free</div>
+                <div class="usage-mini-reset">Resets <span id="usageMiniReset">—</span></div>
+              </div>
+              <div class="usage-mini-right"><span id="usageMiniPct" class="usage-mini-pct">0.0</span><span class="usage-mini-suffix">% used</span></div>
+            </div>
+          </div>
+          </div>
         </div>
-        <!-- Auth: Sign in (Supabase) / Sign out -->
-        <button id="signInBtn" class="btn" type="button">Sign in</button>
-        <button id="signOutBtnTop" class="btn" type="button" style="display:none">Sign out</button>
       </div>
     </div>
 
@@ -1880,7 +1890,7 @@ window.STYLE_MICROCOPY = {
     const CLOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6l4 2"></path></svg>';
 
     function injectHistoryButton(){
-      const tb=document.querySelector('.toolbar');
+      const tb=document.querySelector('#toolbarRow1');
       if(!tb || document.getElementById('historyBtn')) return;
       const btn=document.createElement('button');
       btn.id='historyBtn';
@@ -1888,7 +1898,9 @@ window.STYLE_MICROCOPY = {
       btn.title='Recent runs';
       btn.innerHTML = CLOCK_SVG + '<span>History</span>';
       btn.addEventListener('click',openHistoryModal);
-      tb.appendChild(btn);
+      const langBtn = document.getElementById('uiLangBtn');
+      if (langBtn) tb.insertBefore(btn, langBtn);
+      else tb.appendChild(btn);
       ensureHistoryOverlay();
     }
     function readHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch{return []}}
@@ -3192,95 +3204,28 @@ window.STYLE_MICROCOPY = {
       .flash-save{ animation:flash 900ms var(--ease) 1 }
       @keyframes flash{ 0%{box-shadow:0 0 0 0 rgba(0,122,255,.35)} 100%{box-shadow:0 0 0 0 transparent} }
 
-      /* Character limit indicator */
-      .char-limit-indicator {
-        display: flex;
-        align-items: center;
-        padding: 6px 12px;
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        font-size: 12px;
-        font-weight: 500;
-        color: #64748b;
-        transition: all 0.2s var(--ease);
-        min-width: 120px;
-      }
-      
-      .char-limit-indicator.warning {
-        background: #fef3c7;
-        border-color: #f59e0b;
-        color: #92400e;
-      }
-      
-      .char-limit-indicator.danger {
-        background: #fee2e2;
-        border-color: #ef4444;
-        color: #dc2626;
-      }
-      
-      .char-limit-content {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        width: 100%;
-      }
-      
-      .char-limit-text {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 11px;
-        font-weight: 600;
-        line-height: 1;
-      }
-      
-      .char-limit-bar {
-        width: 100%;
-        height: 3px;
-        background: #e2e8f0;
-        border-radius: 2px;
-        overflow: hidden;
-      }
-      
-      .char-limit-progress {
-        height: 100%;
-        background: var(--accent);
-        border-radius: 2px;
-        transition: all 0.3s var(--ease);
-        transform-origin: left;
-        width: 0%;
-      }
-      
-      .char-limit-indicator.warning .char-limit-progress {
-        background: #f59e0b;
-      }
-      
-      .char-limit-indicator.danger .char-limit-progress {
-        background: #ef4444;
-        animation: pulse-danger 2s infinite;
-      }
-      
-      @keyframes pulse-danger {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
-      }
-      
-      /* Responsive adjustments */
-      @media (max-width: 768px) {
-        .char-limit-indicator {
-          min-width: 100px;
-          padding: 4px 8px;
-        }
-        
-        .char-limit-text {
-          font-size: 10px;
-        }
-        
-        .char-limit-bar {
-          height: 2px;
-        }
-      }
+      /* Compact Usage Meter */
+      .usage-mini{ display:inline-flex; align-items:center; gap:10px; border:1px solid var(--border); background:var(--card); border-radius:10px; padding:8px 10px; box-shadow:var(--shadow-soft); position:relative; cursor:pointer; transition:transform .12s var(--ease), box-shadow .12s var(--ease), border-color .12s; z-index:1010 }
+      .usage-mini:hover{ transform:translateY(-1px); border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak), var(--shadow-soft) }
+      .usage-mini:focus{ outline:none; box-shadow:0 0 0 3px var(--accent-weak), var(--shadow-soft) }
+      .usage-mini-main{ display:flex; align-items:center; gap:10px }
+      .usage-mini-label{ font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter','Helvetica Neue',Arial,system-ui,sans-serif; font-size:13px; font-weight:600; color:var(--text) }
+      .usage-mini-track{ width:120px; height:8px; background:#EFF2F7; border-radius:999px; overflow:hidden }
+      .usage-mini-bar{ height:100%; width:0%; background:var(--accent); border-radius:999px; transition:width .35s cubic-bezier(.22,.61,.36,1) }
+      .usage-mini[data-variant="warning"] .usage-mini-bar{ background:#d97706 }
+      .usage-mini[data-variant="critical"] .usage-mini-bar{ background:#dc2626 }
+      .usage-mini-dropdown{ position:absolute; right:0; top:calc(100% + 8px); min-width:260px; background:var(--card); border:0 solid var(--border); border-radius:12px; box-shadow:var(--shadow); overflow:hidden; max-height:0; opacity:0; pointer-events:none; transition:max-height .28s var(--ease), opacity .16s var(--ease), border-width .16s var(--ease); z-index:1020 }
+      /* Remove seam line per request */
+      .usage-mini-seam{ display:none }
+      .usage-mini[aria-expanded="true"] .usage-mini-dropdown{ max-height:220px; opacity:1; border-width:1px; pointer-events:auto }
+      .usage-mini[aria-expanded="true"] .usage-mini-seam{ opacity:1 }
+      .usage-mini-panel{ display:grid; grid-template-columns:1fr auto; gap:16px; align-items:center; padding:16px 16px }
+      .usage-mini-plan{ font-size:14px; font-weight:700; color:var(--text) }
+      .usage-mini-reset{ font-size:14px; line-height:20px; margin:0; color:var(--muted) }
+      .usage-mini-left{ display:flex; flex-direction:column; gap:4px }
+      .usage-mini-right{ text-align:right; padding-right:0; display:flex; align-items:center; gap:6px }
+      .usage-mini-pct{ font-size:32px; line-height:36px; font-weight:700 }
+      .usage-mini-suffix{ font-size:14px; font-weight:500; color:var(--text); margin-left:4px }
 
       /* Prevent accidental browser selection handle from covering bubble on mobile */
       @media (pointer:coarse){
@@ -3295,14 +3240,17 @@ window.STYLE_MICROCOPY = {
   const WRENCH_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 3l-6 6M3 21l6-6M3 3l6 6M21 21l-6-6"></path></svg>';
 
   function injectBrandButton(){
-    const tb=document.querySelector('.toolbar'); if(!tb || document.getElementById('brandBtn')) return;
+    const tb=document.querySelector('#toolbarRow2'); if(!tb || document.getElementById('brandBtn')) return;
     const btn=document.createElement('button');
     btn.id='brandBtn';
     btn.className='btn face-btn';
     btn.title='Brand Kit';
     btn.innerHTML = SPARKLE_SVG + '<span>Brand Kit</span>';
     btn.addEventListener('click',openBrandOverlay);
-    tb.insertBefore(btn, tb.querySelector('#addTextTabBtn')||null);
+    // Place after Split View and before Usage Meter to form second row order
+    const usageMini = document.getElementById('usageMini');
+    if (usageMini) tb.insertBefore(btn, usageMini);
+    else tb.appendChild(btn);
     ensureBrandOverlay();
     // Hover blue accent like History
     btn.addEventListener('mouseenter',()=>{ btn.style.color='var(--accent)'; btn.style.borderColor='var(--accent)'; btn.style.boxShadow='0 4px 18px rgba(0,0,0,.12), 0 0 0 2px var(--accent-weak)'; });
@@ -3310,14 +3258,17 @@ window.STYLE_MICROCOPY = {
   }
 
   function injectAdvancedButton(){
-    const tb=document.querySelector('.toolbar'); if(!tb || document.getElementById('advBtn')) return;
+    const tb=document.querySelector('#toolbarRow2'); if(!tb || document.getElementById('advBtn')) return;
     const btn=document.createElement('button');
     btn.id='advBtn';
     btn.className='btn face-btn';
     btn.title='Advanced Tools (Glossary, Phrasebook)';
     btn.innerHTML = WRENCH_SVG + '<span>Advanced Tools</span>';
     btn.addEventListener('click',openAdvancedOverlay);
-    tb.insertBefore(btn, tb.querySelector('#addTextTabBtn')||null);
+    // Place after Brand Kit and before Usage Meter
+    const usageMini = document.getElementById('usageMini');
+    if (usageMini) tb.insertBefore(btn, usageMini);
+    else tb.appendChild(btn);
     ensureAdvancedOverlay();
     // Hover blue accent like History
     btn.addEventListener('mouseenter',()=>{ btn.style.color='var(--accent)'; btn.style.borderColor='var(--accent)'; btn.style.boxShadow='0 4px 18px rgba(0,0,0,.12), 0 0 0 2px var(--accent-weak)'; });
@@ -3908,11 +3859,7 @@ ${lines.join('\n')}`);
     setStatus('Localizing done');
     
     // Refresh usage after successful submission (small delay to ensure backend processing is complete)
-    setTimeout(() => {
-      if (window.updateCumulativeUsage) {
-        window.updateCumulativeUsage();
-      }
-    }, 100);
+    setTimeout(() => { if (window.updateCumulativeUsage) window.updateCumulativeUsage(); }, 100);
     if($('#outputRich') && !$('#outputRich').classList.contains('is-hidden')){
       $('#outputRich').textContent = d.output; syncRichToHidden();
     }else{
@@ -3959,11 +3906,7 @@ ${lines.join('\n')}`);
     setStatus('Localizing done');
     
     // Refresh usage after successful SRT translation (small delay to ensure backend processing is complete)
-    setTimeout(() => {
-      if (window.updateCumulativeUsage) {
-        window.updateCumulativeUsage();
-      }
-    }, 100);
+    setTimeout(() => { if (window.updateCumulativeUsage) window.updateCumulativeUsage(); }, 100);
     
     d.output = d.srtTranslations.join('\n');
     $('#outputText').value = d.output;
@@ -4447,6 +4390,25 @@ ${lines.join('\n')}`);
 
   /* ---------- Boot ---------- */
   document.addEventListener('DOMContentLoaded',()=>{
+    // Usage mini dropdown handlers
+    const usageMini = document.getElementById('usageMini');
+    const usageMiniDropdown = document.getElementById('usageMiniDropdown');
+    if (usageMini && usageMiniDropdown){
+      const toggle = (expand)=>{
+        const next = expand ?? usageMini.getAttribute('aria-expanded') !== 'true';
+        usageMini.setAttribute('aria-expanded', String(next));
+        usageMiniDropdown.setAttribute('aria-hidden', String(!next));
+      };
+      usageMini.addEventListener('click', (e)=>{ e.stopPropagation(); toggle(); });
+      usageMini.addEventListener('keydown', (e)=>{
+        if (e.key==='Enter' || e.key===' ') { e.preventDefault(); toggle(); }
+        if (e.key==='Escape') toggle(false);
+      });
+      document.addEventListener('click', (e)=>{ if (!usageMini.contains(e.target)) toggle(false); });
+    }
+
+    // Initial pull
+    if (window.updateCumulativeUsage) window.updateCumulativeUsage();
     ensureGlobalUIStyles();
     injectBrandButton();
     injectAdvancedButton();
@@ -4684,44 +4646,18 @@ ${lines.join('\n')}`);
     }
 
     async function updateCharacterLimit() {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const tier = user.isGuest ? 'guest' : (user.tier || 'free');
-      const tierConfig = window.getTierLimit ? window.getTierLimit(tier) : TIER_LIMITS[tier] || TIER_LIMITS.free;
-      const indicator = document.getElementById('charLimitIndicator');
-      const charLimitSpan = document.getElementById('charLimit');
-      
-      if (indicator && charLimitSpan) {
-        charLimitSpan.textContent = tierConfig.maxInputSize.toLocaleString();
-        indicator.style.display = 'flex';
-        
-        // Create detailed tooltip
-        const upgradeInfo = user.isGuest 
-          ? 'Sign in to unlock higher limits!'
-          : tier === 'free' 
-            ? 'Upgrade to Pro (10K chars) or Team (50K chars)'
-            : tier === 'pro'
-              ? 'Upgrade to Team for 50K characters'
-              : 'You have the highest tier limits';
-              
-        indicator.title = `${tierConfig.name} tier: ${tierConfig.maxInputSize.toLocaleString()} character limit\n${upgradeInfo}`;
-        
-        // Add click handler for guests to open sign-in modal
-        indicator.style.cursor = user.isGuest ? 'pointer' : 'default';
-        indicator.onclick = user.isGuest ? () => {
-          if (typeof openAuth === 'function') openAuth('login');
-        } : null;
-      }
-      
-      // Fetch and update cumulative usage
+      // Compact meter relies on cumulative usage
       await updateCumulativeUsage();
     }
 
     async function updateCumulativeUsage() {
-      const charUsedSpan = document.getElementById('charUsed');
-      const charProgress = document.getElementById('charProgress');
-      const indicator = document.getElementById('charLimitIndicator');
-      
-      if (!charUsedSpan || !charProgress || !indicator) return;
+      const usageMini = document.getElementById('usageMini');
+      const label = document.getElementById('usageMiniLabel');
+      const bar = document.getElementById('usageMiniBar');
+      const planEl = document.getElementById('usageMiniPlan');
+      const pctEl = document.getElementById('usageMiniPct');
+      const resetEl = document.getElementById('usageMiniReset');
+      if (!usageMini || !label || !bar) return;
       
       try {
         // Fetch current usage from backend
@@ -4763,70 +4699,36 @@ ${lines.join('\n')}`);
         const usageData = await response.json();
         
         if (usageData && typeof usageData.used === 'number') {
-          // Update display with cumulative usage
-          charUsedSpan.textContent = usageData.used.toLocaleString();
-          charProgress.style.width = usageData.percentage + '%';
-          
-          // Update styling based on usage
-          indicator.classList.remove('warning', 'danger');
-          
-          if (usageData.percentage >= 100) {
-            indicator.classList.add('danger');
-          } else if (usageData.percentage >= 80) {
-            indicator.classList.add('warning');
-          }
-          
-          // Update tooltip with usage info
-          const tierConfig = window.getTierLimit ? window.getTierLimit(usageData.tier) : TIER_LIMITS[usageData.tier] || TIER_LIMITS.free;
-          const upgradeInfo = usageData.isGuest 
-            ? 'Sign in with Google to unlock higher limits!'
-            : usageData.tier === 'free' 
-              ? 'Upgrade to Pro (10K chars) or Team (50K chars)'
-              : usageData.tier === 'pro'
-                ? 'Upgrade to Team for 50K characters'
-                : 'You have the highest tier limits';
-                
-          indicator.title = `${tierConfig.name} tier: ${usageData.used.toLocaleString()} / ${usageData.limit.toLocaleString()} characters used this month\n${upgradeInfo}`;
-          
-          // Store current usage data for debugging
+          const fmt = (n)=>{
+            if (n < 10000) return n.toLocaleString('id-ID');
+            if (n < 1000000) return (n/1000).toFixed(1).replace(/\.0$/,'') + 'k';
+            return (n/1000000).toFixed(1).replace(/\.0$/,'') + 'm';
+          };
+          label.textContent = `${fmt(usageData.used)} / ${fmt(usageData.limit)}`;
+          bar.style.width = usageData.percentage + '%';
+          usageMini.removeAttribute('data-variant');
+          if (usageData.percentage >= 70) usageMini.setAttribute('data-variant','critical');
+          else if (usageData.percentage >= 50) usageMini.setAttribute('data-variant','warning');
+          if (planEl) planEl.textContent = usageData.isGuest ? 'Guest' : (usageData.tier || 'Free').replace(/^./,c=>c.toUpperCase());
+          if (pctEl) pctEl.textContent = Math.round(usageData.percentage);
+          if (resetEl){ const d=new Date(); d.setMonth(d.getMonth()+1,1); resetEl.textContent = d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
           window.currentUsageData = usageData;
-          console.log('📊 Usage data updated:', usageData);
         } else {
-          // Safe default
-          charUsedSpan.textContent = '0';
-          charProgress.style.width = '0%';
+          label.textContent = '0 / 0';
+          bar.style.width = '0%';
         }
       } catch (error) {
         console.error('Failed to fetch usage data:', error);
         
-        // Show error state instead of falling back to per-tab count
-        const charUsedSpan = document.getElementById('charUsed');
-        const charProgress = document.getElementById('charProgress');
-        const indicator = document.getElementById('charLimitIndicator');
-        
-        if (charUsedSpan && charProgress && indicator) {
-          // Show 0 instead of ? to avoid confusion
-          charUsedSpan.textContent = '0';
-          charProgress.style.width = '0%';
-          indicator.classList.remove('warning', 'danger');
-          
-          // Update tooltip to show error
-          const user = JSON.parse(localStorage.getItem('user') || '{}');
-          const tier = user.isGuest ? 'guest' : (user.tier || 'free');
-          const tierConfig = window.getTierLimit ? window.getTierLimit(tier) : TIER_LIMITS[tier] || TIER_LIMITS.free;
-          
-          indicator.title = `Failed to load usage data. Limit: ${tierConfig.maxInputSize.toLocaleString()} characters`;
-        }
+        // Minimal fallback
+        label.textContent = '0 / 0';
+        bar.style.width = '0%';
       }
     }
 
     function updateCurrentTabCharacterCount() {
       const inputText = document.getElementById('inputText');
-      const charUsedSpan = document.getElementById('charUsed');
-      const charProgress = document.getElementById('charProgress');
-      const indicator = document.getElementById('charLimitIndicator');
-      
-      if (!inputText || !charUsedSpan || !charProgress || !indicator) return;
+      if (!inputText) return;
       
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const tier = user.isGuest ? 'guest' : (user.tier || 'free');
@@ -4835,18 +4737,7 @@ ${lines.join('\n')}`);
       const maxLength = tierConfig.maxInputSize;
       const percentage = Math.min((currentLength / maxLength) * 100, 100);
       
-      // Update display
-      charUsedSpan.textContent = currentLength.toLocaleString();
-      charProgress.style.width = percentage + '%';
-      
-      // Update styling based on usage
-      indicator.classList.remove('warning', 'danger');
-      
-      if (percentage >= 100) {
-        indicator.classList.add('danger');
-      } else if (percentage >= 80) {
-        indicator.classList.add('warning');
-      }
+      // Per-tab visual removed; cumulative meter covers usage
       
       // Return whether limit is exceeded
       return currentLength > maxLength;
