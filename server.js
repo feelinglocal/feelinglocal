@@ -198,7 +198,7 @@ async function updateMonthlyUsage({ userId, requests = 1, inputChars = 0, output
     // Use raw SQL to avoid depending on generated model/compound unique naming
     await prisma.$executeRawUnsafe(
       `INSERT INTO public.usage_monthly (user_id, month, requests, input_tokens, output_tokens)
-       VALUES ($1, $2, $3, $4, $5)
+       VALUES ($1::uuid, $2::date, $3::int, $4::int, $5::int)
        ON CONFLICT (user_id, month)
        DO UPDATE SET
          requests = usage_monthly.requests + EXCLUDED.requests,
@@ -5092,7 +5092,7 @@ app.get('/api/usage/monthly', requireAuth, ensureProfile, async (req, res) => {
   try {
     const userId = req.user?.id; if (!prisma) return res.json({ items: [] });
     const rows = await prisma.$queryRawUnsafe(
-      'SELECT month, requests, input_tokens, output_tokens FROM public.usage_monthly WHERE user_id = $1 ORDER BY month DESC LIMIT 12',
+      'SELECT month, requests, input_tokens, output_tokens FROM public.usage_monthly WHERE user_id = $1::uuid ORDER BY month DESC LIMIT 12',
       userId
     );
     res.json({ items: rows });
@@ -5150,7 +5150,7 @@ app.get('/api/usage/current',
     if (!normalizedTier || !TIERS[normalizedTier]) {
       try {
         const rowsTier = await prisma.$queryRawUnsafe(
-          'select tier from public.profiles where id = $1 limit 1',
+          'select tier from public.profiles where id = $1::uuid limit 1',
           userId
         );
         const dbTier = Array.isArray(rowsTier) && rowsTier[0]?.tier ? String(rowsTier[0].tier) : 'free';
@@ -5177,7 +5177,7 @@ app.get('/api/usage/current',
     // Get current month usage from Supabase (raw SQL to be resilient to Prisma schema mismatch)
     const month = monthStartISO();
     const rows = await prisma.$queryRawUnsafe(
-      'select input_tokens, output_tokens, requests from public.usage_monthly where user_id = $1 and month = $2 limit 1',
+      'select input_tokens, output_tokens, requests from public.usage_monthly where user_id = $1::uuid and month = $2::date limit 1',
       userId,
       month
     );
@@ -5256,7 +5256,7 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
 app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
   try {
     if (!prisma) return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: 'free' });
-    const rows = await prisma.$queryRawUnsafe('select tier from public.profiles where id = $1 limit 1', req.user.id);
+    const rows = await prisma.$queryRawUnsafe('select tier from public.profiles where id = $1::uuid limit 1', req.user.id);
     const tier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier) : 'free';
     res.json({ id: req.user.id, email: req.user.email || null, tier });
   } catch (e) { console.error('profile', e?.message || e); res.status(500).json({ error: 'Failed to get profile' }); }
