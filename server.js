@@ -5157,6 +5157,19 @@ app.get('/api/usage/current',
     }
     const effectiveTierConfig = TIERS[normalizedTier] || TIERS.free;
 
+    // If this is a legacy integer user id (SQLite admin/dev), skip DB lookup to avoid uuid/bigint errors
+    const isUuidLike = typeof userId === 'string' && userId.includes('-');
+    if (!isUuidLike) {
+      return res.json({
+        used: 0,
+        limit: effectiveTierConfig.maxInputSize,
+        tier: normalizedTier,
+        isGuest: false,
+        percentage: 0,
+        requests: 0
+      });
+    }
+
     // Get current month usage from Supabase (raw SQL to be resilient to Prisma schema mismatch)
     const month = monthStartISO();
     const rows = await prisma.$queryRawUnsafe(

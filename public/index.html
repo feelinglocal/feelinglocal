@@ -4777,6 +4777,10 @@ ${lines.join('\n')}`);
           // Store current usage data for debugging
           window.currentUsageData = usageData;
           console.log('📊 Usage data updated:', usageData);
+        } else {
+          // Safe default
+          charUsedSpan.textContent = '0';
+          charProgress.style.width = '0%';
         }
       } catch (error) {
         console.error('Failed to fetch usage data:', error);
@@ -4787,7 +4791,8 @@ ${lines.join('\n')}`);
         const indicator = document.getElementById('charLimitIndicator');
         
         if (charUsedSpan && charProgress && indicator) {
-          charUsedSpan.textContent = '?';
+          // Show 0 instead of ? to avoid confusion
+          charUsedSpan.textContent = '0';
           charProgress.style.width = '0%';
           indicator.classList.remove('warning', 'danger');
           
