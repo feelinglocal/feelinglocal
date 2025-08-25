@@ -5266,6 +5266,13 @@ app.get('/api/usage/current',
       requests: Number(rec?.requests || 0)
     };
     
+    // Disable caching for real-time updates
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     res.json(result);
     
   } catch (error) {

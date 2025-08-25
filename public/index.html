@@ -3907,12 +3907,10 @@ ${lines.join('\n')}`);
     d.output = d.lastAlignedTgt.join('\n');
     setStatus('Localizing done');
     
-    // Refresh usage after successful submission
-    setTimeout(() => {
-      if (window.updateCumulativeUsage) {
-        window.updateCumulativeUsage();
-      }
-    }, 500);
+    // Refresh usage immediately after successful submission
+    if (window.updateCumulativeUsage) {
+      window.updateCumulativeUsage();
+    }
     if($('#outputRich') && !$('#outputRich').classList.contains('is-hidden')){
       $('#outputRich').textContent = d.output; syncRichToHidden();
     }else{
@@ -3957,6 +3955,12 @@ ${lines.join('\n')}`);
     const data = await res.json();
     d.srtTranslations = Array.isArray(data.items)? data.items : items;
     setStatus('Localizing done');
+    
+    // Refresh usage immediately after successful SRT translation
+    if (window.updateCumulativeUsage) {
+      window.updateCumulativeUsage();
+    }
+    
     d.output = d.srtTranslations.join('\n');
     $('#outputText').value = d.output;
     autosizeTextarea($('#outputText'));
@@ -4717,7 +4721,10 @@ ${lines.join('\n')}`);
       
       try {
         // Fetch current usage from backend
-        const headers = {};
+        const headers = {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        };
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         
         if (user.isGuest) {
@@ -4741,7 +4748,10 @@ ${lines.join('\n')}`);
           }
         }
         
-        const response = await fetch('/api/usage/current', { headers });
+        const response = await fetch('/api/usage/current', { 
+          headers,
+          cache: 'no-cache'
+        });
         if (!response.ok) {
           const errText = await response.text().catch(()=>'');
           throw new Error(`HTTP ${response.status} ${errText}`);
