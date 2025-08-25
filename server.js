@@ -4753,6 +4753,18 @@ async function callOpenAIWithRetry({ messages, temperature }) {
 
 app.post('/api/translate-batch',
   allowGuests,
+  (req, res, next) => {
+    // Debug authentication for translate-batch
+    console.log('🔍 Translate-batch Auth Debug:', {
+      userId: req.user?.id,
+      tier: req.user?.tier,
+      isGuest: req.user?.isGuest,
+      hasAuthHeader: !!req.headers['authorization'],
+      hasGuestHeader: !!req.headers['x-guest-id'],
+      userObject: req.user
+    });
+    next();
+  },
   rateLimiters.translation,
   quotaMiddleware,
   checkTierPermission('batch'), // Batch requires Pro or Team tier

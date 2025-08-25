@@ -3907,10 +3907,12 @@ ${lines.join('\n')}`);
     d.output = d.lastAlignedTgt.join('\n');
     setStatus('Localizing done');
     
-    // Refresh usage immediately after successful submission
-    if (window.updateCumulativeUsage) {
-      window.updateCumulativeUsage();
-    }
+    // Refresh usage after successful submission (small delay to ensure backend processing is complete)
+    setTimeout(() => {
+      if (window.updateCumulativeUsage) {
+        window.updateCumulativeUsage();
+      }
+    }, 100);
     if($('#outputRich') && !$('#outputRich').classList.contains('is-hidden')){
       $('#outputRich').textContent = d.output; syncRichToHidden();
     }else{
@@ -3956,10 +3958,12 @@ ${lines.join('\n')}`);
     d.srtTranslations = Array.isArray(data.items)? data.items : items;
     setStatus('Localizing done');
     
-    // Refresh usage immediately after successful SRT translation
-    if (window.updateCumulativeUsage) {
-      window.updateCumulativeUsage();
-    }
+    // Refresh usage after successful SRT translation (small delay to ensure backend processing is complete)
+    setTimeout(() => {
+      if (window.updateCumulativeUsage) {
+        window.updateCumulativeUsage();
+      }
+    }, 100);
     
     d.output = d.srtTranslations.join('\n');
     $('#outputText').value = d.output;
@@ -4748,7 +4752,7 @@ ${lines.join('\n')}`);
           }
         }
         
-        const response = await fetch('/api/usage/current', { 
+        const response = await fetch(`/api/usage/current?t=${Date.now()}`, { 
           headers,
           cache: 'no-cache'
         });
