@@ -4600,6 +4600,14 @@ QUALITY CHECK BEFORE RETURN:
 
   const injBlock = renderInjections(injections);
 
+  const REPHRASE_GUARD = rephrase ? `
+REPHRASE MODE (CRITICAL):
+- Do NOT translate to any other language under any circumstance.
+- Output must be in the SAME language as the input item.
+- If the input is English, output English; if Indonesian, output Indonesian, etc.
+- Improve clarity, tone, and fluency according to the selected style, but keep the language unchanged.
+` : '';
+
   const header = `
 You are an expert localization and translation assistant with advanced skills in cultural adaptation, style consistency, and terminology accuracy.
 Always strictly follow the provided style, substyle, tone, and language style guidelines.
@@ -4612,11 +4620,13 @@ ${safeRenderTemplate(QA_BLOCK, {
   TARGET_LANG: targetLanguage || 'the same language as the input'
 })}
 
+${REPHRASE_GUARD}
+
 ${renderedBase}
 
 BATCH INSTRUCTIONS:
 - ITEMS is a JSON array of ${items.length} strings.
-- ${rephrase ? 'REPHRASE each string in its original language' : `TRANSLATE/LOCALIZE each string into ${targetLanguage || 'the target language'}`}
+- ${rephrase ? 'REPHRASE each string in its original language (never translate or change language)' : `TRANSLATE/LOCALIZE each string into ${targetLanguage || 'the target language'}`}
   according to the selected style (${modeKey}${subStyle ? ` / ${subKey}` : ''}).
 - Return ONLY a JSON array of ${items.length} strings, in the SAME order, 1-to-1 with ITEMS.
 - Do NOT merge or split lines. Do NOT add indices, speakers, or extra punctuation.

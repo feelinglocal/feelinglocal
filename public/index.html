@@ -3846,9 +3846,9 @@ ${lines.join('\n')}`);
       body:JSON.stringify({
         items:srcSegs,
         mode:selectedMode,
-        targetLanguage,
+        targetLanguage: rephrase ? '' : targetLanguage,
         subStyle:selectedSubStyle,
-        rephrase,
+        rephrase: !!rephrase,
         injections
       })
     });
@@ -3894,9 +3894,9 @@ ${lines.join('\n')}`);
             body:JSON.stringify({
               items,
               mode:selectedMode,
-              targetLanguage,
+              targetLanguage: rephrase ? '' : targetLanguage,
               subStyle:selectedSubStyle,
-              rephrase,
+              rephrase: !!rephrase,
               injections
             })
           });
