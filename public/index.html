@@ -625,6 +625,18 @@
         <button id="addTextTabBtn" class="btn" title="New tab" data-i18n="new_tab">New Tab</button>
         <!-- Tier badge -->
         <span id="tierBadge" class="btn" style="display:none; background:#eef3ff; color:#1e40af; border-color:#c7d2fe"></span>
+        
+        <!-- Character limit indicator -->
+        <div id="charLimitIndicator" class="char-limit-indicator" style="display:none;">
+          <div class="char-limit-content">
+            <div class="char-limit-text">
+              <span id="charUsed">0</span>/<span id="charLimit">1000</span>
+            </div>
+            <div class="char-limit-bar">
+              <div id="charProgress" class="char-limit-progress"></div>
+            </div>
+          </div>
+        </div>
         <!-- Auth: Sign in (Supabase) / Sign out -->
         <button id="signInBtn" class="btn" type="button">Sign in</button>
         <button id="signOutBtnTop" class="btn" type="button" style="display:none">Sign out</button>
@@ -2627,6 +2639,8 @@ window.STYLE_MICROCOPY = {
       // Input
       $('#inputText').value = doc.text || '';
       autosizeTextarea($('#inputText'));
+      // Update character count when loading new document
+      setTimeout(updateCharacterCount, 10);
       // Output
       if(doc.isSrt){
         $('#outputRich').classList.add('is-hidden');
@@ -2681,6 +2695,27 @@ window.STYLE_MICROCOPY = {
       }
       const input=(d.text||'').trim();
       if(!input){showToast(t('toast_enter_text'));pulse($('#inputText'));return}
+      
+      // Check character limit
+      if (!checkCharacterLimit(input)) {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const tier = user.isGuest ? 'guest' : (user.tier || 'free');
+        const tierConfig = getTierLimit(tier);
+        
+        if (user.isGuest) {
+          showToast(`Text exceeds ${tierConfig.maxInputSize.toLocaleString()} character limit. Sign in to get higher limits!`);
+          // Auto-open sign in modal for guests
+          setTimeout(() => {
+            if (typeof openAuth === 'function') openAuth('login');
+          }, 1000);
+        } else {
+          showToast(`Text exceeds ${tierConfig.name} tier limit of ${tierConfig.maxInputSize.toLocaleString()} characters. Upgrade for higher limits!`);
+        }
+        
+        pulse($('#inputText'));
+        return;
+      }
+      
       if(!targetLanguage && !rephrase){showToast(t('toast_choose_target'));pulse($('#langButtonsRow'));return}
       if(!selectedMode){showToast(t('toast_choose_style'));pulse($('#styleButtonsRow'));return}
 
@@ -3138,6 +3173,96 @@ window.STYLE_MICROCOPY = {
       /* Brand save animation */
       .flash-save{ animation:flash 900ms var(--ease) 1 }
       @keyframes flash{ 0%{box-shadow:0 0 0 0 rgba(0,122,255,.35)} 100%{box-shadow:0 0 0 0 transparent} }
+
+      /* Character limit indicator */
+      .char-limit-indicator {
+        display: flex;
+        align-items: center;
+        padding: 6px 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 500;
+        color: #64748b;
+        transition: all 0.2s var(--ease);
+        min-width: 120px;
+      }
+      
+      .char-limit-indicator.warning {
+        background: #fef3c7;
+        border-color: #f59e0b;
+        color: #92400e;
+      }
+      
+      .char-limit-indicator.danger {
+        background: #fee2e2;
+        border-color: #ef4444;
+        color: #dc2626;
+      }
+      
+      .char-limit-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        width: 100%;
+      }
+      
+      .char-limit-text {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1;
+      }
+      
+      .char-limit-bar {
+        width: 100%;
+        height: 3px;
+        background: #e2e8f0;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      
+      .char-limit-progress {
+        height: 100%;
+        background: var(--accent);
+        border-radius: 2px;
+        transition: all 0.3s var(--ease);
+        transform-origin: left;
+        width: 0%;
+      }
+      
+      .char-limit-indicator.warning .char-limit-progress {
+        background: #f59e0b;
+      }
+      
+      .char-limit-indicator.danger .char-limit-progress {
+        background: #ef4444;
+        animation: pulse-danger 2s infinite;
+      }
+      
+      @keyframes pulse-danger {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      
+      /* Responsive adjustments */
+      @media (max-width: 768px) {
+        .char-limit-indicator {
+          min-width: 100px;
+          padding: 4px 8px;
+        }
+        
+        .char-limit-text {
+          font-size: 10px;
+        }
+        
+        .char-limit-bar {
+          height: 2px;
+        }
+      }
 
       /* Prevent accidental browser selection handle from covering bubble on mobile */
       @media (pointer:coarse){
@@ -4512,6 +4637,118 @@ ${lines.join('\n')}`);
       }catch{}
     }
     renderAuthHeader();
+
+    // Character limit system
+    const TIER_LIMITS = {
+      free: { maxInputSize: 1000, name: 'Free' },
+      pro: { maxInputSize: 10000, name: 'Pro' },
+      team: { maxInputSize: 50000, name: 'Team' },
+      guest: { maxInputSize: 1000, name: 'Guest' }
+    };
+
+    function getTierLimit(tier) {
+      return TIER_LIMITS[tier] || TIER_LIMITS.free;
+    }
+
+    function updateCharacterLimit() {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const tier = user.isGuest ? 'guest' : (user.tier || 'free');
+      const tierConfig = getTierLimit(tier);
+      const indicator = document.getElementById('charLimitIndicator');
+      const charLimitSpan = document.getElementById('charLimit');
+      
+      if (indicator && charLimitSpan) {
+        charLimitSpan.textContent = tierConfig.maxInputSize.toLocaleString();
+        indicator.style.display = 'flex';
+        
+        // Create detailed tooltip
+        const upgradeInfo = user.isGuest 
+          ? 'Sign in to unlock higher limits!'
+          : tier === 'free' 
+            ? 'Upgrade to Pro (10K chars) or Team (50K chars)'
+            : tier === 'pro'
+              ? 'Upgrade to Team for 50K characters'
+              : 'You have the highest tier limits';
+              
+        indicator.title = `${tierConfig.name} tier: ${tierConfig.maxInputSize.toLocaleString()} character limit\n${upgradeInfo}`;
+        
+        // Add click handler for guests to open sign-in modal
+        indicator.style.cursor = user.isGuest ? 'pointer' : 'default';
+        indicator.onclick = user.isGuest ? () => {
+          if (typeof openAuth === 'function') openAuth('login');
+        } : null;
+      }
+    }
+
+    function updateCharacterCount() {
+      const inputText = document.getElementById('inputText');
+      const charUsedSpan = document.getElementById('charUsed');
+      const charProgress = document.getElementById('charProgress');
+      const indicator = document.getElementById('charLimitIndicator');
+      
+      if (!inputText || !charUsedSpan || !charProgress || !indicator) return;
+      
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const tier = user.isGuest ? 'guest' : (user.tier || 'free');
+      const tierConfig = getTierLimit(tier);
+      const currentLength = inputText.value.length;
+      const maxLength = tierConfig.maxInputSize;
+      const percentage = Math.min((currentLength / maxLength) * 100, 100);
+      
+      // Update display
+      charUsedSpan.textContent = currentLength.toLocaleString();
+      charProgress.style.width = percentage + '%';
+      
+      // Update styling based on usage
+      indicator.classList.remove('warning', 'danger');
+      
+      if (percentage >= 100) {
+        indicator.classList.add('danger');
+      } else if (percentage >= 80) {
+        indicator.classList.add('warning');
+      }
+      
+      // Return whether limit is exceeded
+      return currentLength > maxLength;
+    }
+
+    function checkCharacterLimit(text) {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const tier = user.isGuest ? 'guest' : (user.tier || 'free');
+      const tierConfig = getTierLimit(tier);
+      return text.length <= tierConfig.maxInputSize;
+    }
+
+    // Initialize character limit system
+    function initCharacterLimits() {
+      updateCharacterLimit();
+      
+      // Add event listener to input text
+      const inputText = document.getElementById('inputText');
+      if (inputText) {
+        inputText.addEventListener('input', updateCharacterCount);
+        inputText.addEventListener('paste', () => {
+          setTimeout(updateCharacterCount, 10); // Delay to allow paste to complete
+        });
+      }
+      
+      // Update on user change
+      const originalRenderAuthHeader = window.renderAuthHeader;
+      window.renderAuthHeader = function() {
+        originalRenderAuthHeader.apply(this, arguments);
+        setTimeout(() => {
+          updateCharacterLimit();
+          updateCharacterCount();
+        }, 100);
+      };
+    }
+
+    // Initialize character limits when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCharacterLimits);
+    } else {
+      initCharacterLimits();
+    }
 
     // Complete auth state cleanup
     window.clearAuthState = function clearAuthState() {

@@ -127,18 +127,37 @@ const rateLimiters = {
 // Input size validation middleware
 const validateInputSize = (req, res, next) => {
   const userTier = req.user?.tier || 'free';
-  const tierConfig = TIERS[userTier];
+  const isGuest = req.user?.isGuest === true;
+  const effectiveTier = isGuest ? 'free' : userTier;
+  const tierConfig = TIERS[effectiveTier];
   
-  // Check text input size
+  // Check text input size for single requests
   const textContent = req.body?.text || '';
-  if (textContent.length > tierConfig.maxInputSize) {
+  if (textContent && textContent.length > tierConfig.maxInputSize) {
     return res.status(413).json({
       error: 'Input size exceeds tier limit',
       currentSize: textContent.length,
       maxSize: tierConfig.maxInputSize,
-      tier: userTier,
-      upgradeMessage: userTier === 'free' ? 'Upgrade to Pro for larger inputs' : 'Consider Team tier for enterprise limits'
+      tier: effectiveTier,
+      isGuest,
+      upgradeMessage: isGuest ? 'Sign in to get higher limits!' : (effectiveTier === 'free' ? 'Upgrade to Pro for larger inputs' : 'Consider Team tier for enterprise limits')
     });
+  }
+  
+  // Check batch requests (items array)
+  const items = req.body?.items;
+  if (Array.isArray(items)) {
+    const totalLength = items.join('').length;
+    if (totalLength > tierConfig.maxInputSize) {
+      return res.status(413).json({
+        error: 'Batch input size exceeds tier limit',
+        currentSize: totalLength,
+        maxSize: tierConfig.maxInputSize,
+        tier: effectiveTier,
+        isGuest,
+        upgradeMessage: isGuest ? 'Sign in to get higher limits!' : (effectiveTier === 'free' ? 'Upgrade to Pro for larger inputs' : 'Consider Team tier for enterprise limits')
+      });
+    }
   }
 
   next();
