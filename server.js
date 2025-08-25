@@ -14,7 +14,7 @@ require('dotenv').config();
 
 // Import auth and database modules
 const db = require('./database');
-const { requireAuth, requireApiKey, checkTierPermission, passport } = require('./auth');
+const { requireAuth, requireApiKey, checkTierPermission, passport, TIERS } = require('./auth');
 const { quotaMiddleware, rateLimiters, validateInputSize, recordUsage } = require('./rate-limit');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
@@ -187,6 +187,14 @@ async function updateMonthlyUsage({ userId, requests = 1, inputChars = 0, output
     const inputTokens = Math.ceil((inputChars || 0) / CHARS_PER_TOKEN);
     const outputTokens = Math.ceil((outputChars || 0) / CHARS_PER_TOKEN);
 
+    // Convert integer user ID to UUID string if needed
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      // Skip usage tracking for old integer user IDs - they're not in Supabase
+      console.log('Skipping usage tracking for legacy integer user ID:', userId);
+      return;
+    }
+
     // Use raw SQL to avoid depending on generated model/compound unique naming
     await prisma.$executeRawUnsafe(
       `INSERT INTO public.usage_monthly (user_id, month, requests, input_tokens, output_tokens)
@@ -196,8 +204,9 @@ async function updateMonthlyUsage({ userId, requests = 1, inputChars = 0, output
          requests = usage_monthly.requests + EXCLUDED.requests,
          input_tokens = usage_monthly.input_tokens + EXCLUDED.input_tokens,
          output_tokens = usage_monthly.output_tokens + EXCLUDED.output_tokens`,
-      userId, month, requests, inputTokens, outputTokens
+      userIdForDb, month, requests, inputTokens, outputTokens
     );
+    console.log('Usage tracked successfully:', { userId: userIdForDb, month, requests, inputTokens, outputTokens });
   } catch (e) {
     console.warn('usage_monthly upsert failed (non-fatal):', e?.message || e);
   }
@@ -5072,6 +5081,105 @@ app.get('/api/usage/monthly', requireAuth, ensureProfile, async (req, res) => {
     );
     res.json({ items: rows });
   } catch (e) { console.error('usage monthly', e); res.status(500).json({ items: [] }); }
+});
+
+/** ------------------------- API: Current Usage ------------------------- */
+app.get('/api/usage/current', 
+  (req, res, next) => {
+    // Special middleware for usage endpoint - allow completely unauthenticated requests
+    const guestId = req.headers['x-guest-id'];
+    if (guestId && guestId.startsWith('guest_')) {
+      req.user = {
+        id: guestId,
+        email: null,
+        name: 'Guest User',
+        tier: 'free',
+        isGuest: true
+      };
+      return next();
+    }
+    
+    // Try API key first, then JWT auth, but don't fail if neither exists
+    if (req.headers['x-api-key']) {
+      return requireApiKey(req, res, next);
+    } else if (req.headers['authorization']) {
+      return requireAuth(req, res, next);
+    } else {
+      // No authentication provided - treat as guest
+      req.user = {
+        id: 'anonymous',
+        email: null,
+        name: 'Anonymous User',
+        tier: 'free',
+        isGuest: true
+      };
+      return next();
+    }
+  },
+  async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const isGuest = req.user?.isGuest === true;
+    const tier = req.user?.tier || 'free';
+    const tierConfig = TIERS[tier];
+    
+    if (isGuest || !userId || userId === 'anonymous') {
+      // For guests, return zero usage but show tier limits
+      return res.json({
+        used: 0,
+        limit: tierConfig.maxInputSize,
+        tier: 'guest',
+        isGuest: true,
+        percentage: 0
+      });
+    }
+    
+    // Check if Prisma is available
+    if (!prisma) {
+      return res.json({
+        used: 0,
+        limit: tierConfig.maxInputSize,
+        tier: tier,
+        isGuest: false,
+        percentage: 0,
+        requests: 0
+      });
+    }
+    
+    // Get current month usage from Supabase
+    const month = monthStartISO();
+    
+    const usage = await prisma.usage_monthly.findUnique({
+      where: {
+        user_id_month: {
+          user_id: userId,
+          month: month
+        }
+      }
+    });
+    
+    // Calculate character usage (input + output tokens converted back to chars)
+    const inputChars = (usage?.input_tokens || 0) * CHARS_PER_TOKEN;
+    const outputChars = (usage?.output_tokens || 0) * CHARS_PER_TOKEN;
+    const totalCharsUsed = Math.round(inputChars + outputChars);
+    
+    const percentage = Math.min((totalCharsUsed / tierConfig.maxInputSize) * 100, 100);
+    
+    const result = {
+      used: totalCharsUsed,
+      limit: tierConfig.maxInputSize,
+      tier: tier,
+      isGuest: false,
+      percentage: percentage,
+      requests: usage?.requests || 0
+    };
+    
+    res.json(result);
+    
+  } catch (error) {
+    console.error('Failed to fetch current usage:', error);
+    res.status(500).json({ error: 'Failed to fetch usage data', details: error.message });
+  }
 });
 
 /** ------------------------- Admin: Profile Tier ------------------------- */

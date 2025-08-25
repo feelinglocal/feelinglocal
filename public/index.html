@@ -1704,6 +1704,13 @@ window.STYLE_MICROCOPY = {
       };
       docs.push(doc); activeId=doc.id;
       renderTabs(); loadDocToUI(doc); maybeShowSubmitAll();
+      
+      // Update character count after file is loaded
+      setTimeout(() => {
+        if (window.updateCharacterCount) {
+          window.updateCharacterCount();
+        }
+      }, 100);
     }
     function closeDoc(id){
       const idx=docs.findIndex(d=>d.id===id);
@@ -2196,6 +2203,13 @@ window.STYLE_MICROCOPY = {
             
             console.log(`✅ File processed: ${parsed.originalName}`);
             
+            // Update character count after file processing
+            setTimeout(() => {
+              if (window.updateCharacterCount) {
+                window.updateCharacterCount();
+              }
+            }, 150);
+            
           } catch (fileError) {
             console.error(`❌ Failed to upload ${file.name}:`, fileError);
             results.push({ file: { originalName: file.name }, success: false, error: fileError.message });
@@ -2640,7 +2654,11 @@ window.STYLE_MICROCOPY = {
       $('#inputText').value = doc.text || '';
       autosizeTextarea($('#inputText'));
       // Update character count when loading new document
-      setTimeout(updateCharacterCount, 10);
+      setTimeout(() => {
+        if (window.updateCharacterCount) {
+          window.updateCharacterCount();
+        }
+      }, 10);
       // Output
       if(doc.isSrt){
         $('#outputRich').classList.add('is-hidden');
@@ -2697,10 +2715,10 @@ window.STYLE_MICROCOPY = {
       if(!input){showToast(t('toast_enter_text'));pulse($('#inputText'));return}
       
       // Check character limit
-      if (!checkCharacterLimit(input)) {
+      if (!(await window.checkCharacterLimit(input))) {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         const tier = user.isGuest ? 'guest' : (user.tier || 'free');
-        const tierConfig = getTierLimit(tier);
+        const tierConfig = window.getTierLimit(tier);
         
         if (user.isGuest) {
           showToast(`Text exceeds ${tierConfig.maxInputSize.toLocaleString()} character limit. Sign in to get higher limits!`);
@@ -3888,6 +3906,13 @@ ${lines.join('\n')}`);
     d.lastAlignedTgt = Array.isArray(data.items) ? data.items.map(s=>s||'') : [(data.result||'')];
     d.output = d.lastAlignedTgt.join('\n');
     setStatus('Localizing done');
+    
+    // Refresh usage after successful submission
+    setTimeout(() => {
+      if (window.updateCumulativeUsage) {
+        window.updateCumulativeUsage();
+      }
+    }, 500);
     if($('#outputRich') && !$('#outputRich').classList.contains('is-hidden')){
       $('#outputRich').textContent = d.output; syncRichToHidden();
     }else{
@@ -4650,10 +4675,10 @@ ${lines.join('\n')}`);
       return TIER_LIMITS[tier] || TIER_LIMITS.free;
     }
 
-    function updateCharacterLimit() {
+    async function updateCharacterLimit() {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const tier = user.isGuest ? 'guest' : (user.tier || 'free');
-      const tierConfig = getTierLimit(tier);
+      const tierConfig = window.getTierLimit ? window.getTierLimit(tier) : TIER_LIMITS[tier] || TIER_LIMITS.free;
       const indicator = document.getElementById('charLimitIndicator');
       const charLimitSpan = document.getElementById('charLimit');
       
@@ -4678,9 +4703,75 @@ ${lines.join('\n')}`);
           if (typeof openAuth === 'function') openAuth('login');
         } : null;
       }
+      
+      // Fetch and update cumulative usage
+      await updateCumulativeUsage();
     }
 
-    function updateCharacterCount() {
+    async function updateCumulativeUsage() {
+      const charUsedSpan = document.getElementById('charUsed');
+      const charProgress = document.getElementById('charProgress');
+      const indicator = document.getElementById('charLimitIndicator');
+      
+      if (!charUsedSpan || !charProgress || !indicator) return;
+      
+      try {
+        // Fetch current usage from backend
+        const headers = {};
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        
+        if (user.isGuest) {
+          headers['X-Guest-ID'] = localStorage.getItem('guestId');
+        } else {
+          const authToken = localStorage.getItem('authToken');
+          if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+          }
+        }
+        
+        const response = await fetch('/api/usage/current', { headers });
+        const usageData = await response.json();
+        
+        if (response.ok) {
+          // Update display with cumulative usage
+          charUsedSpan.textContent = usageData.used.toLocaleString();
+          charProgress.style.width = usageData.percentage + '%';
+          
+          // Update styling based on usage
+          indicator.classList.remove('warning', 'danger');
+          
+          if (usageData.percentage >= 100) {
+            indicator.classList.add('danger');
+          } else if (usageData.percentage >= 80) {
+            indicator.classList.add('warning');
+          }
+          
+          // Update tooltip with usage info
+          const tierConfig = window.getTierLimit ? window.getTierLimit(usageData.tier) : TIER_LIMITS[usageData.tier] || TIER_LIMITS.free;
+          const upgradeInfo = usageData.isGuest 
+            ? 'Sign in with Google to unlock higher limits!'
+            : usageData.tier === 'free' 
+              ? 'Upgrade to Pro (10K chars) or Team (50K chars)'
+              : usageData.tier === 'pro'
+                ? 'Upgrade to Team for 50K characters'
+                : 'You have the highest tier limits';
+                
+          indicator.title = `${tierConfig.name} tier: ${usageData.used.toLocaleString()} / ${usageData.limit.toLocaleString()} characters used this month\n${upgradeInfo}`;
+          
+          // Store current usage data for debugging
+          window.currentUsageData = usageData;
+          console.log('📊 Usage data updated:', usageData);
+        } else {
+          console.error('❌ Failed to fetch usage data:', response.status, await response.text());
+        }
+      } catch (error) {
+        console.error('Failed to fetch usage data:', error);
+        // Fallback to current tab character count
+        updateCurrentTabCharacterCount();
+      }
+    }
+
+    function updateCurrentTabCharacterCount() {
       const inputText = document.getElementById('inputText');
       const charUsedSpan = document.getElementById('charUsed');
       const charProgress = document.getElementById('charProgress');
@@ -4690,7 +4781,7 @@ ${lines.join('\n')}`);
       
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const tier = user.isGuest ? 'guest' : (user.tier || 'free');
-      const tierConfig = getTierLimit(tier);
+      const tierConfig = window.getTierLimit ? window.getTierLimit(tier) : TIER_LIMITS[tier] || TIER_LIMITS.free;
       const currentLength = inputText.value.length;
       const maxLength = tierConfig.maxInputSize;
       const percentage = Math.min((currentLength / maxLength) * 100, 100);
@@ -4712,23 +4803,61 @@ ${lines.join('\n')}`);
       return currentLength > maxLength;
     }
 
-    function checkCharacterLimit(text) {
+    // Alias for backward compatibility
+    function updateCharacterCount() {
+      return updateCumulativeUsage();
+    }
+
+    async function checkCharacterLimit(text) {
+      try {
+        // Fetch current usage to check against cumulative limit
+        const headers = {};
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        
+        if (user.isGuest) {
+          headers['X-Guest-ID'] = localStorage.getItem('guestId');
+        } else {
+          const authToken = localStorage.getItem('authToken');
+          if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+          }
+        }
+        
+        const response = await fetch('/api/usage/current', { headers });
+        const usageData = await response.json();
+        
+        if (response.ok) {
+          // Check if adding this text would exceed the limit
+          const potentialUsage = usageData.used + text.length;
+          return potentialUsage <= usageData.limit;
+        }
+      } catch (error) {
+        console.error('Failed to check character limit:', error);
+      }
+      
+      // Fallback to simple text length check
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const tier = user.isGuest ? 'guest' : (user.tier || 'free');
-      const tierConfig = getTierLimit(tier);
+      const tierConfig = window.getTierLimit ? window.getTierLimit(tier) : TIER_LIMITS[tier] || TIER_LIMITS.free;
       return text.length <= tierConfig.maxInputSize;
     }
 
     // Initialize character limit system
-    function initCharacterLimits() {
-      updateCharacterLimit();
+    async function initCharacterLimits() {
+      if (window.updateCharacterLimit) {
+        await window.updateCharacterLimit();
+      }
       
       // Add event listener to input text
       const inputText = document.getElementById('inputText');
       if (inputText) {
-        inputText.addEventListener('input', updateCharacterCount);
+        inputText.addEventListener('input', () => {
+          if (window.updateCharacterCount) window.updateCharacterCount();
+        });
         inputText.addEventListener('paste', () => {
-          setTimeout(updateCharacterCount, 10); // Delay to allow paste to complete
+          setTimeout(() => {
+            if (window.updateCharacterCount) window.updateCharacterCount();
+          }, 10); // Delay to allow paste to complete
         });
       }
       
@@ -4736,12 +4865,24 @@ ${lines.join('\n')}`);
       const originalRenderAuthHeader = window.renderAuthHeader;
       window.renderAuthHeader = function() {
         originalRenderAuthHeader.apply(this, arguments);
-        setTimeout(() => {
-          updateCharacterLimit();
-          updateCharacterCount();
+        setTimeout(async () => {
+          if (window.updateCharacterLimit) {
+            await window.updateCharacterLimit();
+          }
+          if (window.updateCharacterCount) {
+            await window.updateCharacterCount();
+          }
         }, 100);
       };
     }
+
+    // Make functions globally accessible
+    window.updateCharacterLimit = updateCharacterLimit;
+    window.updateCharacterCount = updateCharacterCount;
+    window.updateCumulativeUsage = updateCumulativeUsage;
+    window.updateCurrentTabCharacterCount = updateCurrentTabCharacterCount;
+    window.checkCharacterLimit = checkCharacterLimit;
+    window.getTierLimit = getTierLimit;
 
     // Initialize character limits when DOM is ready
     if (document.readyState === 'loading') {
