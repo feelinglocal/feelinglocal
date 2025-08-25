@@ -5141,32 +5141,45 @@ app.get('/api/usage/current',
       });
     }
     
-    // Get current month usage from Supabase
-    const month = monthStartISO();
-    
-    const usage = await prisma.usage_monthly.findUnique({
-      where: {
-        user_id_month: {
-          user_id: userId,
-          month: month
-        }
+    // Resolve tier if not present on req.user (fallback to DB)
+    let normalizedTier = String(tier || '').toLowerCase();
+    if (!normalizedTier || !TIERS[normalizedTier]) {
+      try {
+        const rowsTier = await prisma.$queryRawUnsafe(
+          'select tier from public.profiles where id = $1 limit 1',
+          userId
+        );
+        const dbTier = Array.isArray(rowsTier) && rowsTier[0]?.tier ? String(rowsTier[0].tier) : 'free';
+        normalizedTier = TIERS[dbTier] ? dbTier : 'free';
+      } catch (_) {
+        normalizedTier = 'free';
       }
-    });
-    
+    }
+    const effectiveTierConfig = TIERS[normalizedTier] || TIERS.free;
+
+    // Get current month usage from Supabase (raw SQL to be resilient to Prisma schema mismatch)
+    const month = monthStartISO();
+    const rows = await prisma.$queryRawUnsafe(
+      'select input_tokens, output_tokens, requests from public.usage_monthly where user_id = $1 and month = $2 limit 1',
+      userId,
+      month
+    );
+    const rec = Array.isArray(rows) && rows[0] ? rows[0] : null;
+
     // Calculate character usage (input + output tokens converted back to chars)
-    const inputChars = (usage?.input_tokens || 0) * CHARS_PER_TOKEN;
-    const outputChars = (usage?.output_tokens || 0) * CHARS_PER_TOKEN;
+    const inputChars = Number(rec?.input_tokens || 0) * CHARS_PER_TOKEN;
+    const outputChars = Number(rec?.output_tokens || 0) * CHARS_PER_TOKEN;
     const totalCharsUsed = Math.round(inputChars + outputChars);
     
-    const percentage = Math.min((totalCharsUsed / tierConfig.maxInputSize) * 100, 100);
+    const percentage = Math.min((totalCharsUsed / effectiveTierConfig.maxInputSize) * 100, 100);
     
     const result = {
       used: totalCharsUsed,
-      limit: tierConfig.maxInputSize,
-      tier: tier,
+      limit: effectiveTierConfig.maxInputSize,
+      tier: normalizedTier,
       isGuest: false,
       percentage: percentage,
-      requests: usage?.requests || 0
+      requests: Number(rec?.requests || 0)
     };
     
     res.json(result);

@@ -4742,9 +4742,13 @@ ${lines.join('\n')}`);
         }
         
         const response = await fetch('/api/usage/current', { headers });
+        if (!response.ok) {
+          const errText = await response.text().catch(()=>'');
+          throw new Error(`HTTP ${response.status} ${errText}`);
+        }
         const usageData = await response.json();
         
-        if (response.ok) {
+        if (usageData && typeof usageData.used === 'number') {
           // Update display with cumulative usage
           charUsedSpan.textContent = usageData.used.toLocaleString();
           charProgress.style.width = usageData.percentage + '%';
@@ -4773,8 +4777,6 @@ ${lines.join('\n')}`);
           // Store current usage data for debugging
           window.currentUsageData = usageData;
           console.log('📊 Usage data updated:', usageData);
-        } else {
-          console.error('❌ Failed to fetch usage data:', response.status, await response.text());
         }
       } catch (error) {
         console.error('Failed to fetch usage data:', error);
