@@ -4054,26 +4054,42 @@ async function fileToText(absPath, originalName) {
 }
 
 /** ------------------------- API: upload ------------------------- */
+// Guest mode middleware - allows both authenticated users and guests
+const allowGuests = (req, res, next) => {
+  // Development bypass if enabled
+  if (NODE_ENV === 'development' && process.env.DEV_AUTH_BYPASS === 'true') {
+    req.user = {
+      id: 'dev-user-' + Date.now(),
+      email: 'dev@localhost',
+      name: 'Development User',
+      tier: 'team'
+    };
+    return next();
+  }
+  
+  // Check for guest ID header
+  const guestId = req.headers['x-guest-id'];
+  if (guestId && guestId.startsWith('guest_')) {
+    req.user = {
+      id: guestId,
+      email: null,
+      name: 'Guest User',
+      tier: 'free',
+      isGuest: true
+    };
+    return next();
+  }
+  
+  // Try API key first, then JWT auth
+  if (req.headers['x-api-key']) {
+    return requireApiKey(req, res, next);
+  } else {
+    return requireAuth(req, res, next);
+  }
+};
+
 app.post('/api/upload',
-  (req, res, next) => {
-    // Development bypass if enabled
-    if (NODE_ENV === 'development' && process.env.DEV_AUTH_BYPASS === 'true') {
-      req.user = {
-        id: 'dev-user-' + Date.now(),
-        email: 'dev@localhost',
-        name: 'Development User',
-        tier: 'team'
-      };
-      return next();
-    }
-    
-    // Try API key first, then JWT auth
-    if (req.headers['x-api-key']) {
-      return requireApiKey(req, res, next);
-    } else {
-      return requireAuth(req, res, next);
-    }
-  },
+  allowGuests,
   rateLimiters.upload,
   quotaMiddleware,
   upload.single('file'),
@@ -4701,26 +4717,7 @@ async function callOpenAIWithRetry({ messages, temperature }) {
 }
 
 app.post('/api/translate-batch',
-  ensureProfile,
-  (req, res, next) => {
-    // Development bypass if enabled
-    if (NODE_ENV === 'development' && process.env.DEV_AUTH_BYPASS === 'true') {
-      req.user = {
-        id: 'dev-user-' + Date.now(),
-        email: 'dev@localhost',
-        name: 'Development User',
-        tier: 'team'
-      };
-      return next();
-    }
-    
-    // Try API key first, then JWT auth
-    if (req.headers['x-api-key']) {
-      return requireApiKey(req, res, next);
-    } else {
-      return requireAuth(req, res, next);
-    }
-  },
+  allowGuests,
   rateLimiters.translation,
   quotaMiddleware,
   checkTierPermission('batch'), // Batch requires Pro or Team tier

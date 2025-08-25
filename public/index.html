@@ -14,55 +14,173 @@
       }
     });
 
+    // Guest mode system
+    window.initGuestMode = function initGuestMode() {
+      let guestId = localStorage.getItem('guestId');
+      if (!guestId) {
+        // Generate anonymous guest ID
+        guestId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('guestId', guestId);
+        console.log('Created guest session:', guestId);
+      }
+      
+      // Set up guest user object
+      const guestUser = {
+        id: guestId,
+        email: null,
+        name: 'Guest User',
+        tier: 'free',
+        isGuest: true
+      };
+      
+      if (!localStorage.getItem('authToken')) {
+        localStorage.setItem('user', JSON.stringify(guestUser));
+        console.log('Guest mode active:', guestUser);
+        // Ensure UI reflects guest state immediately
+        setTimeout(() => renderAuthHeader(), 100);
+      }
+      
+      return guestUser;
+    }
+
     // Keep auth token/user in localStorage so existing fetches work
     supabase.auth.onAuthStateChange(async (_event, session) => {
       const token = session?.access_token || '';
       const user = session?.user ? {
         id: session.user.id,
         email: session.user.email,
-        name: (session.user.user_metadata && session.user.user_metadata.name) ? session.user.user_metadata.name : (session.user.email||'').split('@')[0]
+        name: (session.user.user_metadata && session.user.user_metadata.name) ? session.user.user_metadata.name : (session.user.email||'').split('@')[0],
+        isGuest: false
       } : null;
-      if (token) localStorage.setItem('authToken', token); else localStorage.removeItem('authToken');
-      if (user) localStorage.setItem('user', JSON.stringify(user)); else localStorage.removeItem('user');
+      
+      if (token) {
+        localStorage.setItem('authToken', token);
+        // Clear guest mode when user signs in
+        localStorage.removeItem('guestId');
+      } else {
+        localStorage.removeItem('authToken');
+        // Initialize guest mode if no user session
+        if (!user) {
+          window.initGuestMode();
+        }
+      }
+      
+      if (user) {
+        // For authenticated users, always fetch the authoritative tier from backend
+        localStorage.setItem('user', JSON.stringify(user));
+        console.log('🔍 Authenticated user detected, will fetch tier from backend');
+        // Don't render header yet - wait for profile fetch to get correct tier
+      } else {
+        // Keep guest user if no authenticated user
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!currentUser.isGuest) {
+          localStorage.removeItem('user');
+          window.initGuestMode();
+        }
+        window.renderAuthHeader();
+      }
+      
       // Fetch server-side profile to get authoritative tier
       try{
         if (token) {
-          const res = await fetch('/api/profile', { headers: { 'Authorization': `Bearer ${token}` } });
+          console.log('🔍 Fetching profile for authenticated user with token');
+          const profileHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+          const res = await fetch('/api/profile', { headers: profileHeaders });
+          console.log('🔍 Profile fetch response:', res.status, res.ok);
           if (res.ok) {
             const p = await res.json();
+            console.log('🔍 Profile data received:', p);
             const u = JSON.parse(localStorage.getItem('user')||'{}');
-            u.tier = p.tier || u.tier; localStorage.setItem('user', JSON.stringify(u));
+            u.tier = p.tier || 'team'; // Use backend tier or default to team
+            u.isGuest = false; // Ensure authenticated users are not marked as guests
+            localStorage.setItem('user', JSON.stringify(u));
+            console.log('🔍 Updated user object with backend tier:', u);
             // refresh UI and phrasebook
-            renderAuthHeader();
+            window.renderAuthHeader();
             try{ if (typeof renderSavedPhrasebookAll==='function') await renderSavedPhrasebookAll(); }catch{}
+          } else {
+            console.log('🔍 Profile fetch failed, but user has token - marking as authenticated');
+            // If profile fetch fails but we have a token, still mark as not guest with team tier
+            const u = JSON.parse(localStorage.getItem('user')||'{}');
+            u.isGuest = false;
+            u.tier = u.tier || 'team'; // Default to team tier for authenticated users
+            localStorage.setItem('user', JSON.stringify(u));
+            console.log('🔍 Fallback user object with team tier:', u);
+            window.renderAuthHeader();
           }
+        } else {
+          // No token, ensure guest mode is active
+          const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+          if (!currentUser.isGuest) {
+            window.initGuestMode();
+          }
+          window.renderAuthHeader();
         }
-      }catch(e){ console.warn('profile fetch failed', e); }
+      }catch(e){ 
+        console.warn('profile fetch failed', e);
+        // On error, if we have a token, still mark as authenticated
+        if (token) {
+          const u = JSON.parse(localStorage.getItem('user')||'{}');
+          u.isGuest = false;
+          localStorage.setItem('user', JSON.stringify(u));
+        }
+        window.renderAuthHeader();
+      }
     });
 
     // On initial load, recover session immediately (covers OAuth redirect)
     (async () => {
       try{
+        console.log('Checking for existing session...');
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
+        console.log('Session found:', !!session, 'Token:', !!token);
+        
+        // If we arrived via OAuth, clean the hash from the URL once handled
+        const hasOAuthTokens = /access_token=|refresh_token=|code=/i.test(location.hash);
+        if (hasOAuthTokens) {
+          console.log('OAuth tokens detected in URL hash, processing...');
+          try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+        }
+        
         if (token) {
           const user = session.user ? {
             id: session.user.id,
             email: session.user.email,
-            name: (session.user.user_metadata && session.user.user_metadata.name) ? session.user.user_metadata.name : (session.user.email||'').split('@')[0]
+            name: (session.user.user_metadata && session.user.user_metadata.name) ? session.user.user_metadata.name : (session.user.email||'').split('@')[0],
+            isGuest: false
           } : null;
           localStorage.setItem('authToken', token);
-          if (user) localStorage.setItem('user', JSON.stringify(user));
+          localStorage.removeItem('guestId'); // Clear guest mode
+          if (user) {
+            user.isGuest = false; // Explicitly mark as not guest
+            user.tier = 'team'; // Default to team tier for authenticated users
+            localStorage.setItem('user', JSON.stringify(user));
+            console.log('🔍 Initial session recovery - set user with team tier:', user);
+          }
           try{
-            const res = await fetch('/api/profile', { headers: { 'Authorization': `Bearer ${token}` } });
+            const profileHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+            const res = await fetch('/api/profile', { headers: profileHeaders });
             if (res.ok) {
               const p = await res.json();
               const u = JSON.parse(localStorage.getItem('user')||'{}');
-              u.tier = p.tier || u.tier; localStorage.setItem('user', JSON.stringify(u));
+              u.tier = p.tier || 'team'; // Use backend tier or default to team
+              u.isGuest = false; // Ensure not marked as guest
+              localStorage.setItem('user', JSON.stringify(u));
+              console.log('🔍 Session recovery - updated user with backend tier:', u);
             }
           }catch{}
+        } else {
+          // No authenticated session, initialize guest mode
+          window.initGuestMode();
         }
-      }catch{}
+        // Update header to reflect current state
+        window.renderAuthHeader();
+      }catch{
+        // On error, ensure guest mode is active
+        initGuestMode();
+        window.renderAuthHeader();
+      }
     })();
 
     window.getAuthToken = async () => {
@@ -403,32 +521,91 @@
   <style>
     /* Minimal modal base styles */
     .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9999;display:none;align-items:center;justify-content:center}
-    .modal-card{background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-hard);width:min(420px,92vw);padding:16px}
-    .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .modal-card{background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-hard);width:min(440px,92vw);padding:20px}
+    .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
     /* Animated dropdown */
     @keyframes popIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
     .menu-show{display:block !important;animation:popIn .16s ease-out}
+
+    /* Auth modal — polished visuals */
+    #authModal .modal-card{animation:popIn .18s ease-out}
+    #authModal .modal-head h3{margin:0;font-weight:600;font-size:18px;color:#0f172a}
+    #authModal .auth-body{display:grid;gap:12px}
+    #authModal .btn-google{display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:#111}
+    #authModal .btn-google:hover{border-color:var(--accent);box-shadow:0 6px 22px rgba(0,0,0,.10),0 0 0 2px var(--accent-weak)}
+    #authModal .btn-google svg{width:18px;height:18px}
+    #authModal .auth-divider{display:flex;align-items:center;gap:10px;color:#6b7280;font-size:12px}
+    #authModal .auth-divider:before,#authModal .auth-divider:after{content:"";flex:1;height:1px;background:#e5e7eb}
+    #authModal .auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    #authModal .auth-tabs .btn{border-radius:10px;padding:9px 10px;justify-content:center;transition:all .18s var(--ease)}
+    #authModal .auth-tabs .btn.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-weak)}
+    #authModal .auth-form{display:grid;gap:10px}
+    #authModal .auth-field{display:grid;gap:6px;transition:all .18s var(--ease)}
+    #authModal .auth-field label{font-size:12px;color:#374151}
+    #authModal .auth-input{padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;transition:all .18s var(--ease)}
+    #authModal .auth-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+    #authModal .auth-primary{background:var(--accent);color:#fff;border-color:var(--accent);border-width:1px;border-style:solid;border-radius:10px;padding:10px;justify-content:center;display:inline-flex;transition:all .18s var(--ease)}
+    #authModal .auth-primary:hover{filter:saturate(1.08);box-shadow:0 6px 16px rgba(0,122,255,.25)}
+    #authModal .auth-msg{font-size:12px;color:#e11d48;min-height:16px}
+    #authModal .auth-close{background:transparent}
+    
+    /* Auth state transitions */
+    #authModal .auth-field{transition:all .25s var(--ease)}
+    #authModal .auth-field.hidden{opacity:0;transform:translateY(-8px);max-height:0;margin:0;overflow:hidden}
+    #authModal .auth-field.visible{opacity:1;transform:translateY(0);max-height:100px}
+    
+    /* Check email state */
+    #authModal .check-email{text-align:center;padding:20px 0}
+    #authModal .check-email-icon{font-size:48px;margin-bottom:16px;color:var(--accent)}
+    #authModal .check-email-title{font-size:18px;font-weight:600;margin-bottom:8px;color:#0f172a}
+    #authModal .check-email-text{color:#6b7280;font-size:14px;line-height:1.5;margin-bottom:20px}
+    #authModal .check-email-back{background:transparent;color:var(--accent);border:1px solid var(--accent)}
   </style>
   <!-- Login/Register Modal -->
   <div id="authModal" class="modal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true">
       <div class="modal-head">
-        <h3 style="margin:0;font-size:16px">Sign in</h3>
-        <button id="authClose" class="btn" aria-label="Close">✕</button>
-      </div>
-      <div class="modal-body">
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          <button id="authTabLogin" class="btn" style="flex:1;background:#111;color:#fff">Login</button>
-          <button id="authTabRegister" class="btn" style="flex:1">Register</button>
-          <button id="authGoogle" class="btn" style="flex:1;min-width:220px">Continue with Google</button>
+        <div>
+          <h3>Sign in</h3>
         </div>
-        <form id="authForm" style="display:grid;gap:8px">
-          <input id="authName" placeholder="Full name" style="display:none;padding:10px;border:1px solid var(--border);border-radius:10px" />
-          <input id="authEmail" placeholder="Email" type="email" required style="padding:10px;border:1px solid var(--border);border-radius:10px" />
-          <input id="authPassword" placeholder="Password" type="password" required style="padding:10px;border:1px solid var(--border);border-radius:10px" />
-          <button id="authSubmit" class="btn" type="submit" style="background:#111;color:#fff">Sign in</button>
-          <div id="authMsg" style="font-size:12px;color:#e11d48;min-height:16px"></div>
-        </form>
+        <button id="authClose" class="btn auth-close" aria-label="Close">✕</button>
+      </div>
+      <div class="auth-body">
+        <button id="authGoogle" class="btn btn-google" type="button" aria-label="Continue with Google">
+          <img src="/Google_Favicon_2025.svg" alt="Google" width="18" height="18" style="display:inline-block"/>
+          Continue with Google
+        </button>
+        <div class="auth-divider"><span>or</span></div>
+        <div class="auth-tabs">
+          <button id="authTabLogin" class="btn active" type="button">Login</button>
+          <button id="authTabRegister" class="btn" type="button">Register</button>
+        </div>
+        <div id="authFormContainer">
+          <form id="authForm" class="auth-form">
+            <div class="auth-field hidden" id="authNameField">
+              <label for="authName">Full name</label>
+              <input id="authName" class="auth-input" placeholder="Full name" />
+            </div>
+            <div class="auth-field">
+              <label for="authEmail">Email</label>
+              <input id="authEmail" class="auth-input" placeholder="Email" type="email" required />
+            </div>
+            <div class="auth-field">
+              <label for="authPassword">Password</label>
+              <input id="authPassword" class="auth-input" placeholder="Password" type="password" required />
+            </div>
+            <button id="authSubmit" class="btn auth-primary" type="submit">Sign in</button>
+            <div id="authMsg" class="auth-msg"></div>
+          </form>
+          
+          <!-- Check email state -->
+          <div id="checkEmailState" class="check-email" style="display:none">
+            <div class="check-email-icon">📧</div>
+            <div class="check-email-title">Check your email</div>
+            <div class="check-email-text">We've sent you a confirmation link. Please check your email and click the link to verify your account.</div>
+            <button id="backToLogin" class="btn check-email-back">Back to Sign in</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1883,6 +2060,19 @@ window.STYLE_MICROCOPY = {
         return;
       }
       
+      // Check tier restrictions for multiple files
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const isGuest = user.isGuest === true;
+      const tier = user.tier || 'free';
+      
+      console.log('🔍 File upload tier check:', { user, isGuest, tier, filesCount: files.length });
+      
+      if ((isGuest || tier === 'free') && files.length > 1) {
+        console.log('❌ Multiple file upload blocked for tier:', tier);
+        showToast('Multiple file uploads require Pro or Team tier. Sign in to upgrade!');
+        return;
+      }
+      
       uploadInProgress = true;
       console.log('🚀 Starting file upload process');
       showStatus('Preparing upload…');
@@ -1935,8 +2125,12 @@ window.STYLE_MICROCOPY = {
             // Add authentication token if available
             const headers = {};
             const token = localStorage.getItem('authToken');
+            const guestId = localStorage.getItem('guestId');
+            
             if (token) {
               headers['Authorization'] = `Bearer ${token}`;
+            } else if (guestId) {
+              headers['X-Guest-ID'] = guestId;
             }
             
             // Show upload in progress
@@ -2607,8 +2801,12 @@ window.STYLE_MICROCOPY = {
         // Add authentication headers
         const headers = {'Content-Type':'application/json'};
         const token = localStorage.getItem('authToken');
+        const guestId = localStorage.getItem('guestId');
+        
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
+        } else if (guestId) {
+          headers['X-Guest-ID'] = guestId;
         }
         
         const res=await fetch('/api/download-zip',{method:'POST',headers:headers,body:JSON.stringify({zipname:'localized_bundle', files})});
@@ -3117,7 +3315,13 @@ window.STYLE_MICROCOPY = {
       try{
         const headers = { 'Content-Type':'application/json' };
         const token = localStorage.getItem('authToken');
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const guestId = localStorage.getItem('guestId');
+        
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        } else if (guestId) {
+          headers['X-Guest-ID'] = guestId;
+        }
         const payload = {
           name: next.name || 'My Brand',
           tone: next.tone || [],
@@ -3533,8 +3737,12 @@ ${lines.join('\n')}`);
     // Add authentication headers
     const headers = {'Content-Type':'application/json'};
     const token = localStorage.getItem('authToken');
+    const guestId = localStorage.getItem('guestId');
+    
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    } else if (guestId) {
+      headers['X-Guest-ID'] = guestId;
     }
     
     setStatus('Localizing');
@@ -3575,8 +3783,12 @@ ${lines.join('\n')}`);
               // Add authentication headers
           const headers = {'Content-Type':'application/json'};
           const token = localStorage.getItem('authToken');
+          const guestId = localStorage.getItem('guestId');
+          
           if (token) {
             headers['Authorization'] = `Bearer ${token}`;
+          } else if (guestId) {
+            headers['X-Guest-ID'] = guestId;
           }
           
           const res = await fetch('/api/translate-batch',{
@@ -3607,7 +3819,13 @@ ${lines.join('\n')}`);
   async function pbAPI(path, method='GET', body=null){
     const headers={'Content-Type':'application/json','Cache-Control':'no-cache'};
     const token = localStorage.getItem('authToken');
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const guestId = localStorage.getItem('guestId');
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    } else if (guestId) {
+      headers['X-Guest-ID'] = guestId;
+    }
     const res = await fetch(path,{method,headers,body:body?JSON.stringify(body):undefined});
     if(!res.ok){
       let detail='';
@@ -4109,22 +4327,46 @@ ${lines.join('\n')}`);
     }
 
     function openAuth(mode){
-      if (mode==='register') {
-        authName.style.display='';
-        authTabLogin.style.background=''; authTabLogin.style.color='';
-        authTabRegister.style.background='#111'; authTabRegister.style.color='#fff';
-        authSubmit.textContent='Create account';
-        document.querySelector('.modal-head h3').textContent='Create account';
+      const isRegister = mode==='register';
+      const authNameField = document.getElementById('authNameField');
+      const authForm = document.getElementById('authForm');
+      const checkEmailState = document.getElementById('checkEmailState');
+      
+      // Reset to form state
+      authForm.style.display = '';
+      checkEmailState.style.display = 'none';
+      
+      // Smooth transition for name field using CSS classes
+      if (isRegister) {
+        authNameField.classList.remove('hidden');
+        authNameField.classList.add('visible');
       } else {
-        authName.style.display='none';
-        authTabRegister.style.background=''; authTabRegister.style.color='';
-        authTabLogin.style.background='#111'; authTabLogin.style.color='#fff';
-        authSubmit.textContent='Sign in';
-        document.querySelector('.modal-head h3').textContent='Sign in';
+        authNameField.classList.remove('visible');
+        authNameField.classList.add('hidden');
       }
+      
+      // Update tab states
+      authTabLogin.classList.toggle('active', !isRegister);
+      authTabRegister.classList.toggle('active', isRegister);
+      
+      // Update button and title
+      authSubmit.textContent = isRegister ? 'Create account' : 'Sign in';
+      document.querySelector('.modal-head h3').textContent = isRegister ? 'Create account' : 'Sign in';
+      
+      // Clear messages
       authMsg.textContent='';
+      
+      // Show modal
       authModal.style.display='flex';
-      setTimeout(()=>authEmail.focus(),0);
+      
+      // Focus appropriate field with proper timing
+      setTimeout(() => {
+        if (isRegister) {
+          authName.focus();
+        } else {
+          authEmail.focus();
+        }
+      }, isRegister ? 250 : 100); // Longer delay for register to allow field to appear
     }
     function closeAuth(){ authModal.style.display='none'; }
     if (signInBtn) signInBtn.addEventListener('click', async ()=>{
@@ -4137,49 +4379,132 @@ ${lines.join('\n')}`);
     const authGoogle = document.getElementById('authGoogle');
     if (authGoogle) authGoogle.addEventListener('click', async ()=>{
       try{
-        const redirectTo = location.origin.replace(/\/$/,'') + '/';
-        const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+        // Close the auth modal before OAuth redirect
+        closeAuth();
+        
+        const { data, error } = await supabase.auth.signInWithOAuth({ 
+          provider: 'google', 
+          options: { 
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent'
+            }
+          }
+        });
         if (error) throw error;
-      }catch(e){ console.error('Google sign-in failed', e); showToast('Google sign-in failed'); }
+        
+        console.log('OAuth initiated successfully');
+      }catch(e){ 
+        console.error('Google sign-in failed', e); 
+        showToast('Google sign-in failed: ' + (e.message || e)); 
+      }
     });
     if (authClose) authClose.addEventListener('click', closeAuth);
     if (authTabLogin) authTabLogin.addEventListener('click', ()=>openAuth('login'));
     if (authTabRegister) authTabRegister.addEventListener('click', ()=>openAuth('register'));
+    
+    // Back to login button from check email state
+    const backToLogin = document.getElementById('backToLogin');
+    if (backToLogin) backToLogin.addEventListener('click', ()=>openAuth('login'));
+
+    function showCheckEmailState(email) {
+      const authForm = document.getElementById('authForm');
+      const checkEmailState = document.getElementById('checkEmailState');
+      
+      // Hide form and show check email state
+      authForm.style.display = 'none';
+      checkEmailState.style.display = '';
+      
+      // Update title
+      document.querySelector('.modal-head h3').textContent = 'Check your email';
+    }
 
     if (authForm) authForm.addEventListener('submit', async (e)=>{
       e.preventDefault();
       authMsg.textContent='';
       const email = authEmail.value.trim();
       const password = authPassword.value;
-      const name = authName.style.display==='none' ? undefined : authName.value.trim();
+      const authNameField = document.getElementById('authNameField');
+      const isRegister = authNameField.classList.contains('visible');
+      const name = isRegister ? authName.value.trim() : undefined;
+      
       try{
-        if (name) {
-          const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, tier: 'team' } } });
+        if (isRegister) {
+          // Sign up flow
+          const { data, error } = await supabase.auth.signUp({ 
+            email, 
+            password, 
+            options: { 
+              data: { name, tier: 'free' } 
+            } 
+          });
           if (error) throw error;
+          
+          // Show check email state
+          showCheckEmailState(email);
+          
+          // Auto-transition back to login after 3 seconds
+          setTimeout(() => {
+            openAuth('login');
+          }, 3000);
+        } else {
+          // Sign in flow
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+          closeAuth();
+          location.reload();
         }
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        closeAuth();
-        location.reload();
-      }catch(err){ authMsg.textContent=err.message||String(err); }
+      }catch(err){ 
+        authMsg.textContent = err.message || String(err); 
+      }
     });
 
     // Render header auth state
-    function renderAuthHeader(){
+    window.renderAuthHeader = function renderAuthHeader(){
       try{
         const hasToken = !!localStorage.getItem('authToken');
         const u = JSON.parse(localStorage.getItem('user')||'{}');
         const badge = document.getElementById('tierBadge');
-        if (hasToken){
+        const isGuest = u.isGuest === true;
+        
+        console.log('🔍 renderAuthHeader:', { hasToken, user: u, isGuest });
+        
+        if (hasToken && !isGuest){
+          // Authenticated user
+          console.log('🔍 Rendering authenticated user UI, tier:', u.tier);
           if (signInBtn) signInBtn.style.display='none';
           if (signOutBtnTop) signOutBtnTop.style.display='inline-block';
-          // Optionally reflect tier in title tooltip
           if (signOutBtnTop && u.tier) signOutBtnTop.title = `Tier: ${u.tier}`;
           if (badge){
-            if (u.tier){ badge.style.display='inline-block'; badge.textContent = String(u.tier).toUpperCase(); }
+            if (u.tier){ 
+              badge.style.display='inline-block'; 
+              badge.textContent = String(u.tier).toUpperCase();
+              // Reset guest styling
+              badge.style.background=''; 
+              badge.style.color='';
+              badge.style.borderColor='';
+              badge.title = `Current tier: ${u.tier}`;
+            }
             else { badge.style.display='none'; }
           }
+        } else if (isGuest) {
+          // Guest user
+          if (signOutBtnTop) signOutBtnTop.style.display='none';
+          if (signInBtn) {
+            signInBtn.style.display='inline-block';
+            signInBtn.textContent = 'Sign in';
+            signInBtn.title = 'Sign in to unlock more features and save your work';
+          }
+          if (badge){
+            badge.style.display='inline-block'; 
+            badge.textContent = 'GUEST';
+            badge.style.background='#f3f4f6'; 
+            badge.style.color='#6b7280';
+            badge.style.borderColor='#d1d5db';
+            badge.title = 'Guest mode - Sign in to unlock more features';
+          }
         } else {
+          // No user at all (shouldn't happen with guest mode)
           if (signOutBtnTop) signOutBtnTop.style.display='none';
           if (signInBtn) signInBtn.style.display='inline-block';
           if (badge) badge.style.display='none';
@@ -4188,12 +4513,24 @@ ${lines.join('\n')}`);
     }
     renderAuthHeader();
 
+    // Complete auth state cleanup
+    window.clearAuthState = function clearAuthState() {
+      console.log('🧹 Clearing all auth state');
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
+      localStorage.removeItem('guestId');
+      sessionStorage.clear();
+      // Initialize fresh guest mode
+      window.initGuestMode();
+      window.renderAuthHeader();
+    }
+
+
+
     // Sign out (top button)
     if (signOutBtnTop) signOutBtnTop.addEventListener('click',async ()=>{
       try{ await supabase.auth.signOut(); }catch{}
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-      renderAuthHeader();
+      window.clearAuthState();
       location.reload();
     });
 
@@ -4214,10 +4551,8 @@ ${lines.join('\n')}`);
     if (isLocalHost) {
       setTimeout(() => { if (window.autoLogin) { window.autoLogin(); } }, 1000);
     }
-    // Auto-show login in production when not authenticated
-    if (!isLocalHost && !localStorage.getItem('authToken')) {
-      if (typeof openAuth==='function') openAuth('login');
-    }
+    // Don't auto-show login for guests - they can use the app freely
+    // Only show login modal if explicitly requested
   });
 </script>
 
