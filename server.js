@@ -5129,8 +5129,12 @@ app.get('/api/usage/current',
       });
     }
     
-    // Check if Prisma is available
-    if (!prisma) {
+    // Check if Prisma/Postgres is available and configured
+    const hasPgUrl = typeof process.env.DATABASE_URL === 'string' && /^(postgres|postgresql):\/\//.test(process.env.DATABASE_URL || '');
+    if (!prisma || !hasPgUrl) {
+      if (!hasPgUrl) {
+        console.warn('usage/current: DATABASE_URL missing or invalid; returning zero usage');
+      }
       return res.json({
         used: 0,
         limit: tierConfig.maxInputSize,
