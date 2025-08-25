@@ -257,6 +257,12 @@ let advancedFeaturesInitialized = false;
 // Initialize queue system and workers
 async function initializeM5Services() {
   try {
+    // Skip queue system in development to avoid Redis connection spam
+    if (NODE_ENV === 'development') {
+      console.log('⚠️  Skipping queue system initialization in development (Redis not required)');
+      return;
+    }
+    
     // Initialize queue system
     await initQueueSystem();
     
@@ -4089,11 +4095,21 @@ const allowGuests = (req, res, next) => {
     return next();
   }
   
-  // Try API key first, then JWT auth
+  // Try API key first, then JWT auth, but allow unauthenticated as guest
   if (req.headers['x-api-key']) {
     return requireApiKey(req, res, next);
-  } else {
+  } else if (req.headers['authorization']) {
     return requireAuth(req, res, next);
+  } else {
+    // No authentication provided - treat as anonymous guest
+    req.user = {
+      id: 'anonymous',
+      email: null,
+      name: 'Anonymous User',
+      tier: 'free',
+      isGuest: true
+    };
+    return next();
   }
 };
 

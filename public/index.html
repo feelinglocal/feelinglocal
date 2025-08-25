@@ -4778,8 +4778,24 @@ ${lines.join('\n')}`);
         }
       } catch (error) {
         console.error('Failed to fetch usage data:', error);
-        // Fallback to current tab character count
-        updateCurrentTabCharacterCount();
+        
+        // Show error state instead of falling back to per-tab count
+        const charUsedSpan = document.getElementById('charUsed');
+        const charProgress = document.getElementById('charProgress');
+        const indicator = document.getElementById('charLimitIndicator');
+        
+        if (charUsedSpan && charProgress && indicator) {
+          charUsedSpan.textContent = '?';
+          charProgress.style.width = '0%';
+          indicator.classList.remove('warning', 'danger');
+          
+          // Update tooltip to show error
+          const user = JSON.parse(localStorage.getItem('user') || '{}');
+          const tier = user.isGuest ? 'guest' : (user.tier || 'free');
+          const tierConfig = window.getTierLimit ? window.getTierLimit(tier) : TIER_LIMITS[tier] || TIER_LIMITS.free;
+          
+          indicator.title = `Failed to load usage data. Limit: ${tierConfig.maxInputSize.toLocaleString()} characters`;
+        }
       }
     }
 
