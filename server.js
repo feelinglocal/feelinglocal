@@ -167,7 +167,17 @@ try {
 async function ensureProfile(req, res, next) {
   if (!prisma || !req.user?.id) return next();
   try {
-    await prisma.$executeRaw`insert into public.profiles (id, name, tier) values (${req.user.id}, ${req.user.email || null}, 'free') on conflict (id) do nothing`;
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = req.user.id;
+    if (typeof req.user.id === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${req.user.id.toString().padStart(12, '0')}`;
+      console.log(`ensureProfile: Converting legacy user ID ${req.user.id} to UUID format: ${userIdForDb}`);
+    }
+    
+    await prisma.$executeRawUnsafe(
+      'INSERT INTO public.profiles (id, name, tier) VALUES ($1::uuid, $2, $3) ON CONFLICT (id) DO NOTHING',
+      userIdForDb, req.user.email || null, 'free'
+    );
   } catch (e) {
     console.warn('ensureProfile', e?.message || e);
   }
@@ -190,9 +200,9 @@ async function updateMonthlyUsage({ userId, requests = 1, inputChars = 0, output
     // Convert integer user ID to UUID string if needed
     let userIdForDb = userId;
     if (typeof userId === 'number') {
-      // Skip usage tracking for old integer user IDs - they're not in Supabase
-      console.log('Skipping usage tracking for legacy integer user ID:', userId);
-      return;
+      // Handle legacy integer user IDs by converting to UUID format for Supabase
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
     }
 
     // Use raw SQL to avoid depending on generated model/compound unique naming
@@ -4890,10 +4900,18 @@ function getUID(req){ return req.headers['x-uid'] || req.query.uid || 'anon'; }
 app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
+    
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Phrasebook GET: Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
+    }
+    
     // Prefer Supabase REST with service role to avoid RLS issues on direct PG
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/phrasebook_items`);
-      url.searchParams.set('user_id', `eq.${userId}`);
+      url.searchParams.set('user_id', `eq.${userIdForDb}`);
       url.searchParams.set('select', 'id,src_text,tgt_text,src_lang,tgt_lang,created_at');
       url.searchParams.set('order', 'created_at.desc');
       const r = await fetch(url.toString(), {
@@ -4919,6 +4937,14 @@ app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
 app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
+    
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Phrasebook ADD: Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
+    }
+    
     const it = req.body?.item || {};
     if(!it) return res.status(400).json({ ok:false, error:'Bad item.' });
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -4931,7 +4957,7 @@ app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), asyn
           'Content-Type':'application/json',
           'Prefer':'return=representation'
         },
-        body: JSON.stringify({ user_id: userId, src_text: String(it.srcText||''), tgt_text: String(it.tgtText||''), src_lang: String(it.srcLang||'Auto'), tgt_lang: String(it.tgtLang||'') })
+        body: JSON.stringify({ user_id: userIdForDb, src_text: String(it.srcText||''), tgt_text: String(it.tgtText||''), src_lang: String(it.srcLang||'Auto'), tgt_lang: String(it.tgtLang||'') })
       });
       if (!r.ok) throw new Error(`supabase rest insert ${r.status}`);
       const rows = await r.json();
@@ -4954,12 +4980,20 @@ app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), asyn
 app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
+    
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Phrasebook DELETE: Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
+    }
+    
     const id = req.body?.id;
     if(!id) return res.status(400).json({ ok:false, error:'Missing id.' });
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/phrasebook_items`);
       url.searchParams.set('id', `eq.${id}`);
-      url.searchParams.set('user_id', `eq.${userId}`);
+      url.searchParams.set('user_id', `eq.${userIdForDb}`);
       const r = await fetch(url.toString(), {
         method: 'DELETE',
         headers: {
@@ -4985,9 +5019,17 @@ app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), a
 app.get('/api/brand-kits', requireAuth, ensureProfile, async (req, res) => {
   try {
     const userId = req.user?.id;
+    
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Brand Kits GET: Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
+    }
+    
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/brand_kits`);
-      url.searchParams.set('user_id', `eq.${userId}`);
+      url.searchParams.set('user_id', `eq.${userIdForDb}`);
       url.searchParams.set('select', '*');
       url.searchParams.set('order', 'created_at.desc');
       const r = await fetch(url.toString(), { headers: { 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` } });
@@ -5004,13 +5046,21 @@ app.get('/api/brand-kits', requireAuth, ensureProfile, async (req, res) => {
 app.post('/api/brand-kits', requireAuth, ensureProfile, express.json(), async (req, res) => {
   try {
     const userId = req.user?.id;
+    
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Brand Kits POST: Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
+    }
+    
     const { name = 'My Brand', tone = [], forbidden_words = [], style_notes = '' } = req.body || {};
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const url = `${process.env.SUPABASE_URL}/rest/v1/brand_kits`;
       const r = await fetch(url, {
         method:'POST',
         headers:{ 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type':'application/json', 'Prefer':'return=representation' },
-        body: JSON.stringify({ user_id: userId, name, tone, forbidden_words, style_notes })
+        body: JSON.stringify({ user_id: userIdForDb, name, tone, forbidden_words, style_notes })
       });
       if (!r.ok) throw new Error(`supabase rest create ${r.status}`);
       const rows = await r.json();
@@ -5025,11 +5075,19 @@ app.post('/api/brand-kits', requireAuth, ensureProfile, express.json(), async (r
 app.put('/api/brand-kits/:id', requireAuth, ensureProfile, express.json(), async (req, res) => {
   try {
     const userId = req.user?.id; const id = req.params.id;
+    
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Brand Kits PUT: Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
+    }
+    
     const { name, tone, forbidden_words, style_notes } = req.body || {};
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/brand_kits`);
       url.searchParams.set('id', `eq.${id}`);
-      url.searchParams.set('user_id', `eq.${userId}`);
+      url.searchParams.set('user_id', `eq.${userIdForDb}`);
       const r = await fetch(url.toString(), {
         method:'PATCH',
         headers:{ 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type':'application/json', 'Prefer':'return=representation' },
@@ -5048,10 +5106,18 @@ app.put('/api/brand-kits/:id', requireAuth, ensureProfile, express.json(), async
 app.delete('/api/brand-kits/:id', requireAuth, ensureProfile, async (req, res) => {
   try {
     const userId = req.user?.id; const id = req.params.id;
+    
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Brand Kits DELETE: Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
+    }
+    
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/brand_kits`);
       url.searchParams.set('id', `eq.${id}`);
-      url.searchParams.set('user_id', `eq.${userId}`);
+      url.searchParams.set('user_id', `eq.${userIdForDb}`);
       const r = await fetch(url.toString(), { method:'DELETE', headers:{ 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'Prefer':'return=minimal' } });
       if (!r.ok) throw new Error(`supabase rest delete ${r.status}`);
       return res.json({ ok:true });
@@ -5161,24 +5227,25 @@ app.get('/api/usage/current',
     }
     const effectiveTierConfig = TIERS[normalizedTier] || TIERS.free;
 
-    // If this is a legacy integer user id (SQLite admin/dev), skip DB lookup to avoid uuid/bigint errors
-    const isUuidLike = typeof userId === 'string' && userId.includes('-');
-    if (!isUuidLike) {
-      return res.json({
-        used: 0,
-        limit: effectiveTierConfig.maxInputSize,
-        tier: normalizedTier,
-        isGuest: false,
-        percentage: 0,
-        requests: 0
-      });
+    // Handle legacy integer user IDs by converting to UUID format
+    let userIdForDb = userId;
+    if (typeof userId === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userId.toString().padStart(12, '0')}`;
+      console.log(`Usage API: Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
+    } else if (typeof userId === 'string' && !userId.includes('-')) {
+      // Handle string numbers too
+      const numId = parseInt(userId);
+      if (!isNaN(numId)) {
+        userIdForDb = `00000000-0000-0000-0000-${numId.toString().padStart(12, '0')}`;
+        console.log(`Usage API: Converting legacy string user ID ${userId} to UUID format: ${userIdForDb}`);
+      }
     }
 
     // Get current month usage from Supabase (raw SQL to be resilient to Prisma schema mismatch)
     const month = monthStartISO();
     const rows = await prisma.$queryRawUnsafe(
       'select input_tokens, output_tokens, requests from public.usage_monthly where user_id = $1::uuid and month = $2::date limit 1',
-      userId,
+      userIdForDb,
       month
     );
     const rec = Array.isArray(rows) && rows[0] ? rows[0] : null;
