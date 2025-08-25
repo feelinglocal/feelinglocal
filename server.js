@@ -5085,43 +5085,22 @@ app.get('/api/usage/monthly', requireAuth, ensureProfile, async (req, res) => {
 
 /** ------------------------- API: Current Usage ------------------------- */
 app.get('/api/usage/current', 
-  (req, res, next) => {
-    // Special middleware for usage endpoint - allow completely unauthenticated requests
-    const guestId = req.headers['x-guest-id'];
-    if (guestId && guestId.startsWith('guest_')) {
-      req.user = {
-        id: guestId,
-        email: null,
-        name: 'Guest User',
-        tier: 'free',
-        isGuest: true
-      };
-      return next();
-    }
-    
-    // Try API key first, then JWT auth, but don't fail if neither exists
-    if (req.headers['x-api-key']) {
-      return requireApiKey(req, res, next);
-    } else if (req.headers['authorization']) {
-      return requireAuth(req, res, next);
-    } else {
-      // No authentication provided - treat as guest
-      req.user = {
-        id: 'anonymous',
-        email: null,
-        name: 'Anonymous User',
-        tier: 'free',
-        isGuest: true
-      };
-      return next();
-    }
-  },
+  allowGuests,
   async (req, res) => {
   try {
     const userId = req.user?.id;
     const isGuest = req.user?.isGuest === true;
     const tier = req.user?.tier || 'free';
     const tierConfig = TIERS[tier];
+    
+    console.log('🔍 Usage API Debug:', {
+      userId,
+      isGuest,
+      tier,
+      hasAuthHeader: !!req.headers['authorization'],
+      hasGuestHeader: !!req.headers['x-guest-id'],
+      userObject: req.user
+    });
     
     if (isGuest || !userId || userId === 'anonymous') {
       // For guests, return zero usage but show tier limits

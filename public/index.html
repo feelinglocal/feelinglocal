@@ -4723,9 +4723,21 @@ ${lines.join('\n')}`);
         if (user.isGuest) {
           headers['X-Guest-ID'] = localStorage.getItem('guestId');
         } else {
+          // Try to get Supabase session token
           const authToken = localStorage.getItem('authToken');
           if (authToken) {
             headers['Authorization'] = `Bearer ${authToken}`;
+          } else {
+            // Try to get Supabase session
+            try {
+              const supabaseSession = await supabase.auth.getSession();
+              if (supabaseSession?.data?.session?.access_token) {
+                headers['Authorization'] = `Bearer ${supabaseSession.data.session.access_token}`;
+                console.log('🔑 Using Supabase session token for usage API');
+              }
+            } catch (e) {
+              console.warn('Failed to get Supabase session:', e);
+            }
           }
         }
         
@@ -4817,9 +4829,20 @@ ${lines.join('\n')}`);
         if (user.isGuest) {
           headers['X-Guest-ID'] = localStorage.getItem('guestId');
         } else {
+          // Try to get Supabase session token
           const authToken = localStorage.getItem('authToken');
           if (authToken) {
             headers['Authorization'] = `Bearer ${authToken}`;
+          } else {
+            // Try to get Supabase session
+            try {
+              const supabaseSession = await supabase.auth.getSession();
+              if (supabaseSession?.data?.session?.access_token) {
+                headers['Authorization'] = `Bearer ${supabaseSession.data.session.access_token}`;
+              }
+            } catch (e) {
+              console.warn('Failed to get Supabase session:', e);
+            }
           }
         }
         
