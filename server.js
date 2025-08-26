@@ -3024,6 +3024,14 @@ GLOBAL SUBTITLE/DUBBING RULES:
 - EMOTIONAL TONE: Preserve the emotional weight - suspense ("..."), questions ("?"), urgency ("!").
 - DO NOT invent interjections, do not change kinship gender, and do not add or remove content.
 - DO NOT modify punctuation from source. DO NOT add or remove question marks, periods, or ellipses.
+ - DIALOGUE DASHES (MULTI-SPEAKER IN ONE CUE):
+   If the source cue contains multiple lines starting with a dash (e.g., "- Let me go!\n- No, no, no."), you MUST return the SAME number of lines, each starting with a dash, preserving line breaks and dash markers.
+   Example:
+   SOURCE:
+   - Sicher, sicher, was auch immer.\n- Okay.
+   TARGET (English):
+   - Sure, sure, whatever.\n- Okay.
+   Do NOT merge them into one line. Keep 1:1 line mapping with leading dashes.
 `;
 
 /* ---------------- Helpers: local, non-redeclaring ---------------- */
@@ -3225,6 +3233,44 @@ function sanitizeWithSource(txt = '', srcText = '', targetLanguage = '') {
       out = out.replace(/([.])(\s*$)/g, '!$2');
     }
   }
+
+  // SAFETY NET: Preserve multi-speaker dash lines 1:1 when source uses "- " per line
+  try {
+    const srcLinesAll = String(srcText || '').split(/\r?\n/);
+    const srcDashCount = srcLinesAll.filter(l => l.trim().startsWith('-')).length;
+    if (srcDashCount >= 2) {
+      const tgtLinesRaw = String(out).split(/\r?\n/);
+      const ensureDash = (s) => {
+        const t = String(s || '').trim();
+        return t ? (t.startsWith('-') ? t : ('- ' + t)) : t;
+      };
+      let tgtDashCount = tgtLinesRaw.filter(l => l.trim().startsWith('-')).length;
+      if (tgtDashCount !== srcDashCount) {
+        // Try splitting into sentences first
+        const parts = String(out)
+          .split(/(?<=[.!?…]["'”’)?\]]*)\s+/)
+          .map(s => s.trim())
+          .filter(Boolean);
+        if (parts.length === srcDashCount) {
+          out = parts.map(ensureDash).join('\n');
+        } else if (tgtLinesRaw.length === srcDashCount) {
+          out = tgtLinesRaw.map(ensureDash).join('\n');
+        } else {
+          // fallback: split on " - " if present or pad lines
+          const hy = String(out).split(/\s-\s/).map(s=>s.trim()).filter(Boolean);
+          if (hy.length === srcDashCount) out = hy.map(ensureDash).join('\n');
+          else {
+            const base = ensureDash(out);
+            const arr = new Array(srcDashCount).fill('');
+            arr[0] = base;
+            out = arr.join('\n');
+          }
+        }
+      } else {
+        out = tgtLinesRaw.map(ensureDash).join('\n');
+      }
+    }
+  } catch {}
 
   out = fixCapsAfterTerminals2(out);
   out = enforceNumericPreservation(srcText, out, targetLanguage);

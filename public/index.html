@@ -293,7 +293,8 @@
       width:100%;min-height:40px;border:1px solid transparent;
       border-radius:8px;padding:8px;background:transparent;
       font-family:inherit;font-size:var(--fs);line-height:1.55;
-      resize:none;overflow:hidden;
+      height:auto; /* allow JS to grow to scrollHeight */
+      resize:none;overflow:hidden; /* prevent native resize + hide scrollbars */
       transition:border-color .18s var(--ease);
     }
     .segtext-textarea:focus{
@@ -2464,15 +2465,20 @@ window.STYLE_MICROCOPY = {
         const row = textarea.closest('.segrow');
         const metaEl = row?.querySelector('.segmeta');
         
-        // Auto-resize textarea
+        // Auto-resize textarea (robust for long content & font reflow)
         const autoResize = () => {
           textarea.style.height = 'auto';
-          textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
+          textarea.style.overflowY = 'hidden';
+          const h = Math.max(40, textarea.scrollHeight);
+          textarea.style.height = h + 'px';
         };
-        
+
+        // Initial grow and after paint (handles long initial values)
         autoResize();
-        
-        textarea.addEventListener('input', ()=>{
+        requestAnimationFrame(autoResize);
+        setTimeout(autoResize, 50);
+
+        const onEdit = () => {
           const val = textarea.value || '';
           d.lastAlignedTgt[idx] = val;
           d.output = d.lastAlignedTgt.join('\n');
@@ -2485,6 +2491,14 @@ window.STYLE_MICROCOPY = {
           }
           
           autoResize();
+          // Keep paired rows height-aligned while typing
+          try { equalizeRowHeightsAtIndex(idx); } catch {}
+          try { adjustWrapHeight(); } catch {}
+        };
+
+        // Resize on all common input-style events
+        ;['input','change','cut','paste','drop','keydown'].forEach(ev=>{
+          textarea.addEventListener(ev, onEdit, { passive: true });
         });
       });
     }
