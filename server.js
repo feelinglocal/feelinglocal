@@ -5397,10 +5397,32 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
 /** ------------------------- API: Profile ------------------------- */
 app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
   try {
-    if (!prisma) return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: 'free' });
-    const rows = await prisma.$queryRawUnsafe('select tier from public.profiles where id = $1::uuid limit 1', req.user.id);
-    const tier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier) : 'free';
-    res.json({ id: req.user.id, email: req.user.email || null, tier });
+    // Prefer Prisma, but fall back to Supabase REST if Prisma unavailable
+    let tier = null;
+    const id = req.user?.id || null;
+    const email = req.user?.email || null;
+
+    const hasPgUrl = typeof process.env.DATABASE_URL === 'string' && /^(postgres|postgresql):\/\//.test(process.env.DATABASE_URL || '');
+    if (prisma && hasPgUrl) {
+      const rows = await prisma.$queryRawUnsafe('select tier from public.profiles where id = $1::uuid limit 1', id);
+      tier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier) : null;
+    }
+    if (!tier && process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)) {
+      try {
+        const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+        const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/profiles`);
+        url.searchParams.set('id', `eq.${id}`);
+        url.searchParams.set('select', 'tier');
+        url.searchParams.set('limit', '1');
+        const r = await fetch(url.toString(), { headers: { 'apikey': apiKey, 'Authorization': `Bearer ${apiKey}` } });
+        if (r.ok) {
+          const list = await r.json();
+          const rec = Array.isArray(list) ? list[0] : list;
+          tier = rec?.tier ? String(rec.tier) : null;
+        }
+      } catch {}
+    }
+    res.json({ id, email, tier: tier || 'free' });
   } catch (e) { console.error('profile', e?.message || e); res.status(500).json({ error: 'Failed to get profile' }); }
 });
 // Lightweight helper UI for setting tier (GET in browser)

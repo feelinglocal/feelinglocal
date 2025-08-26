@@ -103,6 +103,46 @@ async function verifySupabaseJWT(accessToken) {
   }
 }
 
+// Fetch full Supabase user to check confirmation status (used if JWKS payload lacks fields)
+async function fetchSupabaseUser(accessToken) {
+  if (!SUPABASE_URL) return null;
+  try {
+    const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'apikey': apiKey }
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+// Fetch tier from Supabase public.profiles using Service Role (preferred) or ANON (read-only)
+async function fetchProfileTier(userId) {
+  if (!SUPABASE_URL) return null;
+  try {
+    const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+    if (!apiKey) return null;
+    const url = new URL(`${SUPABASE_URL}/rest/v1/profiles`);
+    url.searchParams.set('id', `eq.${userId}`);
+    url.searchParams.set('select', 'tier');
+    url.searchParams.set('limit', '1');
+    const res = await fetch(url.toString(), {
+      headers: {
+        'apikey': apiKey,
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+    if (!res.ok) return null;
+    const rows = await res.json();
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    return row && typeof row.tier === 'string' ? String(row.tier) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Passport Local Strategy
 passport.use(new LocalStrategy({
   usernameField: 'email',
@@ -194,10 +234,23 @@ const requireAuth = async (req, res, next) => {
   // 2) Try Supabase JWT introspection
   const supaUser = await verifySupabaseJWT(token);
   if (supaUser && supaUser.id) {
+    let emailConfirmed = !!(supaUser.email_confirmed_at || supaUser.confirmed_at);
+    if (!emailConfirmed) {
+      const full = await fetchSupabaseUser(token);
+      emailConfirmed = !!(full?.email_confirmed_at || full?.confirmed_at);
+    }
+    if (!emailConfirmed) {
+      return res.status(403).json({ error: 'Email not confirmed' });
+    }
+
+    // Always derive tier from profiles table (source of truth)
+    const dbTier = await fetchProfileTier(supaUser.id);
+    const effectiveTier = dbTier && ['free','pro','team'].includes(dbTier.toLowerCase()) ? dbTier.toLowerCase() : 'free';
+
     req.user = {
       id: supaUser.id,
       email: supaUser.email,
-      tier: (supaUser.user_metadata && supaUser.user_metadata.tier) ? supaUser.user_metadata.tier : 'team' // default high tier for beta
+      tier: effectiveTier
     };
     return next();
   }

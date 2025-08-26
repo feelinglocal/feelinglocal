@@ -46,6 +46,7 @@
     // Keep auth token/user in localStorage so existing fetches work
     supabase.auth.onAuthStateChange(async (_event, session) => {
       const token = session?.access_token || '';
+      const emailConfirmed = !!(session?.user?.email_confirmed_at || session?.user?.confirmed_at);
       const user = session?.user ? {
         id: session.user.id,
         email: session.user.email,
@@ -54,6 +55,17 @@
       } : null;
       
       if (token) {
+        if (!emailConfirmed) {
+          // Block unconfirmed sessions: sign out and show guidance
+          try { await supabase.auth.signOut(); } catch {}
+          localStorage.removeItem('authToken');
+          const msg = 'Please confirm your email before signing in.';
+          console.warn(msg);
+          try{ if (typeof showToast==='function') showToast(msg); }catch{}
+          window.initGuestMode();
+          window.renderAuthHeader();
+          return;
+        }
         localStorage.setItem('authToken', token);
         // Clear guest mode when user signs in
         localStorage.removeItem('guestId');
@@ -83,6 +95,7 @@
       // Fetch server-side profile to get authoritative tier
       try{
         if (token) {
+          // Token exists and email is confirmed (guarded above)
           console.log('🔍 Fetching profile for authenticated user with token');
           const profileHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
           const res = await fetch('/api/profile', { headers: profileHeaders });
@@ -4585,6 +4598,13 @@ ${lines.join('\n')}`);
           // Sign in flow
           const { data, error } = await supabase.auth.signInWithPassword({ email, password });
           if (error) throw error;
+          const confirmed = !!(data?.user?.email_confirmed_at || data?.user?.confirmed_at);
+          if (!confirmed) {
+            try { await supabase.auth.signOut(); } catch {}
+            authMsg.textContent = 'Please confirm your email before signing in.';
+            showCheckEmailState(email);
+            return;
+          }
           closeAuth();
           location.reload();
         }
