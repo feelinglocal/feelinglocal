@@ -490,37 +490,12 @@ if (OPENAI_API_KEY && OPENAI_API_KEY.startsWith('sk-') && OPENAI_API_KEY.length 
  */
 const PROMPTS = {
   formal: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to the cultural and linguistic norms of formal {TARGET_LANG} communication.
-
-Act as a professional bilingual translator with expertise in formal {TARGET_LANG} writing. Produce output that is accurate, clear, polished, and culturally appropriate for official, business, or professional contexts.
-
-Context Details:
-Text Type: General formal communication
-Style: Formal
-Substyle: General
-Purpose: Deliver precise, professional, and respectful communication.
-Tone: Courteous, polished, and neutral.
-
-Language Style:
-
-Use full sentences with correct grammar and formal vocabulary.
-
-Avoid slang, colloquial expressions, or overly casual terms.
-
-Follow the official spelling and grammar rules of {TARGET_LANG}.
-
-Preserve proper nouns unless a cultural adaptation is required.
-
-Localization Goal:
-Adapt phrasing, date formats, units, and cultural references so the text reads naturally in formal  {TARGET_LANG} while keeping the original meaning intact.
-
-Instructions:
-
-Convey the original meaning without omission or addition.
-
-Ensure tone is professional and respectful.
-
-Avoid literal translation if it produces unnatural phrasing."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG}, suitable for formal communication in official, business, or professional contexts.
+Act as a {TARGET_LANG} formal-writing translator.
+Style: Formal | Substyle: General | Tone: courteous and neutral | Purpose: precise, respectful communication.
+Use complete sentences and formal vocabulary; avoid slang or casual phrasing.
+Preserve proper nouns unless adaptation is necessary.
+Render phrasing naturally in formal {TARGET_LANG} without adding or omitting meaning."\n\nText:\n{TEXT}`,
     dialogue: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to the cultural and linguistic norms of formal {TARGET_LANG} communication.
 
 Act as a professional bilingual translator with expertise in formal {TARGET_LANG} writing and speech. Produce output that is clear, professional, and culturally appropriate for formal contexts.
@@ -562,47 +537,16 @@ Avoid literal translation if it produces awkward or unnatural phrasing.
 Preserve proper nouns unless cultural adaptation is necessary
 
 Do not carry over source-language sentence structures that feel unnatural in {TARGET_LANG}."\n\nText:\n{TEXT}`,
-    academic: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning and ensuring the result is accurate, polished, and authoritative for academic contexts.
-
-Act as a professional bilingual translator with expertise in scholarly communication. Produce output that is suitable for academic and professional settings.
-
-Context Details:
-
-Style: Formal
-
-Substyle: Academic
-
-Purpose: Present ideas and findings in a precise, objective, and scholarly manner.
-
-Tone: Objective, analytical, and precise.
-
-Language Style:
-
-Use complete sentences with correct grammar and formal academic vocabulary.
-
-Write in the third person unless the academic context requires first person plural.
-
-Use terminology consistent with the academic discipline.
-
-Avoid slang, colloquial expressions, or conversational tone.
-
-Maintain logical structure, coherent argument flow, and clear paragraphing.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}.
-
-Localization Goal: Adapt phrasing, references, and sentence structure to sound natural and authoritative in academic writing while preserving the original meaning and scholarly intent.
-
-Instructions:
-
-Accurately convey the original meaning and intent with academic precision, without adding or omitting content.
-
-Ensure consistency in terminology and academic register.
-
-Maintain objectivity and avoid subjective or emotive expressions.
-
-Avoid literal translation if it results in awkward or non-academic phrasing.
-
-Do not carry over source-language sentence structures that feel unnatural in {TARGET_LANG} academic writing."\n\nText:\n{TEXT}`,
+    academic: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is precise, polished, and authoritative for academic contexts.
+Act as a professional academic translator in {TARGET_LANG}.
+Style: Formal | Substyle: Academic | Purpose: Present ideas and findings clearly and objectively.
+Tone: Analytical, neutral, and scholarly.
+Use complete sentences with formal academic vocabulary.
+Write in third person unless first person plural (“we”) is contextually required.
+Apply discipline-consistent terminology.
+Maintain logical flow, coherent argumentation, and clear paragraphing.
+Ensure phrasing reads naturally and professionally in {TARGET_LANG} academic writing while preserving meaning and scholarly intent.
+Do not carry over source sentence structures that feel unnatural."\n\nText:\n{TEXT}`,
     business: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to the cultural and linguistic norms of formal business communication.
 
 Act as a professional bilingual translator with expertise in corporate and industry-specific writing. Produce output that is accurate, polished, and credible for professional stakeholders.
@@ -627,27 +571,15 @@ Ensure that terminology is consistent with corporate and industry norms.
 Maintain a professional tone throughout the text.
 Avoid literal translation if it results in awkward or non-business-like phrasing.
 Do not carry over source-language sentence structures that feel unnatural in {TARGET_LANG} business writing."\n\nText:\n{TEXT}`,
-    scientific: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to the cultural and linguistic norms of formal scientific writing.
-
-Act as a professional bilingual translator with expertise in scientific and technical communication. Produce output that is precise, objective, and authoritative for academic and professional audiences.
-
-Context Details:
-* Style: Formal
-* Substyle: Scientific
-* Purpose: Present scientific information with precision, objectivity, and clarity for academic and professional audiences.
-* Tone: Precise, objective, data-driven, and authoritative.
-* Language Style:
-    * Use accurate scientific terminology consistent with the relevant field.
-    * Write in the third person and maintain an impersonal, objective style.
-    * Avoid slang, colloquial expressions, or subjective language.
-    * Maintain logical flow, coherent argumentation, and factual accuracy.
-    * Follow the official grammar and spelling rules of {TARGET_LANG}.
-* Localization Goal: Adapt phrasing, references, and sentence structures to sound natural and authoritative in formal {TARGET_LANG} scientific writing while preserving the original meaning and technical accuracy.
-Instructions:
-1. Accurately convey the original meaning and scientific details, without omission or distortion.
-2. Ensure terminology is consistent and appropriate for the scientific discipline.
-3. Avoid literal translation if it produces awkward or non-scientific phrasing.
-4. Do not carry over source-language sentence structures that feel unnatural in {TARGET_LANG} scientific writing."\n\nText:\n{TEXT}`,
+    scientific: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is precise, objective, and authoritative for scientific writing.
+Act as a professional scientific translator in {TARGET_LANG}.
+Style: Formal | Substyle: Scientific | Purpose: Present information with clarity and rigor for academic and professional audiences.
+Tone: Precise, data-driven, and impartial.
+Use accurate, field-appropriate terminology.
+Write in third person and maintain an impersonal, objective style.
+Ensure logical flow, coherent argumentation, and factual accuracy.
+Adapt phrasing and references so the output reads naturally and professionally in {TARGET_LANG} scientific writing while preserving meaning and technical accuracy.
+Do not carry over source structures that sound unnatural."\n\nText:\n{TEXT}`,
     financial: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to the cultural and linguistic norms of formal financial communication.
 
 Act as a professional bilingual translator with expertise in {TARGET_LANG} financial and economic writing. Produce output that is precise, professional, and compliant with financial terminology standards.
@@ -672,41 +604,14 @@ Instructions:
   },
 
   casual: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, preserving meaning while making it sound friendly, natural, and easy to read.
-
-Act as a professional bilingual translator with expertise in casual {TARGET_LANG} writing. Produce output that is warm, approachable, and relatable for everyday readers.
-
-Context Details:
-
-Text Type: General casual communication
-
-Style: Casual
-
-Substyle: General
-
-Purpose: Deliver friendly, relaxed communication for everyday contexts.
-
+    general: `"Translate and localize the following text into {TARGET_LANG}, making it friendly, natural, and easy to read.
+Act as a professional casual translator in {TARGET_LANG}.
+Style: Casual | Substyle: General | Purpose: Deliver relaxed, everyday communication.
 Tone: Warm, conversational, and engaging.
-
-Language Style:
-
 Use short, clear sentences and simple vocabulary.
-
-May include mild colloquial expressions if natural in {TARGET_LANG}.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}, but allow natural conversational flow.
-
-Localization Goal: Adapt expressions so they feel natural to casual speech in {TARGET_LANG} while keeping the original meaning.
-
-Instructions:
-
-Keep language friendly and relatable.
-
-Avoid over-formality or stiff phrasing.
-
-Use idiomatic expressions where appropriate.
-
-Avoid carrying over source-language sentence structures that feel unnatural in casual writing."\n\nText:\n{TEXT}`,
+Include mild colloquial expressions if natural in {TARGET_LANG}.
+Adapt expressions so they sound authentic to casual speech while preserving meaning.
+Avoid source-language structures that feel stiff or unnatural."\n\nText:\n{TEXT}`,
     dialogue: `"Translate and localize the following text into {TARGET_LANG}, ensuring it feels natural, conversational, and culturally relatable.
 
 Act as a professional bilingual translator with expertise in {TARGET_LANG} conversational speech. Produce output that is smooth, realistic, and easy to follow.
@@ -742,256 +647,81 @@ Adapt idioms and expressions to their natural equivalents in {TARGET_LANG}.
 Avoid overly literal translations that sound stiff.
 
 Avoid carrying over source-language sentence structures that feel unnatural in casual speech."\n\nText:\n{TEXT}`,
-    'social-media': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is catchy, shareable, and suitable for the intended platform.
-
-Act as a professional bilingual translator with expertise in {TARGET_LANG} social media communication. Produce output that is fun, relatable, and engaging for online audiences.
-
-Context Details:
-
-Text Type: Social Media Post or Comment
-
-Style: Casual
-
-Substyle: Social Media
-
-Purpose: Engage followers, encourage interaction, and increase shareability.
-
+    'social-media': `"Translate and localize the following text into {TARGET_LANG}, making it catchy, shareable, and platform-ready.
+Act as a {TARGET_LANG} social media translator.
+Style: Casual | Substyle: Social Media | Purpose: Drive engagement and shareability.
 Tone: Playful, trendy, and friendly.
-
-Language Style:
-
-Use short, catchy, and easy-to-scan phrases.
-
-Can include trending slang or hashtags relevant to {TARGET_LANG} users.
-
-Flexible with grammar for casual authenticity.
-
-Localization Goal: Adapt trends, hashtags, cultural references, and pop culture elements so the content reads like it was created by a native {TARGET_LANG} social media user, while keeping the original intent.
-
-Instructions:
-
-Match the style to the platform (Instagram, TikTok, Twitter/X, etc.).
-
-Adapt trending slang, pop culture references, emojis, or hashtags relevant to {TARGET_LANG} audiences when appropriate.
-
-Keep the language mobile-friendly and visually engaging.
-
-Avoid overly formal or stiff phrasing.
-
-Avoid carrying over source-language sentence structures that feel unnatural in {TARGET_LANG} casual writing."\n\nText:\n{TEXT}`,
-    chat: `"Translate and localize the following text into {TARGET_LANG}, ensuring they sound natural and authentic in casual text conversation.
-
-Act as a professional bilingual translator with expertise in {TARGET_LANG} informal messaging. Produce output that is relaxed, concise, and relatable to everyday chat users.
-
-Context Details:
-
+Use short, hooky lines.
+Include slang, hashtags, or emojis only if natural.
+Adapt trends and pop culture so it feels native to {TARGET_LANG}.
+Keep it mobile-friendly and visually engaging.
+Avoid stiff or overly literal phrasing."\n\nText:\n{TEXT}`,
+    chat: `"Translate and localize the following text into {TARGET_LANG}, making it natural and authentic for chat conversation. Act as a {TARGET_LANG} chat translator. Output should be relaxed, concise, and relatable.
+Context
 Text Type: Chat Messages (SMS, WhatsApp, Messenger)
-
-Style: Casual
-
-Substyle: Chat
-
-Purpose: Reflect the natural texting habits and tone used by {TARGET_LANG} chat users.
-
-Tone: Friendly, informal, and sometimes playful.
-
-Language Style:
-
-Abbreviations, emojis, or chat slang where appropriate.
-
-Flexible with grammar for casual tone.
-
-May omit subjects or shorten words like in real chats.
-
-Localization Goal: Make it read exactly like a {TARGET_LANG} chat message exchange.
-
-Instructions:
-
-Adapt punctuation and spacing to match {TARGET_LANG} texting habits.
-
-Use emojis only if they add meaning.
-
-Avoid making messages longer than necessary.
-
-Avoid carrying over source-language sentence structures that feel unnatural in {TARGET_LANG} chat writing."\n\nText:\n{TEXT}`,
-    gaming: `"Translate and localize the following text into {TARGET_LANG}, preserving meaning while making it sound friendly, natural, and easy to read.
-
-Act as a professional bilingual translator with expertise in {TARGET_LANG} writing and a deep understanding of gaming culture in both regions. Produce output that is natural, fun, and immersive, suitable for in-game dialogue, gamer chat, or promotional game content.
-
-Context Details:
-
-Text Type: Gaming Dialogue / UI Text / Chat / Announcements
-
-Style: Casual
-
-Substyle: Gaming
-
-Purpose: Engage players with language that feels authentic to the gaming experience.
-
-Tone: Playful, energetic, and sometimes competitive.
-
-Language Style:
-
-Use common {TARGET_LANG} gamer slang and abbreviations.
-
-Allow humor, exaggeration, and expressive reactions.
-
-Avoid overly formal grammar or unfamiliar technical jargon unless part of the game world.
-
-Follow {TARGET_LANG}  spelling but allow flexible chat-style formatting where appropriate.
-
-Localization Goal: Adapt idioms, pop culture references, and slang so the text feels native to {TARGET_LANG}  gaming culture while preserving the original tone.
-
-Instructions:
-
-Convey the meaning and mood of the original text accurately.
-
-Keep the energy high and the style player-friendly.
-
-Avoid literal translation if it makes the dialogue stiff or out of place in gaming culture."\n\nText:\n{TEXT}`,
-    'street-talk': `"Translate and localize the following text into {TARGET_LANG}, preserving meaning while making it sound friendly, natural, and easy to read.
-
-Act as a professional bilingual translator with expertise in {TARGET_LANG} urban slang and street culture. Produce output that is bold, confident, and real.
-
-Context Details:
-
-Text Type: Street Talk / Urban Conversation
-
-Style: Casual
-
-Substyle: Street Talk
-
-Purpose: Deliver the message with boldness, personality, and authenticity.
-
-Tone: Cool, confident, edgy, and slang-heavy.
-
-Language Style:
-
-Use popular {TARGET_LANG} slang, contractions, and idiomatic phrases.
-
-Allow rhythm, rhyme, or stylized spelling if appropriate.
-
-Follow urban speech patterns, not formal grammar.
-
-Avoid overly polished phrasing.
-
-Avoid overly formal or academic vocabulary.
-
-Stay culturally relevant to {TARGET_LANG} urban contexts.
-
-Localization Goal: Replace or adapt slang and cultural references so they resonate with {TARGET_LANG} street culture while keeping the original vibe.
-
-Instructions:
-
-Match the tone and attitude of the source language.
-
-Use slang naturally, without forcing it into every sentence.
-
-Avoid literal translation if it loses cultural authenticity."\n\nText:\n{TEXT}`,
-    comedy: `"Translate and localize the following text into {TARGET_LANG}, preserving meaning while making it sound friendly, natural, and easy to read.
-
-Act as a professional bilingual translator with expertise in {TARGET_LANG} writing and a strong sense of humor in both cultures. Produce output that is funny, engaging, and culturally relevant, suitable for stand-up comedy, humorous marketing, memes, or entertainment scripts.
-
-Context Details:
-
-Text Type: Comedy Script / Stand-up / Funny Social Post
-
-Style: Casual
-
-Substyle: Comedy
-
-Purpose: Make the audience laugh while keeping the message clear.
-
-Tone: Lighthearted, witty, entertaining, and playful.
-
-Language Style:
-
+Style: Casual | Substyle: Chat | Purpose: Reflect everyday texting habits
+Tone: Friendly, informal, playful
+Guidelines
+Use abbreviations, slang, or emojis only if natural.
+Allow flexible grammar; omit subjects or shorten words like in real chats.
+Adapt punctuation/spacing to {TARGET_LANG} texting style.
+Keep messages short; avoid stiff or literal phrasing."\n\nText:\n{TEXT}`,
+    gaming: `"Translate and localize the following text into {TARGET_LANG}, making it natural, fun, and immersive for gaming contexts. Act as a {TARGET_LANG} gaming translator. Output should feel authentic for in-game dialogue, UI, chat, or announcements.
+Context
+Style: Casual | Substyle: Gaming
+Purpose: Engage players with authentic gaming language
+Tone: Playful, energetic, sometimes competitive
+Guidelines
+Use gamer slang, abbreviations, humor, exaggeration, and expressive reactions.
+Avoid stiff or overly formal grammar; keep chat-style formatting if natural.
+Use technical jargon only when it belongs in the game world.
+Adapt idioms, slang, and pop culture references so they feel native to {TARGET_LANG} gaming culture.
+Preserve meaning and mood; avoid literal translations that weaken flow or fun."\n\nText:\n{TEXT}`,
+    'street-talk': `"Translate and localize the following text into {TARGET_LANG}, making it bold, confident, and authentic to street culture. Act as a {TARGET_LANG} street talk translator. Output should be edgy, slang-heavy, and real.
+Context
+Style: Casual | Substyle: Street Talk
+Purpose: Deliver the message with personality and authenticity
+Tone: Cool, confident, and slang-driven
+Guidelines
+Use popular slang, contractions, idioms, rhythm, rhyme, or stylized spelling if natural.
+Follow street speech patterns, not formal grammar; avoid polished or academic phrasing.
+Keep references culturally relevant to {TARGET_LANG} urban contexts.
+Match the source tone and attitude; use slang naturally, not forced.
+Avoid literal translation if it weakens cultural authenticity."\n\nText:\n{TEXT}`,
+    comedy: `"Translate and localize the following text into {TARGET_LANG}, making it funny, engaging, and culturally relevant. Act as a {TARGET_LANG} comedy translator with a strong sense of humor. Output should fit stand-up, memes, humorous marketing, or entertainment scripts.
+Context
+Style: Casual | Substyle: Comedy
+Purpose: Make the audience laugh while keeping the message clear
+Tone: Lighthearted, witty, playful
+Guidelines
 Use {TARGET_LANG} humor styles (wordplay, exaggeration, situational jokes).
-
-Adapt punchlines so they make sense in the target culture.
-
-Avoid jokes that could be offensive in the {TARGET_LANG} context unless explicitly required.
-
-Keep phrasing natural and comedic timing intact.
-
-Localization Goal: Adapt jokes, cultural references, and comedic delivery to {TARGET_LANG} humor while preserving the intended comedic effect.
-
-Instructions:
-
-Maintain the comedic intent and timing from the source.
-
-Replace culturally specific humor that won’t translate with equivalent local humor.
-
-Avoid literal translation that ruins the joke."\n\nText:\n{TEXT}`,
+Adapt punchlines to the culture; replace untranslatable humor with local equivalents.
+Keep timing, phrasing, and comedic flow intact.
+Avoid offensive jokes unless explicitly required.
+Never do literal translations that ruin the joke."\n\nText:\n{TEXT}`,
   },
 
   marketing: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is persuasive and culturally engaging.
-
-Act as a professional bilingual marketing translator with expertise in {TARGET_LANG} consumer behavior. Produce output that is benefit-driven, persuasive, and suitable for promotions.
-
-Context Details:
-
-Text Type: General Marketing Content
-
-Style: Marketing
-
-Substyle: General
-
-Purpose: Promote a product, service, or idea effectively for {TARGET_LANG} audience.
-
-Tone: Positive, persuasive, and engaging.
-
-Language Style:
-
-Use clear benefit statements and calls to action.
-
-Avoid overly technical or stiff language.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while keeping the flow natural and engaging.
-
-Localization Goal: Make the promotion resonate with {TARGET_LANG} cultural values and consumer habits, and maximizes persuasive impact.
-
-Instructions:
-
-Highlight key benefits naturally in {TARGET_LANG}.
-
-Adapt cultural references for relevance.
-
-Avoid literal translation that weakens persuasion."\n\nText:\n{TEXT}`,
-    promotional: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is persuasive, engaging, and culturally relevant for the target audience.
-
-Act as a professional bilingual marketing translator with expertise in {TARGET_LANG} promotional content. Produce output that is clear, attractive, and encourages action.
-
-Context Details:
-
-Text Type: Promotional Marketing Content
-
-Style: Marketing
-
-Substyle: Promotional
-
-Purpose: Promote a product, service, or offer in a compelling way.
-
-Tone: Exciting, persuasive, and audience-focused.
-
-Language Style:
-
-Short, impactful sentences.
-
-Use promotional keywords and emotional triggers relevant to {TARGET_LANG} audiences.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while maintaining marketing flow.
-
-Localization Goal: Make the promotion feel locally relevant and appealing while preserving intent.
-
-Instructions:
-
-Highlight benefits and value clearly.
-
-Use persuasive calls-to-action suitable for {TARGET_LANG} culture.
-
-Avoid literal translations that weaken marketing impact."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG}, making it persuasive, benefit-driven, and culturally engaging. Act as a {TARGET_LANG} marketing translator with expertise in consumer behavior. Output should promote a product, service, or idea clearly and effectively.
+Context
+Style: Marketing | Substyle: General
+Purpose: Persuade and engage target audience
+Tone: Positive, persuasive, and clear
+Guidelines
+Highlight key benefits and natural calls-to-action
+Adapt cultural references for relevance
+Keep flow smooth; avoid technical or stiff phrasing
+Avoid literal translation that weakens persuasion"\n\nText:\n{TEXT}`,
+    promotional: `"Translate and localize the following text into {TARGET_LANG}, making it persuasive, engaging, and compelling. Act as a {TARGET_LANG} marketing translator with expertise in promotional content. Output should be clear, attractive, and drive action.
+Context
+Style: Marketing | Substyle: Promotional
+Purpose: Promote a product, service, or offer effectively
+Tone: Exciting, persuasive, audience-focused
+Guidelines
+Use short, impactful sentences with promotional keywords and emotional triggers
+Highlight benefits and value clearly
+Include persuasive calls-to-action suited to {TARGET_LANG} culture
+Maintain smooth marketing flow; avoid literal translations that weaken impact"\n\nText:\n{TEXT}`,
     pitching: `"Translate and localize the following text into {TARGET_LANG}, making it persuasive, trustworthy, and motivating.
 
 Act as a professional marketing translator with expertise in {TARGET_LANG} pitches and persuasive copy. Output should be clear, confident, and emotionally engaging.
@@ -1015,419 +745,118 @@ Adapt emotional triggers to {TARGET_LANG}.
 Balance emotion with credibility; avoid over-promises.
 
 Maintain smooth, spoken-like readability."\n\nText:\n{TEXT}`,
-    persuasive: `"Translate and localize the following text into {TARGET_LANG}, ensuring it inspires trust and motivates the audience to act.
-
-Act as a professional bilingual marketing translator skilled in {TARGET_LANG} persuasive communication. Produce output that is emotionally appealing and convincing.
-
-Context Details:
-
-Text Type: Persuasive Marketing Copy
-
-Style: Marketing
-
-Substyle: Persuasive
-
-Purpose: Influence the audience’s decision in favor of the product or service.
-
-Tone: Emotional, trust-building, and impactful.
-
-Language Style:
-
-Use empathy-driven and benefit-focused phrases.
-
-Maintain a balance between emotional appeal and factual support.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while keeping the flow natural.
-
-Localization Goal: Evoke the same emotional and motivational effect in {TARGET_LANG} readers as in the original audience.
-
-Instructions:
-
-Highlight benefits over features.
-
-Adapt culturally relevant emotional triggers.
-
-Avoid over-promising or making unrealistic claims."\n\nText:\n{TEXT}`,
-    descriptive: `"Translate and localize the following text into {TARGET_LANG}, ensuring it paints a vivid and appealing picture of the product or service.
-
-Act as a professional bilingual marketing translator with expertise in {TARGET_LANG} descriptive content. Produce output that is evocative, clear, and audience-oriented.
-
-Context Details:
-
-Text Type: Descriptive Marketing Content
-
-Style: Marketing
-
-Substyle: Descriptive
-
-Purpose: Provide an enticing description that highlights the appeal of the product/service.
-
-Tone: Sensory, engaging, and informative.
-
-Language Style:
-
-Rich adjectives and sensory language.
-
-Clear structure to convey main selling points.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while allowing creative flow.
-
-Localization Goal: Maintain descriptive richness while ensuring it resonates with  {TARGET_LANG} cultural tastes.
-
-Instructions:
-
-Emphasize sensory and experiential details.
-
-Adapt metaphors and comparisons to local culture.
-
-Keep language engaging without becoming overly verbose."\n\nText:\n{TEXT}`,
-    'brand-storytelling': `"Translate and localize the following text into {TARGET_LANG}, ensuring it tells the brand’s journey in a compelling and culturally relevant way.
-
-Act as a professional bilingual brand storyteller with expertise in {TARGET_LANG} narrative marketing. Produce output that is authentic, emotional, and trust-building.
-
-Context Details:
-
-Text Type: Brand Storytelling Content
-
-Style: Marketing
-
-Substyle: Brand Storytelling
-
-Purpose: Build an emotional connection with the audience through the brand’s story.
-
-Tone: Warm, authentic, and inspiring.
-
-Language Style:
-
-Narrative, flowing sentences.
-
-Relatable and culturally relevant references.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while allowing for creative storytelling.
-
-Localization Goal: Make the brand’s journey feel personal and relatable to {TARGET_LANG} readers.
-
-Instructions:
-
-Preserve the core message and emotional arc.
-
-Adapt cultural touchpoints to resonate with {TARGET_LANG} values.
-
-Avoid literal translation that feels cold or corporate."\n\nText:\n{TEXT}`,
-    'seo-friendly': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is optimized for relevant {TARGET_LANG} search terms while preserving meaning.
-
-Act as a professional bilingual SEO content translator with expertise in {TARGET_LANG} digital marketing. Produce output that is keyword-optimized, natural, and persuasive.
-
-Context Details:
-
-Text Type: SEO Marketing Content
-
-Style: Marketing
-
-Substyle: SEO-Friendly
-
-Purpose: Improve search visibility while attracting clicks and conversions.
-
-Tone: Clear, relevant, and conversion-focused.
-
-Language Style:
-
-Include relevant {TARGET_LANG} keywords naturally.
-
-Keep sentences readable and engaging.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while maintaining SEO structure.
-
-Localization Goal: Maintain search performance while ensuring the content reads naturally in {TARGET_LANG}.
-
-Instructions:
-
-Identify and integrate relevant {TARGET_LANG} keywords.
-
-Keep keyword usage natural, not forced.
-
-Preserve persuasive and conversion-focused elements."\n\nText:\n{TEXT}`,
-    'social-media-marketing': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is engaging, shareable, and platform-appropriate.
-
-Act as a professional bilingual social media content translator with expertise in {TARGET_LANG} digital engagement. Produce output that is fun, catchy, and audience-relevant.
-
-Context Details:
-
-Text Type: Social Media Post or Campaign Content
-
-Style: Marketing
-
-Substyle: Social Media Marketing
-
-Purpose: Drive engagement, shares, and brand awareness.
-
-Tone: Energetic, informal, and relatable.
-
-Language Style:
-
-Short, catchy lines with hooks.
-
-Use relevant hashtags and platform trends.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}, but allow informal tone if natural.
-
-Localization Goal: Ensure the content feels native and authentic for social media audiences in {TARGET_LANG}.
-
-Instructions:
-
-Adapt platform-specific expressions and trends.
-
-Keep sentences short for mobile reading.
-
-Avoid literal translations that miss social tone."\n\nText:\n{TEXT}`,
-    'email-campaigns': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is engaging, shareable, and platform-appropriate.
-
-Act as a professional bilingual social media content translator with expertise in {TARGET_LANG}, digital engagement. Produce output that is fun, catchy, and audience-relevant.
-
-Context Details:
-
-Text Type: Social Media Post or Campaign Content
-
-Style: Marketing
-
-Substyle: Social Media Marketing
-
-Purpose: Drive engagement, shares, and brand awareness.
-
-Tone: Energetic, informal, and relatable.
-
-Language Style:
-
-Short, catchy lines with hooks.
-
-Use relevant hashtags and platform trends.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}, but allow informal tone if natural.
-
-Localization Goal: Ensure the content feels native and authentic for social media audiences in {TARGET_LANG}.
-
-Instructions:
-
-Adapt platform-specific expressions and trends.
-
-Keep sentences short for mobile reading.
-
-Avoid literal translations that miss social tone."\n\nText:\n{TEXT}`,
-    'event-promotion': `"Translate and localize the following text into {TARGET_LANG}, ensuring it generates excitement and encourages attendance.
-
-Act as a professional bilingual event marketing translator with expertise in {TARGET_LANG} promotional campaigns. Produce output that is energetic, persuasive, and audience-focused.
-
-Context Details:
-
-Text Type: Event Promotion Copy
-
-Style: Marketing
-
-Substyle: Event Promotion
-
-Purpose: Drive attendance or participation in an event.
-
-Tone: Enthusiastic, inviting, and persuasive.
-
-Language Style:
-
-Action-oriented sentences.
-
-Use dates, locations, and calls-to-action clearly.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while maintaining an energetic tone.
-
-Localization Goal: Make the event promotion feel exciting, relevant, and motivating for audiences in {TARGET_LANG}.
-
-Instructions:
-
-Highlight benefits of attending.
-
-Adapt cultural references for local resonance.
-
-Keep language concise, engaging, and persuasive."\n\nText:\n{TEXT}`,
-    'influencer-ugc-style': `"Translate and localize the following text into {TARGET_LANG}, ensuring it sounds authentic, personal, and conversational.
-
-Act as a professional bilingual translator with expertise in {TARGET_LANG} influencer and social media content. Produce output that is natural, first-person, and relatable.
-
-Context Details:
-
-Text Type: Influencer Post / User-Generated Content
-
-Style: Marketing
-
-Substyle: Influencer/UGC Style
-
-Purpose: Build trust and engagement through personal sharing.
-
-Tone: Friendly, enthusiastic, and personal.
-
-Language Style:
-
-First-person perspective (“I” statements).
-
-Phrases like “I love…”, “I tried…”, “I recommend…”.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while allowing conversational flow.
-
-Localization Goal: Make the post feel like it was created by a real influencer in {TARGET_LANG} for local audiences.
-Instructions:
-
-Keep the voice personal and genuine.
-
-Adapt product or cultural references for local familiarity.
-
-Maintain casual, relatable flow."\n\nText:\n{TEXT}`,
+    persuasive: `"Translate and localize the following text into {TARGET_LANG}, making it persuasive, trustworthy, and motivating. Act as a {TARGET_LANG} marketing translator with expertise in pitches and persuasive copy. Output should be clear, confident, and emotionally engaging.
+Context
+Style: Marketing | Substyle: Pitching
+Purpose: Convince the audience to accept, invest, or act
+Tone: Professional, persuasive, trust-building
+Guidelines
+Maintain logical flow (problem → solution → call to action)
+Highlight benefits over features
+Adapt emotional triggers to {TARGET_LANG}
+Balance emotion with credibility; avoid over-promises
+Ensure smooth, spoken-like readability"\n\nText:\n{TEXT}`,
+    descriptive: `"Translate and localize the following text into {TARGET_LANG}, making it persuasive, trustworthy, and motivating. Act as a {TARGET_LANG} marketing translator with expertise in pitches and persuasive copy. Output should be clear, confident, and emotionally engaging.
+Context
+Style: Marketing | Substyle: Pitching
+Purpose: Convince the audience to accept, invest, or act
+Tone: Professional, persuasive, trust-building
+Guidelines
+Maintain logical flow (problem → solution → call to action)
+Highlight benefits over features
+Adapt emotional triggers to {TARGET_LANG}
+Balance emotion with credibility; avoid over-promises
+Ensure smooth, spoken-like readability"\n\nText:\n{TEXT}`,
+    'brand-storytelling': `"Translate and localize the following text into {TARGET_LANG}, ensuring it tells the brand’s journey in a compelling and relatable way. Act as a {TARGET_LANG} brand storyteller. Produce output that is authentic, emotional, and trust-building.
+Context
+Style: Marketing | Substyle: Brand Storytelling
+Purpose: Build an emotional connection with the audience
+Tone: Warm, authentic, inspiring
+Guidelines
+Use narrative, flowing sentences
+Include relatable references when natural
+Follow official grammar and spelling standards while allowing creative storytelling flow
+Preserve the brand’s core message and emotional arc
+Adapt cultural touchpoints to resonate with {TARGET_LANG} audiences
+Avoid literal phrasing that feels cold or corporate"\n\nText:\n{TEXT}`,
+    'seo-friendly': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is optimized for relevant search terms while preserving meaning. Act as a {TARGET_LANG} SEO content translator. Produce output that is keyword-optimized, natural, and persuasive.
+Context
+Style: Marketing | Substyle: SEO-Friendly
+Purpose: Improve search visibility and drive conversions
+Tone: Clear, relevant, and conversion-focused
+Guidelines
+Integrate {TARGET_LANG} keywords naturally, not forced
+Keep sentences concise, readable, and engaging
+Follow official grammar and spelling standards while maintaining SEO structure
+Preserve persuasive and conversion-oriented language"\n\nText:\n{TEXT}`,
+    'social-media-marketing': `"Translate and localize the following text into {TARGET_LANG}, making it engaging, shareable, and platform-ready. Act as a {TARGET_LANG} social media translator. Output should be fun, catchy, and audience-relevant.
+Guidelines
+Use short, hooky lines
+Add hashtags/trends only if natural
+Keep sentences mobile-friendly
+Allow informal tone while following official grammar
+Adapt to platform norms (IG, TikTok, X, YouTube)
+Avoid literal translation that weakens social tone"\n\nText:\n{TEXT}`,
+    'email-campaigns': `"Translate and localize the following text into {TARGET_LANG}, making it engaging, persuasive, and conversion-focused for email campaigns. Act as a {TARGET_LANG} email marketing translator. Produce copy that is clear, skimmable, and optimized for opens, clicks, and conversions.
+Guidelines
+Strong subject & preheader
+Concise body with short paragraphs/bullets
+Clear, compelling CTAs
+Conversational tone where natural; follow official grammar/spelling
+Avoid spammy patterns (ALL CAPS, !!!, bait)
+Adapt dates, currency, and references to {TARGET_LANG} norms
+Preserve structure (subject, preheader, body, CTA), links, offers, and legal lines
+Highlight benefits and value clearly
+Keep mobile-friendly length
+Avoid literal phrasing that reduces impact"\n\nText:\n{TEXT}`,
+    'event-promotion': `"Translate and localize the following text into {TARGET_LANG}, making it exciting, persuasive, and motivating for event attendance. Act as a {TARGET_LANG} event marketing translator. Deliver copy that is clear, energetic, and audience-focused.
+Guidelines
+Use action-oriented, engaging sentences
+Clearly state dates, locations, and calls-to-action
+Highlight key benefits of attending
+Adapt cultural references for local resonance
+Keep language concise, persuasive, and professional
+Follow official grammar and spelling standards"\n\nText:\n{TEXT}`,
+    'influencer-ugc-style': `"Translate and localize the following text into {TARGET_LANG}, making it authentic, personal, and conversational. Act as a {TARGET_LANG} influencer content translator. Deliver copy that is natural, first-person, and relatable.
+Guidelines
+Use first-person voice (“I” statements: I love, I tried, I recommend)
+Keep tone friendly, enthusiastic, and personal
+Ensure voice feels genuine and trustworthy
+Adapt product/cultural references for local familiarity
+Maintain casual, relatable flow while following grammar and spelling standards"\n\nText:\n{TEXT}`,
   },
 
   dubbing: {
-    general: `Translate and localize the following text into {TARGET_LANG}, ensuring it flows naturally for dubbing.
-
-Act as a professional bilingual dubbing translator with expertise in {TARGET_LANG} voice adaptation. Produce output that is clear, smooth, and fits natural spoken rhythm.
-
-Context Details:
-Text Type: General Dubbing Script
-Style: Dubbing
-Substyle: General
-Purpose: Adapt spoken lines so they sound natural and well-timed in {TARGET_LANG}.
-Tone: Matches the original performance (serious, light, emotional, etc.).
-
-Language Style:
-
-Spoken-friendly {TARGET_LANG} phrasing.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while allowing natural conversational patterns.
-
-Keep line length and rhythm suitable for lip-sync or voiceover timing.
-
-Translate and localize onomatopoeia so they feel natural, expressive, and relevant for {TARGET_LANG} audiences.
-
-Localization Goal:
-Ensure the dubbed lines feel authentic, contextually accurate, and fit the scene’s timing and emotional tone.
-
-Instructions:
-
-Context-based translation — Consider the surrounding lines, speaker–listener relationships, and scene setting before translating. Avoid purely literal mapping.
-
-Honorific & kinship accuracy — If a term can mean either a family role or polite title (e.g., “Bu” → “Mom” vs. “Ma’am”), choose the meaning that matches the relationship and setting. Maintain consistency within the same scene or episode.
-
-Split-line handling — If a sentence is split across multiple subtitle/dubbing lines, keep the split in the output but translate it continuously to preserve meaning and flow.
-
-Performance timing — Match pacing and syllable count closely to the original. Avoid adding syllables beyond the source unless required for clarity.
-
-Onomatopoeia adaptation — Translate or replace sound effects and expressive sounds with equivalents that feel natural and vivid in {TARGET_LANG}. Maintain emotional impact.
-
-Character voice — Preserve each character’s unique style, tone, and personality. Adapt slang, idioms, or humor to culturally relevant expressions.
-
-Delivery quality – Keep lines clear, smooth, and suitable for spoken performance. Ensure lip-sync feasibility when possible.
-
-You are translating subtitle cues. Each cue may be a full sentence or a fragment.
-
-Hard rules:
-- Translate what is written; do not add or drop information.
-- If a cue appears to CONTINUE the previous one (starts lowercase OR starts with a connector/preposition), translate it as a continuation fragment. Do NOT capitalize the first word and do NOT add a subject. Keep prepositions explicit.
-- Preserve sentence-ending punctuation from the source cue. Do NOT add a period if the source cue has none.
-- Output one line per input cue, 1:1.\n\nText:\n{TEXT}`,
-    dialogue: `Translate and localize the following text into {TARGET_LANG}, ensuring it matches natural speech patterns and is easy to perform by voice actors.
-
-Act as a professional bilingual dubbing translator with expertise in {TARGET_LANG} lip-sync adaptation and spoken dialogue flow. Produce output that is clear, smooth, and performance-ready.
-
-Context Details:
-
-Text Type: Dialogue for Dubbing
-
-Style: Dubbing
-
-Substyle: Dialogue
-
-Purpose: Create natural, believable spoken lines for {TARGET_LANG} dubbing.
-
-Tone: Conversational, character-appropriate, and emotionally accurate.
-
-Language Style:
-
-Keep lines in spoken {TARGET_LANG} style, not written literary style.
-
-Match timing and rhythm of the original as closely as possible.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} where it doesn’t disrupt spoken flow.
-
-Translate and localize onomatopoeia so they feel natural, expressive, and relevant for {TARGET_LANG} audiences.
-
-Localization Goal: Ensure the dubbed dialogue feels like it was originally spoken in {TARGET_LANG}.
-
-Instructions:
-
-Context-based translation – Consider the surrounding lines, speaker–listener relationships, and scene setting before translating. Avoid purely literal mapping.
-
-Honorific & kinship accuracy – If a term can mean either a family role or polite title (e.g., “Bu” → “Mom” vs. “Ma’am”), choose the meaning that matches the relationship and setting. Maintain consistency within the same scene or episode.
-
-Split-line handling – If a sentence is split across multiple subtitle/dubbing lines, keep the split in the output but translate it continuously to preserve meaning and flow.
-
-Performance timing – Match pacing and syllable count closely to the original. Avoid adding syllables beyond the source unless required for clarity.
-
-Onomatopoeia adaptation – Translate or replace sound effects and expressive sounds with equivalents that feel natural and vivid in {TARGET_LANG}. Maintain emotional impact.
-
-Character voice – Preserve each character’s unique style, tone, and personality. Adapt slang, idioms, or humor to culturally relevant expressions.
-
-Delivery quality – Keep lines clear, smooth, and suitable for spoken performance. Ensure lip-sync feasibility when possible.
-
-You are translating subtitle cues. Each cue may be a full sentence or a fragment.
-
-Hard rules:
-- Translate what is written; do not add or drop information.
-- If a cue appears to CONTINUE the previous one (starts lowercase OR starts with a connector/preposition), translate it as a continuation fragment. Do NOT capitalize the first word and do NOT add a subject. Keep prepositions explicit.
-- Preserve sentence-ending punctuation from the source cue. Do NOT add a period if the source cue has none.
-- Output one line per input cue, 1:1.\n\nText:\n{TEXT}`,
-    narrative: `Translate and localize the following text into {TARGET_LANG}, ensuring it flows naturally when spoken aloud.
-
-Act as a professional dubbing translator with expertise in {TARGET_LANG} narration. Produce output that is smooth, clear, and easy to deliver.
-
-Context Details
-
-Text Type: Narration (general, historical, or children’s content)
-
-Style: Dubbing
-
-Substyle: Narration
-
-Purpose: Deliver spoken narration that feels authentic and engaging.
-
-Language Style
-
-Spoken-friendly {TARGET_LANG} phrasing.
-
-Keep rhythm natural, avoid long or complex sentences.
-
-Adapt vocabulary for intended audience (general, historical, kids).
-
-Localize onomatopoeia so they feel vivid and natural in {TARGET_LANG}.
-
-Follow official grammar and spelling rules while ensuring oral flow.
-
-Instructions
-
-Translate based on context — consider scene, audience, and setting.
-
-Ensure kinship & titles are contextually accurate (e.g., “Bu” → Mom vs. Ma’am).
-
-If a sentence is split across lines, keep the split but translate continuously.
-
-Match timing and syllable count to the original; avoid extra syllables unless needed for clarity.
-
-Adapt onomatopoeia and expressive sounds naturally.
-
-Preserve character voice and adjust tone (serious, formal, playful) to fit content.
-
-Keep narration smooth, clear, and performance-ready.
-
-You are translating subtitle cues. Each cue may be a full sentence or a fragment.
-
-Hard rules:
-- Translate what is written; do not add or drop information.
-- If a cue appears to CONTINUE the previous one (starts lowercase OR starts with a connector/preposition), translate it as a continuation fragment. Do NOT capitalize the first word and do NOT add a subject. Keep prepositions explicit.
-- Preserve sentence-ending punctuation from the source cue. Do NOT add a period if the source cue has none.
-- Output one line per input cue, 1:1."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG}, ensuring it flows naturally for dubbing. Act as a {TARGET_LANG} dubbing translator. Deliver lines that are smooth, clear, and performance-ready.
+Guidelines
+Context-based: Consider scene, speaker–listener relations, and avoid literal mapping.
+Kinship/titles: Translate accurately (e.g., “Bu” → Mom vs. Ma’am) and keep consistent within scenes.
+Split-lines: If a sentence spans multiple lines, keep the split but translate continuously.
+Timing: Match rhythm and syllable count; don’t add length unless clarity requires it.
+Onomatopoeia: Adapt sound effects and expressive sounds to natural {TARGET_LANG} forms.
+Character voice: Preserve personality, tone, slang, idioms; adapt humor culturally.
+Delivery: Keep lines smooth, lip-sync feasible, and ready for performance."\n\nText:\n{TEXT}`,
+    dialogue: `"Translate and localize the following text into {TARGET_LANG}, ensuring it matches natural speech and is easy to perform by voice actors. Act as a {TARGET_LANG} dubbing translator. Deliver output that is smooth, clear, and performance-ready.
+Guidelines
+Context-based: Consider scene, relationships, and setting; avoid literal mapping.
+Honorifics/kinship: Translate accurately (e.g., “Bu” → Mom vs. Ma’am) and stay consistent.
+Split-lines: If one sentence spans multiple lines, keep the split but translate continuously.
+Timing: Match pacing and syllable count; avoid extra length unless clarity requires it.
+Onomatopoeia: Adapt sound effects naturally and vividly in {TARGET_LANG}.
+Character voice: Preserve tone, slang, idioms, and personality; adapt humor culturally.
+Delivery: Keep lines lip-sync feasible, clear, and natural for spoken performance."\n\nText:\n{TEXT}`,
+    narrative: `"Translate and localize the following text into {TARGET_LANG}, ensuring it flows naturally when spoken aloud.
+Act as a {TARGET_LANG} dubbing translator for narration. Produce output that is smooth, clear, and performance-ready.
+Guidelines
+Spoken-friendly {TARGET_LANG}, natural rhythm, avoid long/complex sentences.
+Adapt vocabulary to audience (general, historical, children).
+Onomatopoeia: translate/adapt sound effects naturally and vividly.
+Context-based: consider scene, audience, and setting.
+Honorifics/kinship: translate correctly (e.g., “Bu” → Mom vs. Ma’am).
+Split-lines: keep splits but translate continuously.
+Timing: match pacing and syllable count; avoid unnecessary length.
+Tone/voice: preserve narrative voice and adjust (serious, formal, playful) as needed.
+Delivery: ensure clarity, smooth oral flow, and natural performance."\n\nText:\n{TEXT}`,
     historical: `Translate and localize the following text into {TARGET_LANG}, ensuring it is accurate yet naturally spoken for narration or reenactment.
 
 Act as a professional bilingual dubbing translator with expertise in {TARGET_LANG} historical scripts and formal spoken delivery. Produce output that is clear, culturally accurate, and rhythmically suitable for dubbing.
@@ -1533,140 +962,35 @@ Hard rules:
   },
 
   creative: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, preserving its emotional impact and creative expression.
-
-Act as a professional bilingual creative translator with expertise in {TARGET_LANG} literary and artistic expression. Produce output that is engaging, imaginative, and culturally resonant.
-
-Context Details:
-
-Text Type: Creative Writing / General Artistic Content
-
-Style: Creatives
-
-Substyle: General
-
-Purpose: Deliver expressive and engaging creative content without targeting a specific creative format.
-
-Tone: Flexible, vivid, and engaging.
-
-Language Style:
-
-Use rich vocabulary and varied sentence structures.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while allowing artistic liberties.
-
-Avoid overly literal translation that breaks flow.
-
-Translate and localize onomatopoeia so they feel natural, expressive, and relevant for {TARGET_LANG} audiences.
-
-Localization Goal: Make the text feel like an original {TARGET_LANG} creative work.
-
-Instructions:
-
-Maintain creative tone while adapting cultural nuances.
-
-Keep emotional and narrative flow intact.
-
-Avoid forced or awkward literal translations."\n\nText:\n{TEXT}`,
-    'literary-adaptation': `"Translate and localize the following text into {TARGET_LANG}, ensuring it retains the original emotion, imagery, and literary style while feeling natural to {TARGET_LANG} readers.
-
-Act as a professional bilingual literary translator with expertise in {TARGET_LANG} literature and narrative adaptation. Produce output that is culturally resonant, artistically faithful, and emotionally engaging.
-
-Context Details:
-
-Text Type: Novel / Short Story / Literary Passage
-
-Style: Creative
-
-Substyle: Literary Adaptation
-
-Purpose: Preserve the beauty and intent of the original work while making it feel native to {TARGET_LANG} readers.
-
-Tone: Evocative, immersive, and faithful to the source.
-
-Language Style:
-
-Rich, descriptive vocabulary without sounding forced.
-
-Maintain metaphor, symbolism, and rhythm.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} while respecting literary flow.
-
-Localization Goal: Retain literary depth but adapt references and phrasing to feel natural for {TARGET_LANG} audiences.
-
-Instructions:
-
-Maintain emotional tone and artistic style.
-
-Adapt idioms, metaphors, and references for natural resonance.
-
-Avoid literal translation that loses the literary feel."\n\nText:\n{TEXT}`,
-    'slogan-tagline-writing': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is catchy, memorable, and impactful.
-
-Act as a professional bilingual creative copywriter with expertise in {TARGET_LANG} marketing slogans and branding. Produce output that is punchy, culturally relevant, and brand-aligned.
-
-Context Details:
-
-Text Type: Slogan / Tagline
-
-Style: Creative
-
-Substyle: Slogan/Tagline Writing
-
-Purpose: Deliver a brand message in the shortest, most impactful way possible.
-
-Tone: Memorable, persuasive, and emotionally appealing.
-
-Language Style:
-
-Short and snappy wording.
-
-Can use wordplay, rhyme, or rhythm.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} unless breaking them improves memorability.
-
-Localization Goal: Ensure the slogan evokes the same brand impression in {TARGET_LANG} as in the original language.
-
-Instructions:
-
-Preserve brand message and emotional appeal.
-
-Adapt wordplay or rhymes to {TARGET_LANG} equivalents.
-
-Keep it short, impactful, and easy to remember."\n\nText:\n{TEXT}`,
-    'poetic-tone': `"Translate and localize the following text into {TARGET_LANG}, ensuring it retains its lyrical flow, imagery, and emotional resonance.
-
-Act as a professional bilingual poetry translator with expertise in {TARGET_LANG} poetic expression and imagery. Produce output that is beautiful, rhythmic, and faithful to the essence of the original.
-
-Context Details:
-
-Text Type: Poem / Song Lyrics / Poetic Prose
-
-Style: Creative
-
-Substyle: Poetic Tone
-
-Purpose: Convey emotion and imagery with the beauty of poetic language in {TARGET_LANG}.
-
-Tone: Expressive, lyrical, and evocative.
-
-Language Style:
-
-Maintain metaphor, rhythm, and musicality.
-
-May adjust sentence structure for poetic flow.
-
-Follow the official grammar and spelling rules of {TARGET_LANG} where it doesn’t interfere with poetic style.
-
-Localization Goal: Evoke the same emotions and artistic impression for {TARGET_LANG} readers.
-
-Instructions:
-
-Retain poetic imagery and mood.
-
-Adapt rhymes or rhythms naturally to {TARGET_LANG}.
-
-Avoid overly literal translation that breaks the poetic tone."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG}, preserving emotional impact and creative expression. Act as a {TARGET_LANG} creative-literary translator. Deliver engaging, imaginative, culturally resonant copy.
+Guidelines:
+Creative writing or artistic content.
+Rich yet natural diction; varied sentence structures.
+Follow official grammar and spelling; allow tasteful artistic license.
+Adapt onomatopoeia to sound natural and expressive in {TARGET_LANG}.
+Keep tone, imagery, and narrative flow intact; respect cultural nuance.
+Avoid stiff or overly literal phrasing."\n\nText:\n{TEXT}`,
+    'literary-adaptation': `"Translate and localize the following text into {TARGET_LANG}, preserving meaning, emotion, imagery, and literary style so it reads naturally to {TARGET_LANG} readers. Act as a {TARGET_LANG} literary translator for narrative prose.
+Guidelines
+Text type: novel / short story / literary passage.
+Use rich but unforced diction; preserve metaphor, symbolism, rhythm, and voice.
+Keep tone, narrative flow, and structure intact.
+Adapt idioms, cultural references, and wordplay for natural resonance in {TARGET_LANG}.
+Avoid calques or literal phrasing that weakens the literary feel."\n\nText:\n{TEXT}`,
+    'slogan-tagline-writing': `"Translate and localize the following text into {TARGET_LANG} as a slogan/tagline that is catchy, memorable, and impactful. Act as a {TARGET_LANG} creative copywriter for branding. Deliver punchy, brand-aligned copy.
+Guidelines:
+Keep it short and culturally natural.
+Use wordplay/rhyme/rhythm when helpful.
+Follow official grammar/spelling; intentional breaks allowed for memorability.
+Preserve the core brand message and emotional pull.
+Aim for the briefest version that retains impact."\n\nText:\n{TEXT}`,
+    'poetic-tone': `"Translate and localize the following text into {TARGET_LANG} for narrative prose, capturing flow, pacing, emotional beats, and distinct character voices. Act as a {TARGET_LANG} narrative-prose translator. Deliver immersive, natural copy suitable for novels, short stories, or narrative passages.
+Guidelines
+Use descriptive yet accessible language.
+Preserve the narrative arc and tone shifts; keep character voices intact.
+Adapt names, idioms, and cultural references naturally.
+Avoid flat or literal phrasing; maintain immersion.
+Make it read as if originally written in {TARGET_LANG}; follow official grammar and spelling."\n\nText:\n{TEXT}`,
     storytelling: `"Translate and localize the following text into {TARGET_LANG}, ensuring it captures the narrative flow, emotional beats, and character voices.
 
 Act as a professional bilingual storyteller with expertise in {TARGET_LANG} narrative adaptation. Produce output that is engaging, immersive, and natural-sounding.
@@ -1703,1218 +1027,289 @@ Avoid flat, literal translations."\n\nText:\n{TEXT}`,
   },
 
   technical: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, ensuring clarity and accuracy for technical audiences.
-
-Act as a professional bilingual technical translator with expertise in {TARGET_LANG} technical documentation. Produce output that is clear, concise, and technically correct.
-
-Context Details:
-
-Text Type: General Technical Document
-
-Style: Technical
-
-Substyle: General
-
-Purpose: Explain technical information without tying to a specific format.
-
-Tone: Clear, direct, and neutral.
-
-Language Style:
-
-Use standardized {TARGET_LANG} technical terms.
-
-Avoid ambiguity and unnecessary complexity.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}.
-
-Localization Goal: Ensure instructions or explanations sound natural to technical readers in {TARGET_LANG}.
-
-Instructions:
-
-Maintain technical accuracy.
-
-Avoid literal translation that introduces confusion.
-
-Use logical, step-by-step structure when applicable."\n\nText:\n{TEXT}`,
-    'software-documentation': `"Translate and localize the following text into {TARGET_LANG} ensuring it is clear, accurate, and easy for developers or end-users to follow.
-
-Act as a professional bilingual technical translator with expertise in software documentation and {TARGET_LANG} technical terminology. Produce output that is precise, consistent, and user-friendly.
-
-Context Details:
-
-Text Type: Software User Guide / Developer Documentation
-
-Style: Technical
-
-Substyle: Software Documentation
-
-Purpose: Help developers or users understand and use software effectively.
-
-Tone: Clear, concise, and professional.
-
-Language Style:
-
-Use correct technical terms in {TARGET_LANG} or retain industry-standard terms when appropriate.
-
-Use step-by-step clarity where needed.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}.
-
-Localization Goal: Ensure technical accuracy while making the documentation sound natural in {TARGET_LANG}.
-
-Instructions:
-
-Preserve technical meaning and instructions exactly.
-
-Adapt terminology to {TARGET_LANG} where appropriate.
-
-Avoid unnecessary literal translations for common industry-standard terms."\n\nText:\n{TEXT}`,
-    'engineering-manuals': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is technically accurate and easy for engineers to follow.
-
-Act as a professional bilingual technical translator with expertise in engineering manuals and {TARGET_LANG} technical terminology. Produce output that is clear, precise, and compliant with industry standards.
-
-Context Details:
-
-Text Type: Engineering Manual / Technical Instruction Guide
-
-Style: Technical
-
-Substyle: Engineering Manuals
-
-Purpose: Provide detailed technical instructions for engineers or technicians.
-
-Tone: Precise, formal, and instructional.
-
-Language Style:
-
-Use industry-approved terminology in {TARGET_LANG} or retain standard terms when appropriate.
-
-Keep instructions clear and sequential.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}.
-
-Localization Goal: Maintain technical clarity while adapting for {TARGET_LANG} -speaking professionals.
-
-Instructions:
-
-Preserve technical accuracy.
-
-Avoid casual or ambiguous language.
-
-Adapt measurement units if required by local standards."\n\nText:\n{TEXT}`,
-    'product-specs': `"Translate and localize the following text into {TARGET_LANG}, ensuring accuracy and consistency with technical requirements.
-
-Act as a professional bilingual technical translator with expertise in {TARGET_LANG} product specification writing. Produce output that is exact, structured, and compliant with product documentation standards.
-
-Context Details:
-
-Text Type: Product Specification Sheet / Technical Datasheet
-
-Style: Technical
-
-Substyle: Product Specs
-
-Purpose: Present detailed product information clearly for users, clients, or regulators.
-
-Tone: Precise, factual, and objective.
-
-Language Style:
-
-Use correct units, dimensions, and technical terms.
-
-Maintain bullet points or tabular formats where applicable.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}.
-
-Localization Goal: Ensure specifications are understood and applicable in the {TARGET_LANG} context.
-
-Instructions:
-
-Keep all technical details exact.
-
-Adapt units or measurement formats if required.
-
-Avoid unnecessary descriptive or marketing language.
-
-Output only the localized product specifications — no commentary or extra notes."\n\nText:\n{TEXT}`,
-    'api-guides': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, developer-friendly, and technically accurate.
-
-Act as a professional, bilingual technical translator with expertise in API documentation and {TARGET_LANG} programming terminology. Produce output that is precise, readable, and aligned with developer expectations.
-
-Context Details:
-
-Text Type: API Guide / API Reference Documentation
-
-Style: Technical
-
-Substyle: API Guides
-
-Purpose: Help developers understand and implement the API effectively.
-
-Tone: Concise, structured, and professional.
-
-Language Style:
-
-Preserve code snippets exactly as in the original.
-
-Use {TARGET_LANG} explanations for parameters, functions, and usage notes.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}.
-
-Localization Goal: Ensure the API documentation is easy to follow for {TARGET_LANG}-speaking developers without losing precision.
-
-Instructions:
-
-Keep all code examples unchanged.
-
-Translate only the explanatory text and annotations.
-
-Avoid altering technical terms that are standard."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG} for a general technical audience. Act as a {TARGET_LANG} technical documentation translator. Deliver clear, concise, technically accurate copy.
+Guidelines:
+Use standardized {TARGET_LANG} terminology; keep facts, units, and data exact.
+Write unambiguous, step-by-step instructions where useful.
+Maintain a clear, direct, neutral tone.
+Avoid literal carryover that harms clarity; make it read naturally to technical readers."\n\nText:\n{TEXT}`,
+    'software-documentation': `"Translate and localize the following text into {TARGET_LANG} for software documentation. Act as a {TARGET_LANG} software-docs translator. Produce precise, consistent, user-friendly copy for developers and end users.
+Guidelines
+Preserve technical meaning and step order; keep existing structure (headings/lists/steps).
+Use standard {TARGET_LANG} technical terms; retain established English terms when industry-standard.
+Keep code, commands, UI labels, file paths, placeholders, and URLs unchanged.
+Be clear and concise; avoid literal carryover that hurts readability or accuracy."\n\nText:\n{TEXT}`,
+    'engineering-manuals': `"Translate and localize the following text into {TARGET_LANG} for an engineering manual. Act as a {TARGET_LANG} engineering-manual translator. Deliver clear, precise, standard-compliant instructions for engineers and technicians.
+Guidelines
+Preserve technical accuracy and step order; keep structure (headings, lists, tables) intact.
+Use industry-approved {TARGET_LANG} terms; retain established English terms when standard.
+Keep numbers, specs, tolerances, part names, model codes, warnings, and symbols exact.
+Adapt units, formats, and referenced standards to local requirements; include originals if needed.
+Write formally and unambiguously; avoid casual or vague phrasing.
+Ensure sequential, easy-to-follow procedures."\n\nText:\n{TEXT}`,
+    'product-specs': `"Translate and localize the following text into {TARGET_LANG} for a product specification/datasheet. Act as a {TARGET_LANG} product-spec translator. Deliver exact, structured, standards-compliant copy.
+Guidelines
+Preserve all technical details: values, tolerances, dimensions, units, part and model codes, standards, warnings, symbols.
+Keep structure intact: headings, bullets, tables, field labels.
+Use correct {TARGET_LANG} terminology; retain established English terms when industry standard.
+Convert units and numeric formats to local norms when required; include originals if needed.
+Ensure term, unit, and abbreviation consistency across the document.
+Write in a precise, factual, objective tone; avoid marketing language.
+Return only the localized specifications."\n\nText:\n{TEXT}`,
+    'api-guides': `"Translate and localize the following text into {TARGET_LANG} for an API guide/reference. Act as a {TARGET_LANG} API-docs translator. Produce clear, precise, developer-friendly copy.
+Guidelines
+Do not change code: code blocks, inline code, endpoints/paths, placeholders (e.g., {id}), params/fields, HTTP methods/status codes, payload keys, JSON examples, CLI commands, file names/paths, versions.
+Translate only prose: headings, body text, notes, comments, and table cells that aren’t code.
+Preserve formatting: markdown structure, lists, tables, code fences/backticks.
+Use standard {TARGET_LANG} terminology; keep established English tech terms (API, SDK, JSON, OAuth, webhook) as is.
+Keep terminology consistent; do not add, omit, or reinterpret content."\n\nText:\n{TEXT}`,
   },
 
   legal: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, preserving its legal meaning and adapting it to {TARGET_LANG} legal drafting norms.
-
-Act as a professional bilingual legal translator with expertise in {TARGET_LANG} law. Produce output that is accurate, unambiguous, and compliant with {TARGET_LANG} legal terminology and structure.
-
-Context Details:
-
-Text Type: General Legal Document
-
-Style: Legal
-
-Substyle: General
-
-Purpose: Communicate legal information clearly and formally without specifying document type.
-
-Tone: Formal, precise, and authoritative.
-
-Language Style:
-
-Use formal legal vocabulary in {TARGET_LANG}.
-
-Follow the official grammar, spelling, and legal drafting standards of {TARGET_LANG}.
-
-Avoid colloquial or ambiguous terms.
-
-Localization Goal: Ensure the translation has the same legal effect and clarity in {TARGET_LANG} as the source.
-
-Instructions:
-
-Preserve all legal meanings and obligations.
-
-Avoid literal translation that could cause ambiguity in law.
-
-Maintain numbering, clauses, and structure."\n\nText:\n{TEXT}`,
-    contracts: `"Translate and localize the following text into {TARGET_LANG}, preserving its legal meaning while adapting it to {TARGET_LANG} legal language norms.
-
-Act as a professional bilingual legal translator with expertise in {TARGET_LANG} contract law. Produce output that is accurate, unambiguous, and compliant with {TARGET_LANG} legal drafting conventions.
-
-Context Details:
-
-Text Type: Contract / Agreement
-
-Style: Legal
-
-Substyle: Contracts
-
-Purpose: Ensure the translated contract has the same legal force and clarity as the original.
-
-Tone: Formal, precise, and legally binding.
-
-Language Style:
-
-Use formal legal vocabulary in {TARGET_LANG}.
-
-Follow official grammar, spelling, and legal formatting norms of {TARGET_LANG}.
-
-Avoid colloquial language or vague expressions.
-
-Localization Goal: Maintain legal intent, enforceability, and formatting conventions used in {TARGET_LANG} legal documents.
-
-Instructions:
-
-Translate with full legal accuracy.
-
-Avoid literal translation if it causes ambiguity in legal interpretation.
-
-Preserve numbering, clauses, and structure."\n\nText:\n{TEXT}`,
-    'terms-conditions': `"Translate and localize the following text into {TARGET_LANG}, preserving meaning while ensuring clarity, legality, and compliance with {TARGET_LANG} norms.
-
-Act as a professional bilingual legal translator with expertise in {TARGET_LANG} consumer and digital regulations. Produce output that is clear, enforceable, and consistent with {TARGET_LANG} T&C drafting standards.
-
-Context Details:
-
-Text Type: Terms & Conditions (T&C)
-
-Style: Legal
-
-Substyle: Terms & Conditions
-
-Purpose: Clearly outline rules, obligations, and legal disclaimers for users.
-
-Tone: Formal, specific, neutral, and authoritative.
-
-Language Style:
-
-Use formal {TARGET_LANG} legal and business terminology.
-
-Follow official grammar, spelling, and formatting practices of {TARGET_LANG}.
-
-Avoid overly complex sentences that hinder understanding.
-
-Localization Goal: Ensure the translated T&C are valid, comprehensible, and culturally adapted to {TARGET_LANG} laws and norms.
-
-Instructions:
-
-Preserve all legal rights, disclaimers, and limitations.
-
-Avoid literal translation that creates legal loopholes.
-
-Keep clause structure and numbering intact."\n\nText:\n{TEXT}`,
-    'compliance-docs': `"Translate and localize the following text into {TARGET_LANG} preserving its legal and regulatory meaning while adapting it to {TARGET_LANG} compliance standards.
-
-Act as a professional bilingual legal translator with expertise in {TARGET_LANG} regulatory compliance. Produce output that is accurate, compliant, and audit-ready.
-
-Context Details:
-
-Text Type: Compliance Documentation (e.g., SOPs, audit checklists, certifications)
-
-Style: Legal
-
-Substyle: Compliance Docs
-
-Purpose: Ensure compliance documents are valid and understandable for {TARGET_LANG} regulatory bodies.
-
-Tone: Formal, exact, objective, and precise.
-
-Language Style:
-
-Use standardized compliance and regulatory terminology in {TARGET_LANG}.
-
-Follow official grammar, spelling, and industry document formatting in {TARGET_LANG}.
-
-Avoid ambiguous or casual expressions.
-
-Localization Goal: Adapt compliance references, formats, and terms for {TARGET_LANG} laws and industry standards.
-
-Instructions:
-
-Ensure accuracy for legal and regulatory review.
-
-Avoid literal translation that misrepresents compliance requirements.
-
-Preserve numbering, structure, and formatting."\n\nText:\n{TEXT}`,
-    'privacy-policies': `"Translate and localize the following text into {TARGET_LANG}, preserving meaning while ensuring compliance with {TARGET_LANG} privacy and data protection laws.
-
-Act as a professional bilingual legal translator with expertise in {TARGET_LANG} data protection regulations. Produce output that is clear, accurate, and legally enforceable.
-
-Context Details:
-
-Text Type: Privacy Policy
-
-Style: Legal
-
-Substyle: Privacy Policies
-
-Purpose: Inform users about their data rights and how their personal information is processed.
-
-Tone: Formal, reassuring, clear, and transparent.
-
-Language Style:
-
-Use formal legal and privacy-related vocabulary in {TARGET_LANG}.
-
-Follow official grammar, spelling, and comply with applicable data protection standards in {TARGET_LANG}.
-
-Avoid vague or overly broad statements.
-
-Localization Goal: Make the policy both legally accurate and easy for users to understand.
-
-Instructions:
-
-Translate with legal precision while keeping clarity for laypersons.
-
-Avoid literal translation that causes regulatory conflicts.
-
-Preserve structure, headings, and clause numbering."\n\nText:\n{TEXT}`,
-    constitutional: `"Translate and localize the following text into {TARGET_LANG}, preserving its legal authority and formal tone while following {TARGET_LANG} constitutional language standards.
-
-Act as a professional bilingual legal translator with expertise in {TARGET_LANG} constitutional law. Produce output that is formally precise, legally binding, and historically respectful.
-
-Context Details:
-
-Text Type: Constitutional Text / Law
-
-Style: Legal
-
-Substyle: Constitutional
-
-Purpose: Maintain the original legal force and historical formality.
-
-Tone: Extremely formal, authoritative, exact, and respectful.
-
-Language Style:
-
-Use official constitutional/legal {TARGET_LANG} vocabulary.
-
-Follow official grammar, spelling, and legislative drafting conventions in {TARGET_LANG}.
-
-Preserve historical and cultural accuracy.
-
-Localization Goal: Keep exact legal meaning and respect the solemnity of constitutional language.
-
-Instructions:
-
-Translate with full legal fidelity and precision.
-
-Avoid any paraphrasing that alters meaning.
-
-Maintain exact numbering, clauses, and structure."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG} for a general legal document. Act as a {TARGET_LANG} legal translator. Produce formal, precise, unambiguous copy aligned with {TARGET_LANG} drafting norms.
+Guidelines
+Preserve legal effect; no additions or omissions.
+Use standard {TARGET_LANG} legal terminology; avoid colloquial or vague wording.
+Keep defined terms, capitalization, references, numbering, clauses, and structure intact.
+Maintain official grammar/spelling.
+Prefer natural legal phrasing over literal mappings that could create ambiguity.
+If the content concerns tax or transfer pricing, apply OECD-aligned terminology and map local paraphrases to recognized TP terms in {TARGET_LANG} (e.g., “prinsip kewajaran dan kelaziman usaha” → “arm's length principle”). Keep method names and acronyms consistent (CUP, RPM, CPM, TNMM, PSM, APA, MAP)."\n\nText:\n{TEXT}`,
+    contracts: `"Translate and localize the following text into {TARGET_LANG}, for a contract/agreement. Act as a {TARGET_LANG} contract-law translator. Deliver formal, precise, enforceable copy aligned with local drafting conventions.
+Guidelines
+Preserve legal effect; no additions or omissions.
+Use standard {TARGET_LANG} contract terminology; avoid colloquial or vague wording.
+Keep formatting intact: headings, clause/section numbering, defined terms, references.
+Follow official grammar, spelling, and legal formatting norms.
+Prefer natural legal phrasing over literal wording that could create ambiguity."\n\nText:\n{TEXT}`,
+    'terms-conditions': `"Translate and localize the following text into {TARGET_LANG}, as Terms & Conditions compliant with {TARGET_LANG} law. Act as a {TARGET_LANG} legal translator (consumer/digital). Deliver formal, clear, enforceable T&C.
+Guidelines
+Preserve all rights, disclaimers, and limitations; no additions or omissions.
+Use standard legal/business terminology; avoid vagueness and overly complex sentences.
+Keep structure and formatting: headings, clause numbering, defined terms.
+Follow official grammar, spelling, and legal formatting in {TARGET_LANG}.
+Prefer precise, natural legal phrasing over literal wording that could create loopholes."\n\nText:\n{TEXT}`,
+    'compliance-docs': `"Translate and localize the following text into {TARGET_LANG}, preserving legal and regulatory meaning and aligning with {TARGET_LANG} compliance standards. Act as a {TARGET_LANG} legal translator specialized in regulatory compliance. Deliver accurate, compliant, audit-ready text.
+Guidelines
+Use standardized compliance terminology and official grammar/spelling; follow industry document formatting.
+Keep structure intact: headings, numbering, tables, defined terms.
+Adapt references, dates, units, and citations to {TARGET_LANG} laws and standards.
+Ensure precision for legal/regulatory review; avoid ambiguity and casual phrasing.
+Prefer clear, natural legal wording over literal phrasing that could misrepresent requirements."\n\nText:\n{TEXT}`,
+    'privacy-policies': `"Translate and localize the following text into {TARGET_LANG}, ensuring compliance with {TARGET_LANG} privacy and data protection laws. Act as a {TARGET_LANG} legal translator specializing in data protection. Deliver a clear, accurate, legally enforceable privacy policy.
+Guidelines
+Use formal legal and privacy terminology; follow applicable standards and official grammar and spelling.
+Keep structure intact: headings, sections, clause numbering, defined terms.
+Clearly explain user rights and how personal data is collected, used, shared, and retained.
+Preserve all rights and obligations; do not add or omit content.
+Ensure layperson clarity; avoid vague or overly broad statements.
+Avoid literal phrasing that could conflict with regulations; adapt dates, numbers, and references to {TARGET_LANG} norms."\n\nText:\n{TEXT}`,
+    constitutional: `"Translate and localize the following text into {TARGET_LANG}, preserving legal authority and the formal constitutional register. Act as a {TARGET_LANG} constitutional-law translator. Deliver text that is precise, binding, and historically respectful.
+Guidelines
+Use official constitutional/legal vocabulary and legislative drafting conventions; follow official grammar/spelling.
+Keep meaning exact: add nothing, omit nothing; avoid paraphrasing that changes legal effect.
+Maintain original numbering, headings, clauses, definitions, and citations.
+Preserve historical and cultural references faithfully.
+Maintain an extremely formal, authoritative tone.
+Adapt dates and citation formats to {TARGET_LANG} standards without altering substance."\n\nText:\n{TEXT}`,
   },
 
   medical: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while ensuring it is clear, accurate, and suitable for a general medical context.
-
-Act as a professional bilingual medical translator with expertise in {TARGET_LANG} health communication. Produce output that is accurate, professional, and easy to understand.
-
-Context Details:
-
-Text Type: General Medical Information
-
-Style: Medical
-
-Substyle: General
-
-Purpose: Present medical information clearly without targeting a specific audience type.
-
-Tone: Clear, informative, and neutral.
-
-Language Style:
-
-Use accurate medical terminology in {TARGET_LANG}.
-
-Explain complex terms briefly if needed.
-
-Follow official grammar and spelling standards.
-
-Localization Goal: Ensure the information feels natural and professionally written in {TARGET_LANG}.
-
-Instructions:
-
-Maintain medical accuracy and clarity.
-
-Avoid overly technical or overly simplified translations.
-
-Use neutral, factual language."\n\nText:\n{TEXT}`,
-    'patient-friendly-explanation': `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to be clear, simple, and reassuring for patients.
-
-Act as a professional bilingual medical translator with expertise in {TARGET_LANG} health communication. Produce output that is accurate, easy to understand, and culturally sensitive.
-
-Context Details:
-
-Text Type: Patient Information / Medical Explanation
-
-Style: Medical
-
-Substyle: Patient-friendly Explanation
-
-Purpose: Help patients understand medical information without confusion or fear.
-
-Tone: Calm, clear, empathetic, and supportive.
-
-Language Style:
-
-Use everyday {TARGET_LANG} words instead of complex medical jargon (explain terms if needed).
-
-Follow official grammar and spelling standards.
-
-Maintain accuracy while simplifying concepts.
-
-Localization Goal: Ensure the explanation feels natural, comforting, and culturally relevant to {TARGET_LANG} patients.
-
-Instructions:
-
-Maintain medical accuracy but explain in layman’s terms.
-
-Avoid literal translation if it sounds overly technical.
-
-Use short, clear sentences for readability."\n\nText:\n{TEXT}`,
-    'research-abstracts': `"Translate and localize the following text into {TARGET_LANG}, preserving its scientific accuracy and academic tone.
-
-Act as a professional bilingual medical translator with expertise in {TARGET_LANG} medical research publications. Produce output that is precise, formal, and scientifically credible.
-
-Context Details:
-
-Text Type: Medical Research Abstract
-
-Style: Medical
-
-Substyle: Research Abstracts
-
-Purpose: Present research findings clearly to {TARGET_LANG} medical professionals and academics.
-
-Tone: Formal, technical, objective, and concise.
-
-Language Style:
-
-Use standardized {TARGET_LANG} medical and scientific terminology.
-
-Follow official grammar and spelling standards and {TARGET_LANG} academic writing norms.
-
-Avoid unnecessary simplification — maintain professional rigor.
-
-Localization Goal: Ensure the translated abstract is publication-ready for {TARGET_LANG} medical journals.
-
-Instructions:
-
-Maintain all data, terminology, and structure.
-
-Avoid literal translation that distorts meaning.
-
-Keep the tone strictly formal and scientific."\n\nText:\n{TEXT}`,
-    'clinical-documentation': `"Translate and localize the following text into {TARGET_LANG}, preserving full medical accuracy and compliance with {TARGET_LANG} healthcare documentation standards.
-
-Act as a professional bilingual medical translator with expertise in {TARGET_LANG} clinical and hospital records. Produce output that is accurate, clear, and compliant.
-
-Context Details:
-
-Text Type: Clinical Notes / Patient Records / Medical Reports
-
-Style: Medical
-
-Substyle: Clinical Documentation
-
-Purpose: Ensure accuracy for patient care, diagnosis, and legal records in {TARGET_LANG}-speaking regions.
-
-Tone: Formal, exact, clinical, and objective.
-
-Language Style:
-
-Use precise medical terminology in {TARGET_LANG}.
-
-Follow official grammar and spelling standards and  {TARGET_LANG} medical norms.
-
-Avoid unnecessary rewording — keep factual tone.
-
-Localization Goal: Ensure translated documentation is medically valid and ready for official patient files in  {TARGET_LANG}.
-
-Instructions:
-
-Translate with 100% accuracy — no omissions or additions.
-
-Keep original structure, headings, and numbering.
-
-Avoid interpretive or explanatory translation."\n\nText:\n{TEXT}`,
-    'health-campaigns': `"Translate and localize the following text into {TARGET_LANG}, preserving meaning while adapting tone to motivate and engage the {TARGET_LANG} public.
-
-Act as a professional bilingual medical translator with expertise in public health communication. Produce output that is clear, persuasive, and culturally relevant.
-
-Context Details:
-
-Text Type: Public Health Campaign / Awareness Material
-
-Style: Medical
-
-Substyle: Health Campaigns
-
-Purpose: Encourage healthy behaviors and inform the public about health risks or preventive measures.
-
-Tone: Positive, motivating, clear, and empathetic.
-
-Language Style:
-
-Use friendly and accessible {TARGET_LANG} vocabulary.
-
-Avoid excessive medical jargon — explain terms if needed.
-
-Follow official grammar and spelling standards while keeping the tone engaging.
-
-Localization Goal: Make health messages resonate emotionally and culturally with {TARGET_LANG} audiences.
-
-Instructions:
-
-Preserve core health message and facts.
-
-Adapt examples, idioms, or scenarios for {TARGET_LANG} context.
-
-Avoid literal translation that feels distant or cold."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, accurate, and suitable for a general medical context. Act as a {TARGET_LANG} medical translator. Deliver professional, easy-to-understand copy.
+Guidelines
+Preserve meaning exactly.
+Use standard medical terminology; briefly explain complex terms if needed.
+Keep tone neutral and factual; avoid jargon-heavy or oversimplified wording.
+Follow official {TARGET_LANG} grammar and spelling; ensure natural professional flow."\n\nText:\n{TEXT}`,
+    'patient-friendly-explanation': `"Translate and localize the following text into {TARGET_LANG}, making it clear, simple, and reassuring for patients. Act as a {TARGET_LANG} medical translator. Deliver accurate, culturally sensitive patient-facing copy.
+Guidelines
+Preserve meaning exactly (no additions or omissions).
+Use everyday language; briefly explain medical terms when needed.
+Keep tone calm, empathetic, and supportive.
+Write short, clear sentences for readability.
+Follow official {TARGET_LANG} grammar and spelling; avoid literal phrasing that sounds overly technical."\n\nText:\n{TEXT}`,
+    'research-abstracts': `"Translate and localize the following text into {TARGET_LANG}, preserving scientific accuracy and an academic tone. Act as a {TARGET_LANG} medical-research translator. Deliver precise, formal, journal-ready output.
+Guidelines
+Keep all data, terminology, headings, and structure (no additions or omissions).
+Use standardized medical/scientific terms; follow {TARGET_LANG} academic conventions and official grammar/spelling.
+Maintain a formal, technical, objective, and concise style.
+Do not oversimplify; keep professional rigor.
+Avoid literal phrasing that distorts meaning."\n\nText:\n{TEXT}`,
+    'clinical-documentation': `"Translate and localize the following text into {TARGET_LANG} for clinical documentation, with full medical accuracy and compliance with {TARGET_LANG} healthcare standards. Act as a {TARGET_LANG} clinical records translator. Deliver formal, exact, objective, file-ready text.
+Guidelines
+Text types: clinical notes, patient records, medical reports
+Preserve structure, headings, and numbering; no additions or omissions
+Use standardized medical terminology; follow official grammar/spelling and clinical norms
+Keep a factual tone; avoid interpretation or explanations
+Avoid unnecessary rewording; prioritize precision"\n\nText:\n{TEXT}`,
+    'health-campaigns': `"Translate and localize the following text into {TARGET_LANG}, for public health campaigns (clear, motivating, culturally relevant). Act as a {TARGET_LANG} public health communicator. Deliver concise, empathetic, persuasive copy.
+Guidelines
+Text type: awareness material
+Preserve core facts and intent; no additions or omissions
+Use friendly, accessible wording; briefly clarify essential terms
+Adapt examples and idioms to {TARGET_LANG} context
+Avoid literal or stiff phrasing; keep tone positive and engaging"\n\nText:\n{TEXT}`,
   },
 
   journalistic: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, ensuring it reads like a natural {TARGET_LANG} news article.
-
-Act as a professional bilingual news translator with expertise in {TARGET_LANG} journalism. Produce output that is factual, concise, and follows news writing norms.
-
-Context Details:
-
-Text Type: General News Article
-
-Style: Journalistic
-
-Substyle: General
-
-Purpose: Report events clearly and accurately without bias.
-
-Tone: Neutral, factual, and clear.
-
-Language Style:
-
-Use official grammar and spelling standards.
-
-Maintain an inverted pyramid or logical news structure.
-
-Include direct quotes and attributions where relevant.
-
-Localization Goal: Ensure phrasing, references, and structure are natural for {TARGET_LANG}-speaking readers while maintaining accuracy.
-
-Instructions:
-
-Keep all facts accurate and verifiable.
-
-Avoid literal translation that causes unnatural phrasing.
-
-Preserve clarity and conciseness for easy reading."\n\nText:\n{TEXT}`,
-    'news-reports': `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to the cultural and linguistic norms of professional news reporting.
-
-Act as a professional bilingual translator with expertise in {TARGET_LANG} news journalism and a deep understanding of cross-cultural communication. Produce output that is natural, fluent, and journalistic, suitable for public news consumption.
-
-Context Details:
-
-Style: Journalistic
-
-Substyle: News Reports
-
-Purpose: Inform readers about current events with clarity, accuracy, and engagement.
-
-Tone: Neutral and factual, but flexible enough to adapt to the news context.
-
-Language Style:
-
-Use clear sentences with correct grammar and standard vocabulary.
-
-May include direct quotes and attributed sources.
-
-Maintain a neutral perspective, avoiding bias.
-
-Follow official grammar and spelling standards.
-
-Localization Goal: Adapt phrasing, references, and structure so it reads like a natural, professional {TARGET_LANG} news article while preserving the original meaning.
-
-Instructions:
-
-Accurately convey the original meaning and details.
-
-Keep the tone factual and neutral, but allow natural news flow.
-
-Use direct quotes and attributions as needed.
-
-Avoid literal translation if it results in awkward phrasing.
-
-Do not carry over source sentence structures that feel unnatural in {TARGET_LANG} news writing."\n\nText:\n{TEXT}`,
-    'editorial-opinion': `"Translate and localize the following text into {TARGET_LANG}, preserving the argument’s clarity while adapting it to journalistic opinion writing norms.
-
-Act as a professional bilingual journalist with expertise in {TARGET_LANG} editorial writing. Produce output that is persuasive, coherent, and aligned with opinion article conventions.
-
-Context Details:
-
-Text Type: Editorial / Opinion Piece
-
-Style: Journalistic
-
-Substyle: Editorial Opinion
-
-Purpose: Present the writer’s opinion clearly while maintaining credibility and logical flow.
-
-Tone: Persuasive, thoughtful, subjective, and authoritative.
-
-Language Style:
-
-Use formal or semi-formal {TARGET_LANG} as appropriate for editorials.
-
-Maintain logical progression of ideas.
-
-Follow official grammar and spelling standards.
-
-Localization Goal: Ensure the piece feels like it was originally written for an {TARGET_LANG} editorial audience while preserving the author’s stance and reasoning.
-
-Instructions:
-
-Maintain the writer’s argument and supporting points.
-
-dapt cultural references appropriately for the target audience.
-
-Avoid literal translation that weakens persuasiveness."\n\nText:\n{TEXT}`,
-    'feature-articles': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is engaging, descriptive, and adapted to feature writing norms.
-
-Act as a professional bilingual journalist with expertise in {TARGET_LANG} long-form feature writing. Produce output that is informative, vivid, and audience-focused.
-
-Context Details:
-
-Text Type: Feature Article
-
-Style: Journalistic
-
-Substyle: Feature Articles
-
-Purpose: Provide in-depth coverage of a topic in a compelling way.
-
-Tone: Informative, engaging, and descriptive.
-
-Language Style:
-
-Rich vocabulary and varied sentence structure.
-
-Incorporate descriptive details and human interest elements.
-
-Follow official grammar and spelling standards.
-
-Localization Goal: Ensure the feature reads naturally in {TARGET_LANG} while maintaining depth, style, and flow.
-
-Instructions:
-
-Preserve depth of information and descriptive details.
-
-Adapt metaphors and cultural references where needed.
-
-Avoid literal translation that disrupts narrative flow."\n\nText:\n{TEXT}`,
-    'press-releases': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, factual, and aligned with {TARGET_LANG} PR communication standards.
-
-Act as a professional bilingual media translator with expertise in {TARGET_LANG} press communications. Produce output that is professional, concise, and ready for publication.
-
-Context Details:
-
-Text Type: Press Release
-
-Style: Journalistic
-
-Substyle: Press Releases
-
-Purpose: Announce news or updates to the media in a clear and concise manner.
-
-Tone: Professional, factual, and direct.
-
-Language Style:
-
-Short, clear sentences.
-
-Avoid excessive jargon unless industry-specific.
-
-Follow official grammar and spelling standards, and use standard press release formatting.
-
-Localization Goal: Ensure the release reads like a professional {TARGET_LANG} press statement while maintaining factual accuracy.
-
-Instructions:
-
-Keep all factual details intact.
-
-Adapt date, time, and formatting to {TARGET_LANG} standards.
-
-Avoid overly literal phrasing that sounds unnatural."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG}, so it reads like a native news article (neutral, factual, concise). Act as a {TARGET_LANG} news translator. Follow newsroom norms.
+Guidelines
+Text type: general news
+Use inverted pyramid or clear logical structure
+Keep quotes and attributions intact
+Localize references, dates, and formats where appropriate
+Ensure accuracy and verifiability; preserve names and figures
+Natural phrasing over literal calques; clear, concise sentences; standard grammar and spelling"\n\nText:\n{TEXT}`,
+    'news-reports': `"Translate and localize the following text into {TARGET_LANG}, formatted as a professional news report. Act as a {TARGET_LANG} newsroom translator. Produce neutral, factual, fluent copy.
+Guidelines
+Use news structure (inverted pyramid or clear logic).
+Keep facts, names, figures, quotes, and attributions intact.
+Localize dates, units, titles, and references appropriately.
+Write clear, concise sentences with standard grammar and spelling.
+Prefer natural phrasing over literal calques; avoid source-like sentence patterns."\n\nText:\n{TEXT}`,
+    'editorial-opinion': `"Translate and localize the following text into {TARGET_LANG}, as a journalistic editorial/opinion piece. Act as a {TARGET_LANG} editorial translator. Deliver persuasive, coherent copy that fits opinion-page conventions.
+Guidelines
+Use formal or semi-formal register as appropriate.
+Preserve the author’s stance, argument, and supporting points.
+Ensure clear logic and flow between paragraphs.
+Adapt cultural references for {TARGET_LANG} readers.
+Use standard grammar and spelling.
+Prefer natural phrasing over literal translation that weakens persuasion."\n\nText:\n{TEXT}`,
+    'feature-articles': `"Translate and localize the following text into {TARGET_LANG}, in engaging, descriptive feature-article style. Act as a {TARGET_LANG} feature-writing translator. Deliver informative, vivid, audience-focused copy.
+Guidelines
+Use rich yet clear vocabulary and varied sentence lengths.
+Weave in descriptive details and human-interest angles.
+Preserve depth, structure, and narrative flow.
+Adapt metaphors, idioms, and cultural references to feel native in {TARGET_LANG}.
+Keep facts accurate; use standard grammar and spelling.
+Prefer natural phrasing over literal translation."\n\nText:\n{TEXT}`,
+    'press-releases': `"Translate and localize the following text into {TARGET_LANG} as a clear, factual, publication-ready press release. Act as a {TARGET_LANG} PR translator. Deliver professional, concise copy.
+Guidelines
+Use a direct tone and short, clean sentences.
+Keep all facts, names, figures, links intact.
+Apply standard press-release structure and {TARGET_LANG} grammar/spelling.
+Adapt dates, times, numbers, and currency to {TARGET_LANG} norms.
+Avoid excessive jargon; prefer natural phrasing over literal translation."\n\nText:\n{TEXT}`,
   },
 
   corporate: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, preserving its professional tone and aligning it with corporate communication standards.
-
-Act as a professional bilingual corporate translator with expertise in {TARGET_LANG} business communication. Produce output that is clear, professional, and brand-aligned.
-
-Context Details:
-
-Text Type: General Corporate Message
-
-Style: Corporate
-
-Substyle: General
-
-Purpose: Deliver professional corporate messaging without targeting a specific document type.
-
-Tone: Formal yet approachable and aligned with company voice..
-
-Language Style:
-
-Clear structure, concise sentences, professional vocabulary.
-
-Follow official grammar and spelling standards, and company tone of voice guidelines.
-
-Avoid unnecessary jargon.
-
-Localization Goal: Ensure the corporate message feels authentic and relevant to {TARGET_LANG} business culture.
-
-Instructions:
-
-Keep communication clear and concise.
-
-Adapt phrasing to sound natural in formal corporate {TARGET_LANG}.
-
-Maintain brand voice and tone."\n\nText:\n{TEXT}`,
-    'internal-communications': `"Translate and localize the following text into {TARGET_LANG}, preserving its clarity, professionalism, and alignment with {TARGET_LANG} corporate culture.
-
-Act as a professional bilingual corporate translator with expertise in {TARGET_LANG} workplace communication. Produce output that is clear, respectful, and aligned with company values.
-
-Context Details:
-
-Text Type: Internal Communications (e.g., memos, employee updates, HR notices)
-
-Style: Corporate
-
-Substyle: Internal Communications
-
-Purpose: Inform employees or teams in a professional yet approachable tone.
-
-Tone: Formal yet warm, respectful, and engaging.
-
-Language Style:
-
-Use clear structure and concise sentences.
-
-Follow official grammar and spelling standards.
-
-Avoid unnecessary jargon unless industry-specific.
-
-Localization Goal: Ensure the message feels natural for {TARGET_LANG} employees while keeping it aligned with company tone and values.
-
-Instructions:
-
-Maintain clarity and purpose of the original message.
-
-Adapt references to suit {TARGET_LANG} corporate culture.
-
-Avoid literal translations that sound stiff or unnatural."\n\nText:\n{TEXT}`,
-    'investor-relations': `"Translate and localize the following text into {TARGET_LANG}, ensuring accuracy, professionalism, and compliance with financial communication norms.
-
-Act as a professional bilingual financial and corporate translator with expertise in {TARGET_LANG} investor communication. Produce output that is precise, formal, and credible.
-
-Context Details:
-
-Text Type: Investor Relations Materials (e.g., shareholder letters, earnings summaries)
-
-Style: Corporate
-
-Substyle: Investor Relations
-
-Purpose: Communicate corporate and financial information to shareholders and investors.
-
-Tone: Formal, authoritative, and transparent.
-
-Language Style:
-
-Use formal financial and business vocabulary in {TARGET_LANG}.
-
-Follow official grammar and spelling standards and standard financial reporting terms.
-
-Avoid vague or ambiguous expressions.
-
-Localization Goal: Ensure the content meets investor relations standards and remains precise in {TARGET_LANG}.
-
-Instructions:
-
-Keep all numerical and factual data intact.
-
-Adapt terms to standard {TARGET_LANG} financial terminology.
-
-Maintain professional tone throughout."\n\nText:\n{TEXT}`,
-    'annual-reports': `"Translate and localize the following text into {TARGET_LANG}, ensuring professionalism, accuracy, and compliance with corporate reporting standards.
-
-Act as a professional bilingual corporate and financial translator with expertise in {TARGET_LANG} annual reports. Produce output that is clear, formal, and ready for publication.
-
-Context Details:
-
-Text Type: Annual Report Content
-
-Style: Corporate
-
-Substyle: Annual Reports
-
-Purpose: Present company performance, achievements, and plans in a professional format.
-
-Tone: Formal, confident, and factual.
-
-Language Style:
-
-Use correct corporate and financial terms in {TARGET_LANG}.
-
-Follow official grammar and spelling standards and {TARGET_LANG} corporate reporting conventions.
-
-Maintain clear structure with headings if present.
-
-Localization Goal: Ensure the report reads like it was written in {TARGET_LANG} while preserving all details.
-
-Instructions:
-
-Keep all data, dates, and figures exactly as in the original.
-
-Adapt terms to standard {TARGET_LANG} corporate and accounting language.
-
-Maintain professional tone without unnecessary embellishment."\n\nText:\n{TEXT}`,
-    'professional-presentations': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, professional, and engaging for a corporate audience.
-
-Act as a professional bilingual corporate translator with expertise in {TARGET_LANG} business presentations. Produce output that is impactful, concise, and audience-appropriate.
-
-Context Details:
-
-Text Type: Professional Presentation (slides, scripts, corporate pitches)
-
-Style: Corporate
-
-Substyle: Professional Presentations
-
-Purpose: Deliver key points in a persuasive yet professional manner.
-
-Tone: Formal, confident, and engaging.
-
-Language Style:
-
-Use concise, impactful sentences.
-
-Follow official grammar and spelling standards and {TARGET_LANG} business communication norms.
-
-Use bullet-friendly phrasing where applicable.
-
-Localization Goal: Ensure the presentation content resonates with {TARGET_LANG} corporate audiences while maintaining professional impact.
-
-Instructions:
-
-Preserve the clarity and flow of the original presentation.
-
-Adapt terms to standard {TARGET_LANG} business terminology.
-
-Avoid overly long or complex sentences."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG} for corporate communication (clear, professional, brand-aligned). Act as a {TARGET_LANG} corporate translator. Deliver concise, polished, company-voice copy.
+Guidelines
+Preserve meaning and structure; use professional vocabulary.
+Follow official grammar/spelling and any provided tone-of-voice.
+Avoid unnecessary jargon; use natural corporate phrasing.
+Make it feel native to {TARGET_LANG} business culture."\n\nText:\n{TEXT}`,
+    'internal-communications': `"Translate and localize the following text into {TARGET_LANG} for internal corporate communications (clear, respectful, company-aligned). Act as a {TARGET_LANG} workplace communications translator. Deliver professional, approachable copy.
+Guidelines
+Preserve intent and structure (headings/bullets if present).
+Use concise, scannable sentences; avoid unnecessary jargon.
+Align with company voice and values.
+Adapt references to {TARGET_LANG} workplace context.
+Avoid literal phrasing that reads stiff; make it feel native to employees."\n\nText:\n{TEXT}`,
+    'investor-relations': `"Translate and localize the following text into {TARGET_LANG} for investor relations (accurate, professional, compliant). Act as a {TARGET_LANG} financial communications translator. Deliver precise, formal, credible copy.
+Guidelines
+Preserve all numbers, dates, units, metrics, footnotes, and disclosures.
+Use standard {TARGET_LANG} financial/accounting terminology; follow IR reporting norms.
+Maintain a formal, authoritative, transparent tone.
+Be clear and unambiguous; avoid hype or vague phrasing.
+Keep structure and formatting (headings, bullets, tables).
+Adapt currency, number styles, and terms to {TARGET_LANG} conventions.
+No additions or omissions."\n\nText:\n{TEXT}`,
+    'annual-reports': `"Translate and localize the following text into {TARGET_LANG} for annual reports (professional, accurate, publication-ready). Act as a {TARGET_LANG} corporate and financial translator. Deliver clear, formal, compliant copy.
+Guidelines
+Preserve all data, figures, dates, tables, captions, and footnotes.
+Use standard {TARGET_LANG} corporate and accounting terminology; follow reporting norms.
+Keep original structure and headings; maintain a confident, factual tone.
+Adapt currency, number styles, units, and date formats to {TARGET_LANG} conventions.
+Be precise and objective; avoid embellishment.
+No additions or omissions."\n\nText:\n{TEXT}`,
+    'professional-presentations': `"Translate and localize the following text into {TARGET_LANG} for corporate presentations (clear, professional, engaging). Act as a {TARGET_LANG} business presentation translator. Deliver concise, impactful copy for slides, scripts, and pitches.
+Guidelines
+Use short, punchy lines and bullet-friendly phrasing.
+Follow official {TARGET_LANG} grammar, spelling, and business norms.
+Preserve structure and logical flow; keep headings and key terms consistent.
+Use standard {TARGET_LANG} business terminology.
+Maintain a formal, confident, engaging tone.
+Avoid long or complex sentences."\n\nText:\n{TEXT}`,
   },
 
   entertainment: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is engaging, relatable, and audience-friendly.
-
-Act as a professional bilingual entertainment translator with expertise in {TARGET_LANG} pop culture and media. Produce output that is fun, dynamic, and culturally engaging.
-
-Context Details:
-
-Text Type: General Entertainment Content
-
-Style: Entertainment
-
-Substyle: General
-
-Purpose: Entertain and engage the audience without focusing on a specific entertainment category.
-
-Tone: Fun, energetic, and inviting.
-
-Language Style:
-
-Conversational flow, lively vocabulary.
-
-Follow official grammar and spelling standards while allowing creative freedom for entertainment value.
-
-Adapt idioms and cultural references for relevance.
-
-Localization Goal: Ensure the content feels like it was originally written for an {TARGET_LANG} entertainment audience.
-
-Instructions:
-
-Keep the tone lively and engaging.
-
-Adapt references to fit {TARGET_LANG} entertainment culture.
-
-Avoid overly literal translation that loses entertainment value."\n\nText:\n{TEXT}`,
-    subtitling: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, concise, and engaging as subtitles.
-
-Act as a professional bilingual entertainment subtitle translator with expertise in {TARGET_LANG} audiovisual translation. Produce output that is accurate, natural, and timed for easy reading.
-
-Context Details:
-
-Text Type: Entertainment Subtitles
-
-Style: Entertainment
-
-Substyle: Subtitling
-
-Purpose: Make the content fun, clear, and accessible for {TARGET_LANG} viewers.
-
-Tone: Matches the original scene’s emotional tone (funny, dramatic, suspenseful, etc.), concise, and natural.
-
-Language Style:
-
-Short, concise lines that fit reading speed guidelines.
-
-Follow official grammar and spelling standards while keeping a natural spoken flow.
-
-Adapt cultural references for relevance.
-
-Localization Goal: Ensure subtitles feel natural to {TARGET_LANG} viewers while keeping the entertainment value intact.
-
-Instructions:
-
-Keep lines short and easy to read on screen.
-
-Adapt idioms, jokes, or slang to equivalent {TARGET_LANG} expressions.
-
-Avoid literal translation that breaks the natural entertainment tone."\n\nText:\n{TEXT}`,
-    screenwriting: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is ready for production and culturally engaging.
-
-Act as a professional bilingual screenwriter-translator with expertise in {TARGET_LANG} film and TV scripts. Produce output that is natural, dramatic, and audience-appropriate.
-
-Context Details:
-
-Text Type: Screenplay (Film/TV)
-
-Style: Entertainment
-
-Substyle: Screenwriting
-
-Purpose: Adapt scripts so they work naturally for {TARGET_LANG} actors and audiences.
-
-Tone: Matches original scene — could be dramatic, comedic, romantic, or suspenseful.
-
-Language Style:
-
-Use spoken-friendly {TARGET_LANG} dialogue.
-
-Follow official grammar and spelling standards while allowing creative liberties for performance flow.
-
-Adapt cultural references to equivalents relevant for the audience.
-
-Localization Goal: Make the script feel as if it was originally written in {TARGET_LANG} for local audiences.
-
-Instructions:
-
-Maintain character voice and personality.
-
-Adapt humor, idioms, or references for local understanding.
-
-Avoid literal translation that disrupts performance flow."\n\nText:\n{TEXT}`,
-    'script-adaptation': `"Translate and localize the following text into {TARGET_LANG}, ensuring it fits local culture, humor, and audience preferences.
-
-Act as a professional bilingual script adapter with expertise in {TARGET_LANG} entertainment media. Produce output that is engaging, natural, and culturally adapted.
-
-Context Details:
-
-Text Type: Script for adaptation (Film, TV, Web series, Theatre)
-
-Style: Entertainment
-
-Substyle: Script Adaptation
-
-Purpose: Retain story flow while making it relatable to {TARGET_LANG} audiences.
-
-Tone: Matches the original scene’s emotional tone and pacing.
-
-Language Style:
-
-Natural, audience-friendly {TARGET_LANG} phrasing.
-
-Follow official grammar and spelling standards while allowing creative flow.
-
-Replace untranslatable references with culturally relevant equivalents.
-
-Localization Goal: Ensure the adapted script feels authentic to {TARGET_LANG} entertainment culture.
-
-Instructions:
-
-Maintain plot, tone, and character integrity.
-
-Replace idioms or cultural jokes with {TARGET_LANG} equivalents.
-
-Keep dialogue flow smooth for performance delivery."\n\nText:\n{TEXT}`,
-    'character-dialogue': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is true to the character’s personality and the scene’s mood.
-
-Act as a professional bilingual entertainment dialogue translator with expertise in {TARGET_LANG} spoken character writing. Produce output that is natural, in-character, and culturally engaging.
-
-Context Details:
-
-Text Type: Character Dialogue
-
-Style: Entertainment
-
-Substyle: Character Dialogue
-
-Purpose: Keep each character’s voice authentic and relatable for {TARGET_LANG} audiences.
-
-Tone: Matches the original personality (serious, playful, sarcastic, etc.).
-
-Language Style:
-
-Spoken-friendly {TARGET_LANG}, adjusted for personality and age group.
-
-Follow official grammar and spelling standards while maintaining natural, believable speech.
-
-Adapt cultural cues for {TARGET_LANG} context.
-
-Localization Goal: Ensure dialogue sounds like it was originally written for {TARGET_LANG} characters.
-
-Instructions:
-
-Keep the character’s voice and style intact.
-
-Adapt slang, humor, or tone to {TARGET_LANG} cultural context.
-
-Avoid unnatural literal translations."\n\nText:\n{TEXT}`,
+    general: `"Translate and localize the following text into {TARGET_LANG} for general entertainment (engaging, relatable, audience friendly). Act as a {TARGET_LANG} entertainment translator with pop-culture expertise. Deliver fun, dynamic copy that feels native.
+Guidelines
+Use conversational flow and lively vocabulary.
+Adapt idioms, jokes, and cultural references to {TARGET_LANG}.
+Keep the tone energetic and inviting.
+Follow official grammar and spelling; allow natural creativity.
+Avoid literal or stiff phrasing that reduces entertainment value."\n\nText:\n{TEXT}`,
+    subtitling: `"Translate and localize the following text into {TARGET_LANG} as entertainment subtitles (clear, concise, engaging). Act as a {TARGET_LANG} AV subtitle translator. Produce accurate, natural lines timed for easy reading.
+Guidelines
+Keep lines short to meet reading-speed norms.
+Match the scene’s tone; maintain natural spoken flow.
+Adapt idioms, jokes, and slang to {TARGET_LANG}.
+Use official grammar and spelling.
+Avoid literal or stiff phrasing that hurts readability."\n\nText:\n{TEXT}`,
+    screenwriting: `"Translate and localize the following text into {TARGET_LANG}, making it production-ready for film/TV. Act as a {TARGET_LANG} screenwriter-translator. Deliver natural, dramatic dialogue that works for local actors and audiences.
+Guidelines
+Keep spoken-friendly lines and preserve screenplay formatting (character names, parentheticals, action).
+Match the scene’s tone (drama, comedy, romance, suspense).
+Preserve character voice and intent.
+Adapt humor, idioms, and cultural references to {TARGET_LANG} equivalents.
+Keep pacing performable; avoid stiff or literal phrasing that hurts flow."\n\nText:\n{TEXT}`,
+    'script-adaptation': `"Translate and localize the following text into {TARGET_LANG}, for a culturally authentic script adaptation. Act as a {TARGET_LANG} script adapter. Deliver engaging, natural lines for film/TV/web/theatre.
+Guidelines
+Keep plot, tone, pacing, and character voice.
+Preserve script formatting (character names, parentheticals, action).
+Use audience-friendly phrasing; adapt humor, idioms, and references to {TARGET_LANG} equivalents.
+Replace untranslatable items with culturally relevant ones.
+Ensure smooth, performable dialogue; avoid stiff or overly literal phrasing."\n\nText:\n{TEXT}`,
+    'character-dialogue': `"Translate and localize the following text into {TARGET_LANG}, staying true to each character’s voice and the scene’s mood. Act as a {TARGET_LANG} character-dialogue translator. Deliver natural, performable lines.
+Guidelines
+Preserve character voice, intent, relationships, and emotional beats.
+Use spoken {TARGET_LANG} suited to age/role; keep delivery concise and believable.
+Localize slang, humor, idioms, and cultural cues; prefer native equivalents over literal.
+Avoid stiff or word-for-word phrasing; make it read like original {TARGET_LANG} dialogue."\n\nText:\n{TEXT}`,
   },
 
   educational: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, preserving its instructional clarity and adapting it for {TARGET_LANG} learners.
-
-Act as a professional bilingual educational translator with expertise in {TARGET_LANG} learning materials. Produce output that is clear, supportive, and easy to follow.
-
-Context Details:
-
-Text Type: General Educational Content
-
-Style: Education
-
-Substyle: General
-
-Purpose: Provide accessible and accurate learning content for a wide audience.
-
-Tone: Supportive, clear, and motivating.
-
-Language Style:
-
-Use plain {TARGET_LANG} for accessibility.
-
-Follow logical, step-by-step explanations.
-
+    general: `"Translate and localize the following text into {TARGET_LANG}, keeping it instructionally clear for {TARGET_LANG} learners. Act as a {TARGET_LANG} educational translator. Deliver clear, supportive, easy-to-follow content.
+Guidelines
+Use plain {TARGET_LANG} and short sentences.
+Present steps logically; use numbering/bullets when helpful.
 Follow official grammar and spelling standards.
-
-Localization Goal: Make learning content intuitive and relatable for {TARGET_LANG} readers.
-
-Instructions:
-
-Maintain accuracy of facts and processes.
-
-Avoid overly technical or academic jargon unless necessary.
-
-Keep sentences short and clear for easy comprehension."\n\nText:\n{TEXT}`,
-    'e-learning': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, engaging, and suitable for digital learning platforms.
-
-Act as a professional bilingual educational translator with expertise in {TARGET_LANG} online learning content. Produce output that is easy to understand, motivating, and learner-friendly.
-
-Context Details:
-
-Text Type: E-learning Material (videos, interactive lessons, modules)
-
-Style: Education
-
-Substyle: E-learning
-
-Purpose: Deliver knowledge effectively in a digital format for {TARGET_LANG} learners.
-
-Tone: Encouraging, clear, and interactive.
-
-Language Style:
-
-Use plain {TARGET_LANG} for accessibility.
-
-Follow logical, easy-to-digest sentence structure.
-
+Preserve factual/process accuracy; avoid unnecessary jargon (briefly explain if needed).
+Maintain a supportive, motivating tone."\n\nText:\n{TEXT}`,
+    'e-learning': `"Translate and localize the following text into {TARGET_LANG} for e-learning (clear, engaging, platform-ready). Act as a {TARGET_LANG} e-learning translator. Produce motivating, learner-friendly copy.
+Guidelines
+Use plain {TARGET_LANG} and short, digestible sentences.
+Structure for screens: headings, bullets, and steps.
 Follow official grammar and spelling standards.
-
-Localization Goal: Ensure the e-learning content feels natural, motivating, and accessible for {TARGET_LANG} learners.
-
-Instructions:
-
-Maintain clarity while avoiding overly technical or academic jargon.
-
-Adapt examples or cultural references for {TARGET_LANG} learners.
-
-Keep a tone that promotes active learning and engagement."\n\nText:\n{TEXT}`,
-    'step-by-step-guides': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, sequential, and easy to follow.
-
-Act as a professional bilingual instructional translator with expertise in {TARGET_LANG} user and learner guides. Produce output that is accurate, concise, and user-friendly.
-
-Context Details:
-
-Text Type: Instructional Step-by-step Guide
-
-Style: Education
-
-Substyle: Step-by-step Guides
-
-Purpose: Provide clear, actionable instructions for {TARGET_LANG} users or learners.
-
-Tone: Clear, supportive, sequential, and direct.
-
-Language Style:
-
-Sequential numbering or bullet format where relevant.
-
-Use plain, simple {TARGET_LANG} for easy comprehension.
-
+Keep an encouraging, interactive tone.
+Minimize jargon; briefly explain terms when needed.
+Localize examples and references for {TARGET_LANG} learners.
+Preserve accuracy and intent."\n\nText:\n{TEXT}`,
+    'step-by-step-guides': `"Translate and localize the following text into {TARGET_LANG} as a step-by-step guide (clear, sequential, easy to follow). Act as a {TARGET_LANG} instructional translator. Deliver accurate, concise, user-friendly instructions.
+Guidelines
+Use numbered steps or bullets where helpful.
+Use plain {TARGET_LANG} and short sentences.
 Follow official grammar and spelling standards.
-
-Localization Goal: Ensure the guide feels natural and logical to {TARGET_LANG} readers while maintaining accuracy.
-
-Instructions:
-
-Preserve the logical order of steps.
-
-Avoid unnecessary complexity in phrasing.
-
-Adapt terms to standard {TARGET_LANG} where applicable."\n\nText:\n{TEXT}`,
-    'academic-tutorials': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, accurate, and aligned with {TARGET_LANG} academic conventions.
-
-Act as a professional bilingual academic translator with expertise in {TARGET_LANG} instructional and academic materials. Produce output that is structured, precise, and easy to follow.
-
-Context Details:
-
-Text Type: Academic Tutorial (lesson walkthrough, subject-specific instruction)
-
-Style: Education
-
-Substyle: Academic Tutorials
-
-Purpose: Teach academic concepts in a way that {TARGET_LANG} learners can understand.
-
-Tone: Formal yet approachable, educational, explanatory, and clear.
-
-Language Style:
-
-Use correct academic terminology in {TARGET_LANG}.
-
-Maintain structured, logical explanations.
-
+Keep the original step order.
+Prefer direct, actionable phrasing; avoid unnecessary complexity.
+Use standard {TARGET_LANG} terminology; adapt terms naturally."\n\nText:\n{TEXT}`,
+    'academic-tutorials': `"Translate and localize the following text into {TARGET_LANG}, ensuring clarity, accuracy, and alignment with {TARGET_LANG} academic conventions. Act as a {TARGET_LANG} academic translator. Produce structured, precise, easy-to-follow tutorial text.
+Guidelines
+Use correct discipline terminology.
+Keep a formal yet approachable, educational tone.
+Maintain clear logical structure and flow.
 Follow official grammar and spelling standards.
-
-Localization Goal: Ensure the tutorial reads naturally for {TARGET_LANG} students while preserving academic accuracy.
-
-Instructions:
-
-Keep concepts clear and logically structured.
-
-Avoid literal translations that disrupt academic flow.
-
-Adapt examples or cultural references where needed."\n\nText:\n{TEXT}`,
-    'test-preparation': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, accurate, and motivating for learners.
-
-Act as a professional bilingual educational translator with expertise in {TARGET_LANG} exam preparation materials. Produce output that is student-focused, encouraging, and precise.
-
-Context Details:
-
-Text Type: Test Preparation Content (practice questions, study tips, exam strategies)
-
-Style: Education
-
-Substyle: Test Preparation
-
-Purpose: Help learners prepare effectively for tests or exams.
-
-Tone: Supportive, structured, focused clear, and motivational.
-
-Language Style:
-
-Use straightforward, easy-to-understand {TARGET_LANG}.
-
-Follow official grammar and spelling standards.
-
-Maintain a balance between clarity and engagement.
-
-Localization Goal: Ensure the preparation material feels relevant and encouraging for {TARGET_LANG} learners.
-
-Instructions:
-
+Adapt examples or references for {TARGET_LANG} learners when helpful.
+Avoid literal carry-over that disrupts academic style."\n\nText:\n{TEXT}`,
+    'test-preparation': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, accurate, and motivating for learners. Act as a {TARGET_LANG} exam-prep translator. Deliver student-focused, encouraging, precise output.
+Context: Education > Test Preparation (practice questions, study tips, exam strategies).
+Guidelines
+Use straightforward {TARGET_LANG}; follow official grammar/spelling.
 Keep instructions and examples clear and direct.
-
-Adapt terminology to {TARGET_LANG} education standards.
-
-Avoid overly complex phrasing that may confuse learners."\n\nText:\n{TEXT}`,
+Maintain a supportive, structured tone.
+Adapt terminology to {TARGET_LANG} education standards; keep content relevant.
+Balance clarity with engagement; avoid overly complex phrasing."\n\nText:\n{TEXT}`,
   },
 };
 
@@ -2993,17 +1388,19 @@ const TEMP_BY_SUB = {
 
 /** Guard to discourage dashes/bullets in model output */
 const STYLE_GUARD = `
-Formatting constraints:
-- Do NOT use em dashes (—) or en dashes (–) as punctuation.
-- Do NOT use " - " as a separator and do NOT use bullet lists.
-- Use commas or periods instead.
+Formatting defaults (override if mode/template requires structure):
+- Avoid em dashes (—) and en dashes (–) as punctuation by default.
+- Avoid " - " as a separator and avoid bullet lists by default.
+- Use commas or periods instead when lists are not required.
 - Keep hyphens only inside words where linguistically required (e.g., co-founder, anak-anak).
-- Return plain paragraphs only.
+- Prefer plain paragraphs unless the prompt/mode explicitly requires lists, headings, tables, code blocks, or multi-speaker dashes.
+- If any rule here conflicts with mode-specific instructions or overrides, the mode-specific instructions take precedence.
 `;
 
 /** Global subtitle/dubbing overrides (applies on top of the per-mode templates) */
 const SUBTITLE_OVERRIDES = `
 GLOBAL SUBTITLE/DUBBING RULES:
+- These subtitle/dubbing rules override paragraph/list/dash constraints in the global style guard.
 - CONTEXT PRESERVATION: Maintain the emotional impact and implied meaning of each line. "Sangue..." with ellipsis suggests suspense/concern, not just literal "Blood."
 - PUNCTUATION PRESERVATION: Keep exactly the same punctuation from source. If source ends with "?", target must end with "?". If source ends with "...", preserve the ellipsis and tone. CRITICAL: "Senão..." must become "Otherwise..." NOT "Otherwise." - preserve ellipsis for emotional context.
 - CONTINUATION vs NEW SENTENCE:
@@ -3328,7 +1725,7 @@ QUALITY CHECK BEFORE RETURN:
 - Punctuation preservation: Keep the same punctuation type from source (? stays ?, . stays ., ! stays !, ... stays ...).
 - Terminology consistency: keep domain terms consistent within the output.
 - Locale formats: use {TARGET_LANG} date/time/number/currency formatting; convert units only if appropriate.
-- Paragraph integrity: no lists or dashes; return plain paragraphs only.
+- Structure: Preserve lists, headings, tables, and code blocks when the prompt/mode requires them; otherwise prefer plain paragraphs.
 - Output must be returned ONLY between <result> and </result>.
 `;
 
@@ -3339,21 +1736,17 @@ QUALITY CHECK BEFORE RETURN:
 - Style adaptation: Apply the requested style and substyle while keeping the same language.
 - Punctuation preservation: Keep the same punctuation type from source (? stays ?, . stays ., ! stays !, ... stays ...).
 - Terminology consistency: keep domain terms consistent within the output.
-- Paragraph integrity: no lists or dashes; return plain paragraphs only.
+- Structure: Preserve lists, headings, tables, and code blocks when the prompt/mode requires them; otherwise prefer plain paragraphs.
 - Output must be returned ONLY between <result> and </result>.
 `;
 
   const injBlock = renderInjections(injections);
 
   if (rephrase || !targetLanguage) {
-    // ✅ For rephrase: Use style template but replace translation instructions
-    const rephraseTemplate = tmpl
-      .replace(/Translate.*?into\s+\{TARGET_LANG\}/gi, 'Rephrase the following text')
-      .replace(/\{TARGET_LANG\}/g, 'the same language as the input')
-      .replace(/translation/gi, 'rephrasing')
-      .replace(/translate/gi, 'rephrase');
+    // ✅ Strong rephrase-only template (never translate or code-switch)
+    const REPHRASE_TEMPLATE = `Rephrase the following text in the EXACT SAME LANGUAGE as the input. Do NOT translate or change language. Do NOT code-switch. Preserve meaning, domain terms, and proper nouns; adjust tone/style to the requested style/substyle.\n\nStyle: ${modeKey || 'general'} | Substyle: ${subKey || 'general'}\n\nText:\n{TEXT}`;
 
-    const renderedTmpl = safeRenderTemplate(rephraseTemplate, {
+    const renderedTmpl = safeRenderTemplate(REPHRASE_TEMPLATE, {
       TARGET_LANG: 'the same language as the input',
       TEXT: text,
     });
@@ -4634,7 +3027,7 @@ QUALITY CHECK BEFORE RETURN:
 - Number format: Keep Arabic digits as digits unless target language requires spelling.
 - Terminology consistency across items.
 - Locale formats: use {TARGET_LANG} conventions (dates, numbers, decimal separators).
-- NO lists, NO dashes; plain text.
+- Structure: Preserve lists, headings, tables, and code blocks when the prompt/mode requires them; otherwise prefer plain paragraphs.
 - Output MUST be returned ONLY between <result> and </result> and MUST be a JSON array of strings with the SAME LENGTH as ITEMS.
 - HARD 1:1 CHECK: The output array length MUST equal ITEMS length, and each index must correspond to its source index without moving words across items (no merging/splitting between indices). Example: If ITEMS[i] is "di nascosto", the output[i] MUST be "secretly" (or equivalent), and output[i-1] MUST NOT receive that adverb.
 `.trim();
@@ -5397,32 +3790,10 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
 /** ------------------------- API: Profile ------------------------- */
 app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
   try {
-    // Prefer Prisma, but fall back to Supabase REST if Prisma unavailable
-    let tier = null;
-    const id = req.user?.id || null;
-    const email = req.user?.email || null;
-
-    const hasPgUrl = typeof process.env.DATABASE_URL === 'string' && /^(postgres|postgresql):\/\//.test(process.env.DATABASE_URL || '');
-    if (prisma && hasPgUrl) {
-      const rows = await prisma.$queryRawUnsafe('select tier from public.profiles where id = $1::uuid limit 1', id);
-      tier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier) : null;
-    }
-    if (!tier && process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)) {
-      try {
-        const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-        const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/profiles`);
-        url.searchParams.set('id', `eq.${id}`);
-        url.searchParams.set('select', 'tier');
-        url.searchParams.set('limit', '1');
-        const r = await fetch(url.toString(), { headers: { 'apikey': apiKey, 'Authorization': `Bearer ${apiKey}` } });
-        if (r.ok) {
-          const list = await r.json();
-          const rec = Array.isArray(list) ? list[0] : list;
-          tier = rec?.tier ? String(rec.tier) : null;
-        }
-      } catch {}
-    }
-    res.json({ id, email, tier: tier || 'free' });
+    if (!prisma) return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: 'free' });
+    const rows = await prisma.$queryRawUnsafe('select tier from public.profiles where id = $1::uuid limit 1', req.user.id);
+    const tier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier) : 'free';
+    res.json({ id: req.user.id, email: req.user.email || null, tier });
   } catch (e) { console.error('profile', e?.message || e); res.status(500).json({ error: 'Failed to get profile' }); }
 });
 // Lightweight helper UI for setting tier (GET in browser)
