@@ -3246,9 +3246,12 @@ app.post('/api/translate-batch',
       return res.status(400).json({ items: [], error: 'Missing items or mode.' });
     }
 
-    // For subtitling/dubbing/dialogue, enforce strict 1:1 by micro-batching
+    // For subtitling/dubbing/dialogue, we CAN enforce strict 1:1 by micro-batching,
+    // but keep it opt-in via env to avoid regressions under load.
     const isSubtitleLike = String(mode).toLowerCase() === 'dubbing' || String(subStyle).toLowerCase() === 'subtitling' || String(subStyle).toLowerCase() === 'dialogue';
-    const chunks = isSubtitleLike
+    const strict1to1 = process.env.STRICT_SUBTITLE_1TO1 === 'true';
+    const useMicroBatch = isSubtitleLike && strict1to1;
+    const chunks = useMicroBatch
       ? items.map(x => [x])
       : chunkByTokenBudget(items, {
           maxTokensPerRequest: Number(process.env.BATCH_TOKENS || 7000),
@@ -3261,7 +3264,7 @@ app.post('/api/translate-batch',
     const results = [];
 
     // Run with limited concurrency to keep UI responsive
-    const CONCURRENCY = isSubtitleLike ? Number(process.env.SUBTITLE_CONCURRENCY || 4) : Number(process.env.BATCH_CONCURRENCY || 2);
+    const CONCURRENCY = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 2) : Number(process.env.BATCH_CONCURRENCY || 2);
     const queue = [...chunks];
     async function worker(){
       while(queue.length){
