@@ -13,6 +13,18 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 // Supabase configuration (browser uses ANON KEY; server uses URL + ANON to introspect tokens)
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const HTTP_TIMEOUT_MS = parseInt(process.env.HTTP_TIMEOUT_MS || '5000', 10);
+
+// Small helper to add timeouts to fetch
+async function fetchWithTimeout(resource, options = {}, timeoutMs = HTTP_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(resource, { ...(options || {}), signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
 
 // Tier configurations
 const TIERS = {
@@ -92,7 +104,7 @@ async function verifySupabaseJWT(accessToken) {
   // 2) Fallback: call Supabase Auth user endpoint with SRK/ANON apikey
   try {
     const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    const res = await fetchWithTimeout(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { 'Authorization': `Bearer ${accessToken}`, 'apikey': apiKey }
     });
     if (!res.ok) return null;
@@ -108,7 +120,7 @@ async function fetchSupabaseUser(accessToken) {
   if (!SUPABASE_URL) return null;
   try {
     const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    const res = await fetchWithTimeout(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { 'Authorization': `Bearer ${accessToken}`, 'apikey': apiKey }
     });
     if (!res.ok) return null;
@@ -128,7 +140,7 @@ async function fetchProfileTier(userId) {
     url.searchParams.set('id', `eq.${userId}`);
     url.searchParams.set('select', 'tier');
     url.searchParams.set('limit', '1');
-    const res = await fetch(url.toString(), {
+    const res = await fetchWithTimeout(url.toString(), {
       headers: {
         'apikey': apiKey,
         'Authorization': `Bearer ${apiKey}`

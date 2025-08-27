@@ -153,6 +153,18 @@ const { initTranslationMemory, translationMemory, translationMemoryMiddleware } 
   translationMemoryMiddleware: (req, res, next) => { req.tm = {}; next(); }
 });
 
+// HTTP timeout helper (shared)
+const HTTP_TIMEOUT_MS = parseInt(process.env.HTTP_TIMEOUT_MS || '5000', 10);
+async function fetchWithTimeout(resource, options = {}, timeoutMs = HTTP_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(resource, { ...(options || {}), signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 // Prisma Client (optional at startup; load if available)
 let prisma = null;
 try {
@@ -3234,43 +3246,43 @@ app.post('/api/translate-batch',
       return res.status(400).json({ items: [], error: 'Missing items or mode.' });
     }
 
-    const chunks = chunkByTokenBudget(items, {
-      maxTokensPerRequest: Number(process.env.BATCH_TOKENS || 7000),
-      overheadTokens: 1200,
-      outputFactor: 1.15,
-      maxItemsPerChunk: 250
-    });
+    // For subtitling/dubbing/dialogue, enforce strict 1:1 by micro-batching
+    const isSubtitleLike = String(mode).toLowerCase() === 'dubbing' || String(subStyle).toLowerCase() === 'subtitling' || String(subStyle).toLowerCase() === 'dialogue';
+    const chunks = isSubtitleLike
+      ? items.map(x => [x])
+      : chunkByTokenBudget(items, {
+          maxTokensPerRequest: Number(process.env.BATCH_TOKENS || 7000),
+          overheadTokens: 1200,
+          outputFactor: 1.15,
+          maxItemsPerChunk: 250
+        });
 
     const temperature = pickTemperature(mode, subStyle, rephrase);
     const results = [];
 
-    for (const chunk of chunks) {
-      const prompt = buildBatchPrompt({
-        items: chunk,
-        mode,
-        subStyle,
-        targetLanguage,
-        rephrase,
-        injections
-      });
-
-      const raw = await callOpenAIWithRetry({
-        messages: [
-          { role: 'system', content: 'You are an expert localization and translation assistant.' },
-          { role: 'user', content: prompt }
-        ],
-        temperature
-      });
-
-      let arr = parseJsonArrayStrict(raw, chunk.length);
-
-      // Final sanitation per line with source awareness
-      for (let i = 0; i < arr.length; i++) {
-        arr[i] = sanitizeWithSource(arr[i] || '', chunk[i] || '', targetLanguage);
+    // Run with limited concurrency to keep UI responsive
+    const CONCURRENCY = isSubtitleLike ? Number(process.env.SUBTITLE_CONCURRENCY || 4) : Number(process.env.BATCH_CONCURRENCY || 2);
+    const queue = [...chunks];
+    async function worker(){
+      while(queue.length){
+        const chunk = queue.shift();
+        const prompt = buildBatchPrompt({ items: chunk, mode, subStyle, targetLanguage, rephrase, injections });
+        const raw = await callOpenAIWithRetry({
+          messages: [
+            { role: 'system', content: 'You are an expert localization and translation assistant.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature
+        });
+        let arr = parseJsonArrayStrict(raw, chunk.length);
+        for (let i = 0; i < arr.length; i++) {
+          arr[i] = sanitizeWithSource(arr[i] || '', chunk[i] || '', targetLanguage);
+        }
+        results.push(...arr);
       }
-
-      results.push(...arr);
     }
+    const workers = Array.from({ length: Math.max(1, CONCURRENCY) }, () => worker());
+    await Promise.all(workers);
 
     // Record usage for analytics and quota tracking
     const inputChars = items.join('').length; const outputChars = results.join('').length;
@@ -3765,7 +3777,7 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
       if (!SUPABASE_URL || !SRK) return res.status(500).json({ error: 'Missing Supabase service credentials' });
       const q = new URL(`${SUPABASE_URL}/auth/v1/admin/users`);
       q.searchParams.set('email', email);
-      const r = await fetch(q.toString(), { headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
+      const r = await fetchWithTimeout(q.toString(), { headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
       if (!r.ok) return res.status(404).json({ error: 'User not found' });
       const list = await r.json();
       const u = Array.isArray(list?.users) ? list.users[0] : Array.isArray(list) ? list[0] : list;
@@ -3859,7 +3871,7 @@ app.post('/api/admin/profile/tier', express.json(), async (req, res) => {
       if (!SUPABASE_URL || !SRK) return res.status(500).json({ error: 'Missing Supabase service credentials' });
       const q = new URL(`${SUPABASE_URL}/auth/v1/admin/users`);
       q.searchParams.set('email', email);
-      const r = await fetch(q.toString(), { headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
+      const r = await fetchWithTimeout(q.toString(), { headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
       if (!r.ok) return res.status(404).json({ error: 'User not found' });
       const list = await r.json();
       const u = Array.isArray(list?.users) ? list.users[0] : Array.isArray(list) ? list[0] : list;
