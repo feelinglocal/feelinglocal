@@ -1726,8 +1726,7 @@ function buildPrompt({ text, mode, subStyle, targetLanguage, rephrase, injection
     byMode['general'] ||
     `Translate the text into {TARGET_LANG}.\n\nText:\n{TEXT}`;
 
-  const needsSubtitleRules =
-    modeKey === 'dubbing' || subKey === 'subtitling' || subKey === 'dialogue';
+  const needsSubtitleRules = (modeKey === 'dubbing') || (subKey === 'subtitling') || (subKey === 'dialogue');
 
     // ✅ Create separate QA blocks for translation vs rephrase
   const TRANSLATION_QA_BLOCK = `
@@ -3323,11 +3322,18 @@ app.post('/api/translate-batch',
 
     // Run with limited concurrency to keep UI responsive
     const CONCURRENCY = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 2) : Number(process.env.BATCH_CONCURRENCY || 2);
-    const queue = [...chunks];
+    // Build indexed jobs so we can reconstruct results in original order
+    const jobs = [];
+    {
+      let start = 0;
+      for (const c of chunks) { jobs.push({ start, items: c }); start += c.length; }
+    }
+    const queue = [...jobs];
+    const out = new Array(items.length).fill('');
     async function worker(){
       while(queue.length){
-        const chunk = queue.shift();
-        const prompt = buildBatchPrompt({ items: chunk, mode, subStyle, targetLanguage, rephrase, injections });
+        const job = queue.shift();
+        const prompt = buildBatchPrompt({ items: job.items, mode, subStyle, targetLanguage, rephrase, injections });
         const raw = await callOpenAIWithRetry({
           messages: [
             { role: 'system', content: 'You are an expert localization and translation assistant.' },
@@ -3335,18 +3341,19 @@ app.post('/api/translate-batch',
           ],
           temperature
         });
-        let arr = parseJsonArrayStrict(raw, chunk.length);
+        let arr = parseJsonArrayStrict(raw, job.items.length);
         for (let i = 0; i < arr.length; i++) {
-          arr[i] = sanitizeWithSource(arr[i] || '', chunk[i] || '', targetLanguage);
+          const sanitized = sanitizeWithSource(arr[i] || '', job.items[i] || '', targetLanguage);
+          out[job.start + i] = sanitized;
         }
-        results.push(...arr);
       }
     }
     const workers = Array.from({ length: Math.max(1, CONCURRENCY) }, () => worker());
     await Promise.all(workers);
+    const resultsOut = out;
 
     // Defer usage accounting until response finishes successfully
-    const inputChars = items.join('').length; const outputChars = results.join('').length;
+    const inputChars = items.join('').length; const outputChars = resultsOut.join('').length;
     const totalChars = inputChars + outputChars;
     res.once('finish', async () => {
       try {
@@ -3354,12 +3361,12 @@ app.post('/api/translate-batch',
           await recordUsage(req, 'translate-batch', 0, totalChars);
           try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars, outputChars }); } catch {}
           recordMetrics.translation('batch', mode, targetLanguage, req.user?.tier || 'anonymous', true, totalChars);
-          log.translation('batch', items.join('').length, results.join('').length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+          log.translation('batch', items.join('').length, resultsOut.join('').length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
         }
       } catch (e) { /* non-fatal */ }
     });
 
-    return res.json({ items: results });
+    return res.json({ items: resultsOut });
   } catch (e) {
     console.error('translate-batch error (final):', e);
     return res.status(500).json({ items: [], error: 'Batch translation failed.' });
