@@ -2350,8 +2350,20 @@ window.STYLE_MICROCOPY = {
       if(endsWithEllipsis(a)) return true;
       return false;
     }
+    function normalizeBookText(text){
+      let s = String(text || '');
+      // Remove soft hyphen character
+      s = s.replace(/\u00AD/g, '');
+      // Join hyphenated line breaks: word-\nword -> wordword
+      s = s.replace(/([A-Za-zÀ-ÖØ-öø-ÿ])\-\s*\n\s*([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1$2');
+      // Join single in-paragraph newlines to spaces (keep paragraph breaks as double newlines)
+      s = s.replace(/([^\n])\n(?!\n)/g, '$1 ');
+      // Normalize excessive blank lines
+      s = s.replace(/\n{3,}/g, '\n\n');
+      return s;
+    }
     function segmentText(text){
-      const raw = splitGlobal(text);
+      const raw = splitGlobal(normalizeBookText(text));
       if(!raw.length) return [];
       const healed = [];
       for(const cur of raw){
@@ -2393,48 +2405,78 @@ window.STYLE_MICROCOPY = {
       const space = str.indexOf(' ', Math.max(halfway, 8));
       return space>0 ? space : -1;
     }
-    function alignToSource(targetText, srcCount){
+    function alignToSource(targetText, src){
+      const srcCount = Array.isArray(src) ? src.length : Number(src)||0;
+      const srcLens = Array.isArray(src) ? src.map(s=>charCount(s||'')).filter(n=>n>0).sort((a,b)=>a-b) : [];
+      const medianSrcLen = srcLens.length ? srcLens[Math.floor(srcLens.length/2)] : 60;
+
       let segs = segmentText(targetText).slice();
-      if(segs.length===srcCount){
-        for(let i=1;i<segs.length;i++){
-          const prev = segs[i-1], cur = segs[i];
-          const prevIsMicro = endsWithEllipsis(prev) || wordCount(prev)<=2 || charCount(prev)<=8;
-          if(prevIsMicro){
-            const merged = (prev + ' ' + cur).replace(/\s+/g,' ').trim();
-            const cut = pickSplitPoint(merged);
-            if(cut>0){
-              segs[i-1] = merged.slice(0,cut).trim();
-              segs[i]   = merged.slice(cut).trim();
-            }else{
-              segs[i-1] = merged;
-              segs.splice(i,1);
-              break;
-            }
-          }
-        }
-      }
-      while(segs.length > srcCount){
-        let idx = segs.findIndex(s => isInterjection(s) || charCount(s) < 15 || endsWithEllipsis(s));
-        if(idx <= 0) idx = 1;
-        segs[idx-1] = (segs[idx-1] + ' ' + segs[idx]).replace(/\s+/g,' ').trim();
-        segs.splice(idx,1);
-      }
-      while(segs.length < srcCount){
-        let longest = 0, li = 0;
+
+      // Phase A: if too few target segments, split longest first
+      let guard = 0;
+      while(segs.length < srcCount && guard++ < 200){
+        // choose the longest segment above 0.8 * median source length
+        let li = -1, longest = 0;
         for(let i=0;i<segs.length;i++){
           const len = charCount(segs[i]);
           if(len > longest){ longest = len; li = i; }
         }
+        if(longest < Math.max(20, Math.floor(medianSrcLen*0.8))) break;
         const cut = pickSplitPoint(segs[li]);
         if(cut>0){
           const a = segs[li].slice(0,cut).trim();
           const b = segs[li].slice(cut).trim();
           segs.splice(li,1,a,b);
-        }else{
-          segs.push('');
+        } else {
           break;
         }
       }
+
+      // Phase B: if too many target segments, merge only short ones
+      guard = 0;
+      while(segs.length > srcCount && guard++ < 200){
+        let idx = -1; let shortest = Infinity;
+        for(let i=0;i<segs.length;i++){
+          const len = charCount(segs[i]);
+          if(len < shortest){ shortest = len; idx = i; }
+        }
+        // Merge a very short/micro segment into neighbor, favor previous
+        if(idx <= 0) idx = 1;
+        if(shortest > Math.max(15, Math.floor(medianSrcLen*0.35))) {
+          // if nothing qualifies as short, merge the smallest anyway
+        }
+        segs[idx-1] = (segs[idx-1] + ' ' + segs[idx]).replace(/\s+/g,' ').trim();
+        segs.splice(idx,1);
+      }
+
+      // Phase C: equalize count exactly (no blanks)
+      if(segs.length < srcCount){
+        // best-effort split again using any possible cut
+        guard = 0;
+        while(segs.length < srcCount && guard++ < 200){
+          let li = -1, longest = 0;
+          for(let i=0;i<segs.length;i++){
+            const len = charCount(segs[i]);
+            if(len > longest){ longest = len; li = i; }
+          }
+          const cut = pickSplitPoint(segs[li]);
+          if(cut>0){
+            const a = segs[li].slice(0,cut).trim();
+            const b = segs[li].slice(cut).trim();
+            segs.splice(li,1,a,b);
+          } else {
+            // replicate smallest neighbor to avoid creating empty trailing blanks
+            segs.splice(li+1,0,segs[li].slice(0, Math.min(20, segs[li].length)).trim());
+          }
+        }
+      }
+
+      // Trim any residual overage conservatively
+      while(segs.length > srcCount){
+        segs.splice(segs.length-2,1, (segs[segs.length-2] + ' ' + segs[segs.length-1]).replace(/\s+/g,' ').trim());
+        segs.pop();
+      }
+
       return segs;
     }
     function buildRowHTML(text, idx, isTarget = false){
@@ -2527,7 +2569,7 @@ window.STYLE_MICROCOPY = {
         tgtSegs = d.lastAlignedTgt.slice();
       }else{
         const tgtVal = d.output || '';
-        tgtSegs = alignToSource(tgtVal, nSrc);
+        tgtSegs = alignToSource(tgtVal, srcSegs);
       }
 
       const n=Math.max(srcSegs.length,tgtSegs.length);
