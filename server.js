@@ -2969,6 +2969,59 @@ app.post('/api/translate',
     const { text = '', mode = '', targetLanguage = '', subStyle = '', rephrase = false, injections = '' } = req.body || {};
     if (!text || !mode) return res.status(400).json({ result: 'Missing text or mode.' });
 
+    // Auto-route large inputs via batch to improve reliability
+    const MAX_SINGLE_CHARS = parseInt(process.env.MAX_SINGLE_CHARS || '5000', 10);
+    if (text.length > MAX_SINGLE_CHARS) {
+      // Basic segmentation: split by blank lines, fallback to fixed-size chunks
+      let items = String(text).split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+      if (items.length <= 1) {
+        const CHUNK = parseInt(process.env.BATCH_FALLBACK_CHARS || '1200', 10);
+        const tmp = [];
+        for (let i = 0; i < text.length; i += CHUNK) tmp.push(text.slice(i, i + CHUNK));
+        items = tmp;
+      }
+
+      const chunks = chunkByTokenBudget(items, {
+        maxTokensPerRequest: Number(process.env.BATCH_TOKENS || 7000),
+        overheadTokens: 1200,
+        outputFactor: 1.15,
+        maxItemsPerChunk: 250
+      });
+
+      const temperature = pickTemperature(mode, subStyle, rephrase);
+      const results = [];
+      for (const chunk of chunks) {
+        const prompt = buildBatchPrompt({ items: chunk, mode, subStyle, targetLanguage, rephrase, injections });
+        const raw = await callOpenAIWithRetry({
+          messages: [
+            { role: 'system', content: 'You are an expert localization and translation assistant.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature
+        });
+        let arr = parseJsonArrayStrict(raw, chunk.length);
+        for (let i = 0; i < arr.length; i++) {
+          arr[i] = sanitizeWithSource(arr[i] || '', chunk[i] || '', targetLanguage);
+        }
+        results.push(...arr);
+      }
+
+      const clean = results.join('\n');
+      const usedCharsTotal = text.length + clean.length;
+      res.once('finish', async () => {
+        try {
+          if (res.statusCode < 400) {
+            await recordUsage(req, 'translate-batch(auto)', 0, usedCharsTotal);
+            try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: text.length, outputChars: clean.length }); } catch {}
+            recordMetrics.translation('batch-auto', mode, targetLanguage, req.user?.tier || 'anonymous', true, usedCharsTotal);
+            log.translation('batch-auto', text.length, clean.length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+          }
+        } catch {}
+      });
+
+      return res.json({ result: clean });
+    }
+
     const prompt = buildPrompt({ text, mode, subStyle, targetLanguage, rephrase, injections });
 
     const completion = await openai.chat.completions.create({
@@ -2984,14 +3037,19 @@ app.post('/api/translate',
     const body = extractResultTagged(raw) || '(no output)';
     const clean = sanitizeWithSource(body, text, targetLanguage);
     
-    // Record usage for analytics and quota tracking
-    await recordUsage(req, 'translate', 0, text.length + clean.length);
-    try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: text.length, outputChars: clean.length }); } catch {}
-    
-    // Record observability metrics
-    recordMetrics.translation('single', mode, targetLanguage, req.user?.tier || 'anonymous', true, text.length + clean.length);
-    log.translation('single', text.length, clean.length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
-    
+    // Defer usage accounting until response finishes successfully
+    const usedCharsTotal = text.length + clean.length;
+    res.once('finish', async () => {
+      try {
+        if (res.statusCode < 400) {
+          await recordUsage(req, 'translate', 0, usedCharsTotal);
+          try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: text.length, outputChars: clean.length }); } catch {}
+          recordMetrics.translation('single', mode, targetLanguage, req.user?.tier || 'anonymous', true, usedCharsTotal);
+          log.translation('single', text.length, clean.length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+        }
+      } catch (e) { /* non-fatal */ }
+    });
+
     return res.json({ result: clean });
   } catch (e) {
     console.error(e);
@@ -3287,16 +3345,20 @@ app.post('/api/translate-batch',
     const workers = Array.from({ length: Math.max(1, CONCURRENCY) }, () => worker());
     await Promise.all(workers);
 
-    // Record usage for analytics and quota tracking
+    // Defer usage accounting until response finishes successfully
     const inputChars = items.join('').length; const outputChars = results.join('').length;
     const totalChars = inputChars + outputChars;
-    await recordUsage(req, 'translate-batch', 0, totalChars);
-    try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars, outputChars }); } catch {}
-    
-    // Record observability metrics
-    recordMetrics.translation('batch', mode, targetLanguage, req.user?.tier || 'anonymous', true, totalChars);
-    log.translation('batch', items.join('').length, results.join('').length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
-    
+    res.once('finish', async () => {
+      try {
+        if (res.statusCode < 400) {
+          await recordUsage(req, 'translate-batch', 0, totalChars);
+          try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars, outputChars }); } catch {}
+          recordMetrics.translation('batch', mode, targetLanguage, req.user?.tier || 'anonymous', true, totalChars);
+          log.translation('batch', items.join('').length, results.join('').length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+        }
+      } catch (e) { /* non-fatal */ }
+    });
+
     return res.json({ items: results });
   } catch (e) {
     console.error('translate-batch error (final):', e);
