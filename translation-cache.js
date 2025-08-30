@@ -45,10 +45,22 @@ class TranslationCacheManager {
    */
   async init() {
     try {
-      // Try to get Redis client from queue system
-      const { connection } = require('./queue');
-      if (connection) {
-        this.redisClient = connection;
+      // Prefer session/client Redis if REDIS_URL is set
+      const { createClient } = require('redis');
+      const url = process.env.REDIS_URL;
+      if (url) {
+        const isTLS = url.startsWith('rediss://') || process.env.REDIS_TLS === 'true';
+        this.redisClient = createClient({ url, socket: isTLS ? { tls: true, servername: new URL(url).hostname } : {} });
+        this.redisClient.on('error', (e) => log.warn('Translation cache redis error', { error: e?.message||String(e) }));
+        try { await this.redisClient.connect(); } catch {}
+      } else {
+        // Fallback: try queue connection if present
+        try {
+          const { connection } = require('./queue');
+          if (connection) this.redisClient = connection;
+        } catch {}
+      }
+      if (this.redisClient) {
         await this.redisClient.ping();
         this.isRedisAvailable = true;
         log.info('Translation cache initialized with Redis');
@@ -617,3 +629,5 @@ module.exports = {
   cacheAwareTranslation,
   initTranslationCache
 };
+
+

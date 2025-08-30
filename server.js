@@ -1,9 +1,11 @@
 // server.js
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const IORedis = require('ioredis');
 const SrtParser = require('srt-parser-2').default;
 const mammoth = require('mammoth');
 const PDFDocument = require('pdfkit');
@@ -18,6 +20,9 @@ const { requireAuth, requireApiKey, checkTierPermission, passport, TIERS } = req
 const { quotaMiddleware, rateLimiters, validateInputSize, recordUsage } = require('./rate-limit');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
+const { RedisStore } = require('connect-redis');
+const { createClient: createRedisClient } = require('redis');
+const csurf = require('csurf');
 
 // Import observability modules
 const log = require('./logger');
@@ -429,17 +434,75 @@ log.info('Application starting', {
   backupRetention: backupService.retentionDays
 });
 
-// Session configuration
+// Security: Helmet baseline headers
+app.use(helmet({
+  // Keep flexible due to SPA/CDN usage; tighten incrementally
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
+
+// Optional CSP (report-only by default)
+if (process.env.ENABLE_CSP !== 'false') {
+  const reportOnly = process.env.CSP_REPORT_ONLY !== 'false';
+  const cspDirectives = {
+    defaultSrc: ["'self'"],
+    baseUri: ["'self'"],
+    objectSrc: ["'none'"],
+    frameAncestors: ["'none'"],
+    imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+    scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    fontSrc: ["'self'", 'data:'],
+    connectSrc: ["'self'", 'https:', 'wss:', 'ws:']
+  };
+  app.use(helmet.contentSecurityPolicy({ directives: cspDirectives, reportOnly }));
+}
+
+// CSP violation report endpoint (optional)
+app.post('/csp/report', express.json({ type: 'application/csp-report' }), (req, res) => {
+  try { log.warn('CSP violation reported', { report: req.body }); } catch {}
+  res.status(204).end();
+});
+
+// Session configuration (Redis preferred across envs if available)
+let sessionStore;
+let redisClient = null;
+
+// Prefer Node Redis client for session store
+if (process.env.REDIS_URL || process.env.FORCE_REDIS_SESSIONS === 'true') {
+  const url = process.env.REDIS_URL || 'redis://localhost:6379';
+  const isTLS = url.startsWith('rediss://') || process.env.REDIS_TLS === 'true';
+  const hostForSni = (() => { try { return new URL(url).hostname; } catch { return undefined; } })();
+  try {
+    redisClient = createRedisClient({
+      url,
+      socket: isTLS ? { tls: true, servername: hostForSni } : undefined
+    });
+    redisClient.on('error', (err) => console.warn('Redis session client error', err?.message || err));
+    // Fire and forget connect
+    redisClient.connect().catch(() => {});
+  } catch {}
+}
+
+if (redisClient) {
+  sessionStore = new RedisStore({ client: redisClient, prefix: 'sess:' });
+} else {
+  sessionStore = new SQLiteStore({ db: 'sessions.db', table: 'sessions' });
+}
+
 app.use(session({
-  store: new SQLiteStore({
-    db: 'sessions.db',
-    table: 'sessions'
-  }),
+  store: sessionStore,
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  name: process.env.SESSION_COOKIE_NAME || 'sid',
   cookie: {
     secure: NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'lax',
+    domain: process.env.SESSION_COOKIE_DOMAIN || undefined,
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   }
 }));
@@ -448,9 +511,36 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use(cors());
+// CORS configuration (env-driven; defaults permissive for backwards-compat)
+const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+const corsOptions = {
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.length === 0 || allowedOrigins.includes('*')) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
+  allowedHeaders: ['Origin','X-Requested-With','Content-Type','Accept','Authorization','X-API-Key','X-Request-Id'],
+  exposedHeaders: ['X-Request-Id','X-RateLimit-Limit','X-RateLimit-Remaining','X-RateLimit-Used']
+};
+app.use(cors(corsOptions));
+// Global preflight handler: CORS headers are added by cors() above
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// Optional CSRF protection (disabled by default to avoid breaking API clients)
+if (process.env.ENABLE_CSRF === 'true') {
+  app.use(csurf());
+  app.get('/csrf-token', (req, res) => res.json({ csrfToken: req.csrfToken() }));
+}
 
 // Apply observability middleware
 app.use(requestIdMiddleware);
@@ -2033,8 +2123,14 @@ app.post('/auth/login', rateLimiters.auth, async (req, res) => {
       }
     }
 
+    // Mitigate session fixation: regenerate session on login
+    await new Promise((resolve, reject) => req.session.regenerate(err2 => err2 ? reject(err2) : resolve()))
+      .catch(() => {});
+
     const token = generateToken(user);
     req.session.token = token;
+
+    try { await AuditService.logEvent(user.id, AUDIT_ACTIONS.USER_LOGIN, RESOURCE_TYPES.USER, user.id, {}, req); } catch {}
 
     res.json({
       message: 'Login successful',
@@ -2055,8 +2151,14 @@ app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'em
 app.get('/auth/google/callback', 
   passport.authenticate('google', { session: false }),
   (req, res) => {
+    // Regenerate session on OAuth login as well
+    const setToken = (tok) => { req.session.token = tok; };
     const token = generateToken(req.user);
-    req.session.token = token;
+    if (req.session) {
+      req.session.regenerate(() => setToken(token));
+    } else {
+      setToken(token);
+    }
     
     // Redirect to frontend with token
     res.redirect(`/?token=${token}`);
@@ -2067,7 +2169,7 @@ app.get('/auth/google/callback',
 app.get('/auth/me', requireAuth, async (req, res) => {
   try {
     const user = await db.get('SELECT id, email, name, tier, created_at FROM users WHERE id = ?', [req.user.id]);
-    res.json({ user });
+    res.json({ user, aal: req.user?.aal });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get user info' });
   }
@@ -2075,12 +2177,22 @@ app.get('/auth/me', requireAuth, async (req, res) => {
 
 // Logout
 app.post('/auth/logout', (req, res) => {
-  req.session.destroy();
+  // Destroy session and clear cookie
+  const sid = req.sessionID;
+  try { if (req.user?.id) { AuditService.logEvent(req.user.id, AUDIT_ACTIONS.USER_LOGOUT, RESOURCE_TYPES.USER, req.user.id, {}, req); } } catch {}
+  req.session.destroy(() => {});
+  res.clearCookie(process.env.SESSION_COOKIE_NAME || 'sid');
   res.json({ message: 'Logged out successfully' });
 });
 
 // API Key management
 app.post('/auth/api-keys', requireAuth, async (req, res) => {
+  // Optional MFA enforcement for API key operations
+  if (process.env.REQUIRE_MFA_FOR_API_KEYS === 'true') {
+    if (!req.headers['x-mfa-verified'] && req.user?.aal !== 'aal2' && req.user?.aal !== 'aal3') {
+      return res.status(403).json({ error: 'MFA required to manage API keys' });
+    }
+  }
   try {
     const { name } = req.body;
     if (!name) {
@@ -2165,6 +2277,19 @@ app.get('/api/health/ready', async (req, res) => {
 
 // Prometheus metrics endpoint
 app.get('/metrics', metricsHandler);
+
+// Redis session connectivity check
+app.get('/api/health/redis', async (_req, res) => {
+  try {
+    if (!redisClient) {
+      return res.json({ status: 'disabled' });
+    }
+    const pong = await (redisClient.ping ? redisClient.ping() : Promise.resolve('unknown'));
+    res.json({ status: 'ok', ping: pong });
+  } catch (e) {
+    res.status(500).json({ status: 'error', error: e?.message || String(e) });
+  }
+});
 
 /** ------------------------- M5: Queue Management Admin Endpoints ------------------------- */
 // Queue status and metrics
@@ -2643,7 +2768,17 @@ app.post('/api/upload',
         text: (c.text || '').toString().replace(/\r/g, '').trim()
       }));
 
-      const text = cues.map(c => c.text).join('\n').trim();
+      let text = cues.map(c => c.text).join('\n').trim();
+      if (!text) {
+        // Fallback: strip indices and timestamps to surface raw subtitle text
+        text = raw
+          .replace(/\r/g, '')
+          .replace(/^WEBVTT.*\n/i, '')
+          .replace(/^\d+\s*$/gm, '')
+          .replace(/\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3}.*$/gm, '')
+          .replace(/^\s*$/gm, '')
+          .trim();
+      }
 
       // respond without keeping file
       res.json({ ...basePayload, text, cues });

@@ -1,5 +1,11 @@
 // rate-limit.js - Rate limiting and quota management
-const rateLimit = require('express-rate-limit');
+const rateLimitLib = require('express-rate-limit');
+const rateLimit = rateLimitLib;
+const { ipKeyGenerator } = rateLimitLib;
+let RedisRateLimitStore;
+try { ({ RedisRateLimitStore } = require('./redis-rate-limit-store')); } catch {}
+const RELAX_LIMITS = (process.env.RELAX_RATE_LIMITS === 'true') || (process.env.NODE_ENV === 'development');
+const SKIP_PREFIXES = ['/api/usage', '/api/health', '/metrics'];
 const db = require('./database');
 const { TIERS } = require('./auth');
 
@@ -79,16 +85,43 @@ const quotaMiddleware = async (req, res, next) => {
 };
 
 // Create rate limiters for different tiers
-const createRateLimiter = (windowMs, maxRequests, message) => {
-  return rateLimit({
+const createRateLimiter = (windowMs, maxRequests, message, prefix = 'rl:general') => {
+  const keyFn = (req) => req.user?.id || ipKeyGenerator(req);
+  if (RELAX_LIMITS) {
+    return rateLimit({ windowMs, max: 1000000, standardHeaders: false, legacyHeaders: false, keyGenerator: keyFn, skip: (req)=> SKIP_PREFIXES.some(p => (req.path||'').startsWith(p)) });
+  }
+  const useRedis = !!(process.env.REDIS_URL && RedisRateLimitStore);
+  const common = {
     windowMs,
     max: maxRequests,
     message: { error: message },
     standardHeaders: true,
-    legacyHeaders: false
-    // Use default keyGenerator for proper IPv6 support
-  });
+    legacyHeaders: false,
+    keyGenerator: keyFn,
+    skip: (req) => SKIP_PREFIXES.some(p => (req.path||'').startsWith(p))
+  };
+  if (useRedis) {
+    return rateLimit({
+      ...common,
+      store: new RedisRateLimitStore({ windowMs, prefix })
+    });
+  }
+  return rateLimit(common);
 };
+
+// Tier-aware wrappers (Team gets higher RPM)
+function withTierOverride(limiterFactory, teamMax) {
+  return rateLimit({
+    windowMs: limiterFactory.windowMs,
+    max: limiterFactory.max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.user?.id || ipKeyGenerator(req),
+    skip: (req) => SKIP_PREFIXES.some(p => (req.path||'').startsWith(p)),
+    store: (process.env.REDIS_URL && RedisRateLimitStore) ? new RedisRateLimitStore({ windowMs: limiterFactory.windowMs, prefix: limiterFactory.prefix }) : undefined,
+    // Override per-request using draft API: handler's allowed count is fixed; emulate by skipping for team when under teamMax using a soft counter
+  });
+}
 
 // Different rate limits for different endpoints
 // Auth limiter configurable via env for hot-fixes in production
@@ -98,31 +131,53 @@ const rateLimiters = {
   // General API rate limiting (per minute)
   general: createRateLimiter(
     1 * 60 * 1000, // 1 minute
-    60, // 60 requests per minute
-    'Too many requests, please try again later'
+    60, // default
+    'Too many requests, please try again later',
+    'rl:general'
   ),
   
   // Translation endpoints (stricter)
   translation: createRateLimiter(
     1 * 60 * 1000, // 1 minute
-    30, // 30 requests per minute
-    'Translation rate limit exceeded'
+    RELAX_LIMITS ? 100000 : 60,
+    'Translation rate limit exceeded',
+    'rl:translation'
   ),
   
   // Auth endpoints (very strict)
   auth: createRateLimiter(
     AUTH_WINDOW_MS,
     AUTH_MAX,
-    'Too many authentication attempts'
+    'Too many authentication attempts',
+    'rl:auth'
   ),
   
   // File upload (moderate)
   upload: createRateLimiter(
     1 * 60 * 1000, // 1 minute
-    10, // 10 uploads per minute
-    'Upload rate limit exceeded'
+    RELAX_LIMITS ? 100000 : 60,
+    'Upload rate limit exceeded',
+    'rl:upload'
   )
 };
+
+// Per-tier bump for Team: wrap the middleware to use a separate limiter at 100 rpm when tier === team
+function teamBoost(limiter, teamLimiter) {
+  return (req, res, next) => {
+    const isTeam = (req.user?.tier || '').toLowerCase() === 'team';
+    if (isTeam) return teamLimiter(req, res, next);
+    return limiter(req, res, next);
+  };
+}
+
+const teamGeneral = createRateLimiter(60 * 1000, 100, 'Too many requests (team)', 'rl:general:team');
+const teamTranslation = createRateLimiter(60 * 1000, 100, 'Translation rate limit exceeded (team)', 'rl:translation:team');
+const teamUpload = createRateLimiter(60 * 1000, 100, 'Upload rate limit exceeded (team)', 'rl:upload:team');
+
+// Replace default exported limiters with tier-aware wrappers
+rateLimiters.general = teamBoost(rateLimiters.general, teamGeneral);
+rateLimiters.translation = teamBoost(rateLimiters.translation, teamTranslation);
+rateLimiters.upload = teamBoost(rateLimiters.upload, teamUpload);
 
 // Input size validation middleware
 const validateInputSize = (req, res, next) => {

@@ -31,15 +31,17 @@ const TIERS = {
   free: {
     name: 'Free',
     maxRequestsPerDay: 50,
-    maxInputSize: 1000, // characters
+    maxInputSize: 1000, // characters per request
+    maxMonthlyChars: 3500, // characters per month
     batchAllowed: false,
     zipDownloadAllowed: false,
     phrasebookAllowed: true
   },
   pro: {
     name: 'Pro',
-    maxRequestsPerDay: 1000,
+    maxRequestsPerDay: 500,
     maxInputSize: 10000,
+    maxMonthlyChars: 100000,
     batchAllowed: true,
     zipDownloadAllowed: true,
     phrasebookAllowed: true
@@ -48,6 +50,7 @@ const TIERS = {
     name: 'Team',
     maxRequestsPerDay: 5000,
     maxInputSize: 50000,
+    maxMonthlyChars: 500000,
     batchAllowed: true,
     zipDownloadAllowed: true,
     phrasebookAllowed: true,
@@ -259,10 +262,15 @@ const requireAuth = async (req, res, next) => {
     const dbTier = await fetchProfileTier(supaUser.id);
     const effectiveTier = dbTier && ['free','pro','team'].includes(dbTier.toLowerCase()) ? dbTier.toLowerCase() : 'free';
 
+    // Expose MFA signals
+    const aal = supaUser?.aal || (supaUser?.amr?.includes('mfa') ? 'aal2' : (supaUser?.amr?.includes('pwd') ? 'aal1' : undefined));
+    const mfaEnabled = !!(supaUser?.user_metadata?.two_factor_enabled);
     req.user = {
       id: supaUser.id,
       email: supaUser.email,
-      tier: effectiveTier
+      tier: effectiveTier,
+      aal,
+      mfaEnabled
     };
     return next();
   }

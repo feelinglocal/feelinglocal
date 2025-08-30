@@ -275,7 +275,7 @@
     /* Chips and toggles (STATE-GUIDE) */
     .chips-row{ display:flex; gap:8px }
     .chip-btn{ border:1px solid var(--border); background:#fff; color:var(--text); border-radius:999px; padding:8px 16px; font-size:14px; font-family:"Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif; cursor:pointer; transition:all .18s var(--ease); font-weight:500 }
-    .chip-btn:hover{ background:#f6f6f2; border-color:var(--accent); color:var(--accent) }
+    .chip-btn:hover{ background:inherit; border-color:var(--accent); color:inherit }
     .chip-btn.active{ background:var(--accent-weak); color:var(--accent); border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-weak) }
     .switch{ position:relative; width:44px; height:24px; display:inline-block }
     .switch input{ display:none }
@@ -557,8 +557,9 @@
     opacity .12s,
     filter .22s var(--ease),
     backdrop-filter .22s var(--ease);}
-    .btn:hover{transform:translateY(-1px)}
-    .btn:active{transform:translateY(0)}
+    /* Unified hover/active for toolbar/main buttons: border only changes to blue */
+    .btn:hover{ border-color: var(--accent); background:#fff; color: inherit; transform:none; box-shadow:none }
+    .btn:active{ border-color: var(--accent); background:#fff; transform:none; box-shadow:none }
     .btn[disabled]{opacity:.5;cursor:not-allowed}
     .toggle-btn.active,.style-btn.active{border-color:var(--accent);background:var(--accent-weak);box-shadow:0 0 0 2px var(--accent-weak)}
     .primary{background:var(--accent);color:#fff;border-color:var(--accent);padding:10px 16px;border-radius:12px;box-shadow:0 6px 16px rgba(0,122,255,.25)}
@@ -604,7 +605,7 @@
     .substyle-scroll{max-height:180px;overflow:auto;padding:8px 0 2px}
     .chips{display:flex;flex-wrap:wrap;gap:8px}
     .chip{border:1px solid var(--border);background:#fafafa;border-radius:999px;padding:6px 12px;font-size:13px;transition:background .12s,border-color .12s,transform .12s var(--ease);cursor:pointer}
-    .chip:hover{transform:translateY(-1px)}
+    .chip:hover{transform:none; border-color:var(--accent)}
     .chip.active{background:var(--accent-weak);border-color:var(--accent)}
 
     /* Split view + rows */
@@ -720,13 +721,7 @@
     .ctl-btn svg{width:16px;height:16px}
     .ctl-btn.copy-btn{min-width:110px}
     .split-footer .ctl-btn{white-space:nowrap}
-    .ctl-btn:hover{
-      background:rgba(255,255,255,.95);
-      border-color:var(--accent);
-      color:var(--accent);
-      transform:translateY(-1px);
-      box-shadow:0 4px 18px rgba(0,0,0,.12), 0 0 0 2px var(--accent-weak);
-    }
+    .ctl-btn:hover{ background:inherit; border-color:var(--accent); color:inherit; transform:none; box-shadow:none }
     .copy-btn.copied{background:var(--accent-weak);border-color:var(--accent);color:var(--accent);transform:translateY(-1px);backdrop-filter:blur(3px) saturate(1.12);-webkit-backdrop-filter:blur(3px) saturate(1.12)}
 
     .no-js .mode-wrap{height:auto!important;min-height:unset!important}
@@ -808,49 +803,42 @@
 
         /* Glassy toolbar buttons (Language + History) */
     #uiLangBtn,
-    #historyBtn{
-      background: rgba(255,255,255,.45);                 /* transparent look */
-      -webkit-backdrop-filter: blur(6px) saturate(1.15); /* Safari */
-      backdrop-filter: blur(6px) saturate(1.15);
-      border-color: rgba(0,0,0,.08);
-      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+    #historyBtn,
+    #addTextTabBtn,
+    #settingsBtn,
+    #signInBtn,
+    #signOutBtnTop,
+    #toggleSplit,
+    #brandBtn,
+    #advBtn{
+      background:#fff; /* keep base white */
+      border-color: var(--border);
+      box-shadow: var(--shadow-soft);
     }
 
-    /* Red accent on Sign out hover (match style with blue variant) */
-    #signOutBtnTop:hover{
-      background: rgba(255,255,255,.32);
-      color: #ef4444;
-      border-color: #ef4444;
-      box-shadow: 0 4px 18px rgba(0,0,0,.12), 0 0 0 2px rgba(239,68,68,.18);
-    }
+    /* Toolbar: explicit hover accents */
+    /* Sign out → red outline only */
+    #signOutBtnTop:hover{ background:#fff; color: inherit; border-color: #ef4444; box-shadow:none }
+    /* Sign in → blue outline only */
+    #signInBtn:hover{ background:#fff; color: inherit; border-color: var(--accent); box-shadow:none }
 
     /* Blue accent on Split View and New Tab hover (match Brand Kit/History style) */
     #toggleSplit:hover,
-    #addTextTabBtn:hover{
-      background: rgba(255,255,255,.32);
-      color: var(--accent);
-      border-color: var(--accent);
-      box-shadow: 0 4px 18px rgba(0,0,0,.12), 0 0 0 2px var(--accent-weak);
-    }
+    #addTextTabBtn:hover,
+    #settingsBtn:hover,
+    #brandBtn:hover,
+    #advBtn:hover{ background:#fff; color: inherit; border-color: var(--accent); box-shadow:none }
 
-    /* Transparent hover + blue accent ring */
+    /* Transparent hover + blue accent ring (keep text black) */
     #uiLangBtn:hover,
-    #historyBtn:hover{
-      background: rgba(255,255,255,.32);                 /* stay transparent */
-      color: var(--accent);                              /* blue text/icon */
-      border-color: var(--accent);                       /* blue border */
-      box-shadow: 0 4px 18px rgba(0,0,0,.12),
-                  0 0 0 2px var(--accent-weak);          /* subtle blue halo */
-    }
+    #historyBtn:hover,
+    #settingsBtn:hover,
+    #brandBtn:hover,
+    #advBtn:hover{ background:#fff; color: inherit; border-color: var(--accent); box-shadow:none }
 
     /* Active press state stays transparent */
     #uiLangBtn:active,
-    #historyBtn:active{
-      transform: translateY(0);
-      filter: saturate(1.06);
-      box-shadow: 0 2px 10px rgba(0,0,0,.10),
-                  0 0 0 2px var(--accent-weak);
-    }
+    #historyBtn:active{ transform:none; filter:none; border-color: var(--accent); box-shadow:none }
 
     /* Keyboard focus — blue focus ring */
     #uiLangBtn:focus-visible,
@@ -1231,8 +1219,8 @@
                 <div style="margin-bottom:14px;">
                   <div style="font-size:14px; color:#006cff; margin-bottom:4px;">Payment method</div>
                   <div id="billingSummaryPayment" style="font-size:14x; color:var(--text);"></div>
-                </div>
               </div>
+                </div>
               <div style="text-align:right; margin-top:12px;">
                 <button id="openBillingDialog" style="background:#006cff; color:white; border:none; border-radius:10px; padding:8px 14px; font-size:14px; height:32px; cursor:pointer;">Update billing details</button>
               </div>
@@ -1244,16 +1232,16 @@
               <div style="background:#f6f6f2; border:1px solid #eaeaea; border-radius:11px; padding:20px;">
                 <div style="overflow-x:auto;">
                   <table class="inv-table" style="width:100%; border-collapse:separate; border-spacing:0;">
-                    <thead>
-                      <tr>
+                <thead>
+                  <tr>
                         <th style="text-align:left; font-size:16px; color:#006cff; padding:8px 0; border-bottom:1px solid #eaeaea;">Invoice</th>
                         <th style="text-align:left; font-size:16px; color:#006cff; padding:8px 0; border-bottom:1px solid #eaeaea;">Status</th>
                         <th style="text-align:left; font-size:16px; color:#006cff; padding:8px 0; border-bottom:1px solid #eaeaea;">Amount</th>
                         <th style="text-align:left; font-size:16px; color:#006cff; padding:8px 0; border-bottom:1px solid #eaeaea;">Date</th>
                         <th style="text-align:left; font-size:16px; color:#006cff; padding:8px 0; border-bottom:1px solid #eaeaea;"></th>
-                      </tr>
-                    </thead>
-                    <tbody id="invoicesBody">
+                  </tr>
+                </thead>
+                <tbody id="invoicesBody">
                       <tr>
                         <td style="font-size:16px; color:var(--text); padding:12px 0;">REF-0003</td>
                         <td style="font-size:16px; color:var(--text); padding:12px 0;">Paid</td>
@@ -1275,8 +1263,8 @@
                         <td style="font-size:16px; color:var(--text); padding:12px 0;">Dec 10, 2024, 12.35 PM</td>
                         <td><button class="invoice-view-btn" data-invoice="REF-0001" style="font-size:16px; font-weight:bold; color:#006cff; padding:12px 0; cursor:pointer; background:none; border:none;">View</button></td>
                       </tr>
-                    </tbody>
-                  </table>
+                </tbody>
+              </table>
                   <div class="settings-muted" id="invoicesEmpty" style="display:none;">No invoices yet</div>
                 </div>
               </div>
@@ -1291,9 +1279,9 @@
                 <div style="display:flex; align-items:center; justify-content:space-between;">
                   <span style="font-size:16px; color:var(--text);">Disabled</span>
                   <button id="add2FABtn" style="background:#006cff; color:white; border:none; border-radius:7px; padding:6px 12px; font-size:14x; cursor:pointer;">Add Two-Factor authentication</button>
+              </div>
                 </div>
               </div>
-            </div>
 
             <!-- Change Password Section -->
             <div style="margin-bottom:20px">
@@ -1305,8 +1293,8 @@
                   <div style="display:flex; align-items:center; gap:8px;">
                     <input id="currentPassword" type="password" value="" style="flex:1; border:2px solid #eaeaea; border-radius:10px; height:28px; padding:0 11px; font: size 14px; background:#fff;" />
                     <button id="showCurrentPw" type="button" style="background:none; border:none; color:var(--text); font-size:14px; cursor:pointer; padding:4px 8px;">Show</button>
-                  </div>
-                </div>
+            </div>
+            </div>
                 
                 <!-- New Password -->
                 <div style="margin-bottom:16px;">
@@ -1323,13 +1311,13 @@
                   <div style="display:flex; align-items:center; gap:8px;">
                     <input id="confirmPassword" type="password" style="flex:1; border:2px solid #eaeaea; border-radius:10px; height:28px; padding:0 11px; font-size:14px; background:#fff;" />
                     <button id="showConfirmPw" type="button" style="background:none; border:none; color:var(--text); font-size:14px; cursor:pointer; padding:4px 8px;">Hide</button>
-                  </div>
                 </div>
-                
               </div>
+              
+                    </div>
               <div style="text-align:left; margin-top:12px;">
                 <button id="changePasswordBtn" style="background:#006cff; color:white; border:none; border-radius:7px; padding:6px 12px; font-size:14px; cursor:pointer;">Change password</button>
-              </div>
+                  </div>
             </div>
 
             <!-- Log Out Section -->
@@ -1338,9 +1326,9 @@
               <p style="font-size:12px; color:var(--text); margin:0 0 16px; line-height:1.4;">This will log out your account from all devices connected.</p>
               <div style="text-align:left;">
                 <button id="logoutAllBtn" style="background:#ff0000; color:white; border:none; border-radius:7px; padding:6px 12px; font-size:14px; font-weight:bold; cursor:pointer;">Log out</button>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
 
           <section id="secA11y" class="settings-section" tabindex="-1">
             <!-- Appearance Section -->
@@ -1350,8 +1338,8 @@
                 <button id="themeAuto" class="theme-btn active" style="background:#F6F6F2; color:var(--text); border:2px solid #006cff; border-radius:7px; padding:8px 16px; font-size:14px; cursor:pointer; font-weight:500;">Auto</button>
                 <button id="themeLight" class="theme-btn" style="background:#FFFFFF; color:var(--text); border:2px solid #eaeaea; border-radius:7px; padding:8px 16px; font-size:14px; cursor:pointer;">Light</button>
                 <button id="themeDark" class="theme-btn" style="background:#000000; color:white; border:2px solid #eaeaea; border-radius:7px; padding:8px 16px; font-size:14px; cursor:pointer;">Dark</button>
-              </div>
             </div>
+          </div>
 
             <!-- Reduced Motion Section -->
             <div style="margin-bottom:20px">
@@ -1396,7 +1384,7 @@
         <div style="margin-bottom:20px">
           <h4 style="font-size:14px; font-weight:500; color:var(--text); margin:0 0 12px;">Name on card</h4>
           <input class="billing-input" placeholder="" style="width:100%;" />
-        </div>
+          </div>
 
         <!-- Billing Address Section -->
         <div style="margin-bottom:20px">
@@ -4076,9 +4064,9 @@ window.STYLE_MICROCOPY = {
     if (usageMini) tb.insertBefore(btn, usageMini);
     else tb.appendChild(btn);
     ensureBrandOverlay();
-    // Hover blue accent like History
-    btn.addEventListener('mouseenter',()=>{ btn.style.color='var(--accent)'; btn.style.borderColor='var(--accent)'; btn.style.boxShadow='0 4px 18px rgba(0,0,0,.12), 0 0 0 2px var(--accent-weak)'; });
-    btn.addEventListener('mouseleave',()=>{ btn.style.color=''; btn.style.borderColor=''; btn.style.boxShadow=''; });
+    // Keep hover consistent: border only, no face text color change
+    btn.addEventListener('mouseenter',()=>{ btn.style.borderColor='var(--accent)'; btn.style.boxShadow='none'; });
+    btn.addEventListener('mouseleave',()=>{ btn.style.borderColor=''; btn.style.boxShadow=''; });
   }
 
   function injectAdvancedButton(){
@@ -4094,9 +4082,9 @@ window.STYLE_MICROCOPY = {
     if (usageMini) tb.insertBefore(btn, usageMini);
     else tb.appendChild(btn);
     ensureAdvancedOverlay();
-    // Hover blue accent like History
-    btn.addEventListener('mouseenter',()=>{ btn.style.color='var(--accent)'; btn.style.borderColor='var(--accent)'; btn.style.boxShadow='0 4px 18px rgba(0,0,0,.12), 0 0 0 2px var(--accent-weak)'; });
-    btn.addEventListener('mouseleave',()=>{ btn.style.color=''; btn.style.borderColor=''; btn.style.boxShadow=''; });
+    // Keep hover consistent: border only, no face text color change
+    btn.addEventListener('mouseenter',()=>{ btn.style.borderColor='var(--accent)'; btn.style.boxShadow='none'; });
+    btn.addEventListener('mouseleave',()=>{ btn.style.borderColor=''; btn.style.boxShadow=''; });
   }
 
     /* ---------- Brand overlay (standalone) ---------- */
@@ -5329,6 +5317,7 @@ ${lines.join('\n')}`);
         const { data, error } = await supabase.auth.signInWithOAuth({ 
           provider: 'google', 
           options: { 
+            redirectTo: 'https://app.feelslocal.com',
             queryParams: {
               access_type: 'offline',
               prompt: 'consent'
