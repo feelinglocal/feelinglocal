@@ -10,6 +10,7 @@ class AdvancedAuditManager {
   constructor() {
     this.db = require('./database');
     this.chainHash = null; // Blockchain-style hash chain
+    this.initialized = false;
     this.config = {
       enableTamperProof: process.env.AUDIT_TAMPER_PROOF !== 'false',
       enableEncryption: process.env.AUDIT_ENCRYPTION !== 'false',
@@ -31,8 +32,15 @@ class AdvancedAuditManager {
    */
   async init() {
     try {
+      // Ensure database is initialized first
+      if (!this.db.instance) {
+        await this.db.init();
+      }
+      
       await this.createAdvancedAuditTables();
       await this.initializeHashChain();
+      
+      this.initialized = true;
       
       log.info('Advanced audit system initialized', {
         tamperProof: this.config.enableTamperProof,
@@ -67,12 +75,7 @@ class AdvancedAuditManager {
         signature TEXT,
         encrypted_data TEXT,
         verification_status TEXT DEFAULT 'unverified',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_audit_chain (chain_index),
-        INDEX idx_audit_hash (current_hash),
-        INDEX idx_audit_timestamp (timestamp),
-        INDEX idx_audit_user (user_id),
-        INDEX idx_audit_resource (resource_type, resource_id)
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
       
       `CREATE TABLE IF NOT EXISTS audit_chain_state (
@@ -94,7 +97,14 @@ class AdvancedAuditManager {
         issues_found TEXT, -- JSON array of issues
         performed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         performed_by TEXT
-      )`
+      )`,
+      
+      // Create indexes separately
+      `CREATE INDEX IF NOT EXISTS idx_audit_chain ON audit_logs_advanced (chain_index)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_hash ON audit_logs_advanced (current_hash)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs_advanced (timestamp)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs_advanced (user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs_advanced (resource_type, resource_id)`
     ];
 
     for (const query of queries) {
@@ -140,6 +150,11 @@ class AdvancedAuditManager {
    * Create tamper-proof audit log entry
    */
   async createAuditLog(action, resourceType, resourceId, details = {}, userId = null, sessionInfo = {}) {
+    if (!this.initialized) {
+      log.warn('Advanced audit system not initialized, skipping audit log');
+      return null;
+    }
+    
     try {
       const timestamp = new Date().toISOString();
       const chainIndex = await this.getNextChainIndex();
@@ -799,3 +814,5 @@ module.exports = {
   advancedAuditManager,
   advancedAuditMiddleware
 };
+
+

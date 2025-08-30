@@ -262,11 +262,16 @@ if (sentry) {
   app.use(sentry.Handlers.tracingHandler());
 }
 
-// Initialize database
-db.init().catch(err => {
-  log.error('Failed to initialize database', { error: err.message });
-  process.exit(1);
-});
+// Initialize database and wait for it
+async function initializeDatabase() {
+  try {
+    await db.init();
+    log.info('Database initialized successfully');
+  } catch (err) {
+    log.error('Failed to initialize database', { error: err.message });
+    process.exit(1);
+  }
+}
 
 // Initialize M3 services
 const backupService = new BackupService();
@@ -385,11 +390,27 @@ backupService.scheduleBackups();
 fileRetentionService.scheduleRetentionJobs();
 retentionService.scheduleCleanup();
 
-// Initialize M5 services
-initializeM5Services();
+// Initialize services in proper sequence
+async function initializeAllServices() {
+  try {
+    // 1. Initialize database first
+    await initializeDatabase();
+    
+    // 2. Initialize M5 services
+    await initializeM5Services();
+    
+    // 3. Initialize Advanced Features (after database is ready)
+    await initializeAdvancedFeatures();
+    
+    log.info('All services initialized successfully');
+  } catch (error) {
+    log.error('Service initialization failed', { error: error.message });
+    process.exit(1);
+  }
+}
 
-// Initialize Advanced Features  
-initializeAdvancedFeatures();
+// Start initialization sequence
+initializeAllServices();
 
 // Optional: migrate legacy local JSON phrasebooks (disabled by default)
 if (process.env.MIGRATE_LEGACY_PB === 'true') {
@@ -3874,10 +3895,21 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
 /** ------------------------- API: Profile ------------------------- */
 app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
   try {
-    if (!prisma) return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: 'free' });
-    const rows = await prisma.$queryRawUnsafe('select tier from public.profiles where id = $1::uuid limit 1', req.user.id);
+    if (!prisma) return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: 'free', name: null });
+    // Normalize legacy numeric IDs to UUID like usage endpoint
+    let userIdForDb = req.user?.id;
+    if (typeof userIdForDb === 'number') {
+      userIdForDb = `00000000-0000-0000-0000-${userIdForDb.toString().padStart(12, '0')}`;
+    } else if (typeof userIdForDb === 'string' && !userIdForDb.includes('-')) {
+      const numId = parseInt(userIdForDb);
+      if (!isNaN(numId)) {
+        userIdForDb = `00000000-0000-0000-0000-${numId.toString().padStart(12, '0')}`;
+      }
+    }
+    const rows = await prisma.$queryRawUnsafe('select tier, name from public.profiles where id = $1::uuid limit 1', userIdForDb);
     const tier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier) : 'free';
-    res.json({ id: req.user.id, email: req.user.email || null, tier });
+    const name = Array.isArray(rows) && rows[0]?.name ? String(rows[0].name) : null;
+    res.json({ id: req.user.id, email: req.user.email || null, tier, name });
   } catch (e) { console.error('profile', e?.message || e); res.status(500).json({ error: 'Failed to get profile' }); }
 });
 // Lightweight helper UI for setting tier (GET in browser)
@@ -3954,6 +3986,267 @@ app.post('/api/admin/profile/tier', express.json(), async (req, res) => {
     await prisma.profiles.upsert({ where: { id }, update: { tier: tier.toLowerCase() }, create: { id, tier: tier.toLowerCase() } });
     res.json({ ok:true, userId: id, tier: tier.toLowerCase() });
   } catch (e) { console.error('api admin set tier', e); res.status(500).json({ error: 'Failed to set tier' }); }
+});
+
+/** ------------------------- Settings: Design Tokens ------------------------- */
+// Aggregate design tokens from files in design/setting-page and expose to client
+app.get('/api/settings/tokens', async (req, res) => {
+  try {
+    const designDir = path.join(__dirname, 'design', 'setting-page');
+    const files = [
+      'SETTING-PROFILE.design.json',
+      'SETTINGS-BILLINGSUBSCRIBTION.design.json',
+      'SETTING-SECURITY.design.json',
+      'SETTING-ACCESIBILITY.design.json',
+      'SETTING-BILLINGSUBSCRIBTION-UPDATEBILLINGDETAILS.design.json'
+    ];
+    const jsons = [];
+    for (const f of files) {
+      try {
+        const p = path.join(designDir, f);
+        if (fs.existsSync(p)) jsons.push(JSON.parse(fs.readFileSync(p, 'utf8')));
+      } catch {}
+    }
+    const pick = (getter, fallback) => {
+      for (const j of jsons) {
+        const v = getter(j);
+        if (v !== undefined && v !== null) return v;
+      }
+      return fallback;
+    };
+    const palette = pick(j => j?.palette?.tokens, null) || {};
+    const spacing = pick(j => j?.spacing, null) || {};
+    const padding = spacing.padding || {};
+    const radii = spacing.radii || {};
+    const typography = pick(j => j?.typography?.recommendation, null) || {};
+    const headings = (typography.sizes) || {};
+
+    const tokens = {
+      palette: {
+        bg: palette.bg,
+        card: palette.card,
+        text: palette.text,
+        muted: palette.muted,
+        border: palette.border,
+        accent: palette.accent,
+        accentWeak: palette['accent-weak'] || palette.accentWeak
+      },
+      spacing: {
+        page: padding.page,
+        card: padding.card,
+        section: padding.section,
+        buttonX: padding?.button?.x,
+        buttonY: padding?.button?.y,
+        chipX: padding?.chip?.x,
+        chipY: padding?.chip?.y,
+        inputX: padding?.input?.x,
+        inputY: padding?.input?.y
+      },
+      radii: {
+        sm: radii.sm,
+        md: radii.md,
+        lg: radii.lg,
+        pill: radii.pill
+      },
+      typography: {
+        body: typography.body || {},
+        label: typography.label || {},
+        headings
+      }
+    };
+    res.json(tokens);
+  } catch (e) {
+    console.error('tokens', e?.message || e);
+    res.status(500).json({ error: 'Failed to read design tokens' });
+  }
+});
+
+/** ------------------------- API: Update Profile ------------------------- */
+// Update profile fields (name in public.profiles) and optional auth.user_metadata
+app.patch('/api/profile', requireAuth, ensureProfile, express.json(), async (req, res) => {
+  try {
+    const { display_name, locale, timezone, avatar_url } = req.body || {};
+    const out = { updated: {} };
+    if (prisma && display_name) {
+      try {
+        let userIdForDb = req.user.id;
+        if (typeof userIdForDb === 'number') {
+          userIdForDb = `00000000-0000-0000-0000-${userIdForDb.toString().padStart(12, '0')}`;
+        } else if (typeof userIdForDb === 'string' && !userIdForDb.includes('-')) {
+          const numId = parseInt(userIdForDb);
+          if (!isNaN(numId)) userIdForDb = `00000000-0000-0000-0000-${numId.toString().padStart(12, '0')}`;
+        }
+        await prisma.$executeRawUnsafe(
+          'UPDATE public.profiles SET name = $2 WHERE id = $1::uuid',
+          userIdForDb, display_name
+        );
+        out.updated.name = display_name;
+      } catch (e) {
+        console.warn('profile name update', e?.message || e);
+      }
+    }
+    // Update Supabase Auth user_metadata if provided
+    if (locale || timezone || avatar_url) {
+      const SUPABASE_URL = process.env.SUPABASE_URL;
+      const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (SUPABASE_URL && SRK) {
+        const url = new URL(`${SUPABASE_URL}/auth/v1/admin/users/${req.user.id}`);
+        const body = { user_metadata: {} };
+        if (locale) body.user_metadata.locale = locale;
+        if (timezone) body.user_metadata.timezone = timezone;
+        if (avatar_url) body.user_metadata.avatar_url = avatar_url;
+        const r = await fetchWithTimeout(url.toString(), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SRK}`, 'apikey': SRK },
+          body: JSON.stringify(body)
+        });
+        if (!r.ok) console.warn('user_metadata update failed', await r.text());
+        else out.updated.metadata = true;
+      }
+    }
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    console.error('update profile', e?.message || e);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+/** ------------------------- API: Profile Preferences ------------------------- */
+// Persist accessibility and UI prefs to Supabase Auth user_metadata.prefs
+app.patch('/api/profile/prefs', requireAuth, express.json(), async (req, res) => {
+  try {
+    const { high_contrast, reduced_motion, font_scale, ui_language, theme } = req.body || {};
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SRK) return res.status(500).json({ error: 'Missing Supabase service credentials' });
+    const url = new URL(`${SUPABASE_URL}/auth/v1/admin/users/${req.user.id}`);
+    const prefs = {};
+    if (typeof high_contrast !== 'undefined') prefs.high_contrast = !!high_contrast;
+    if (typeof reduced_motion !== 'undefined') prefs.reduced_motion = !!reduced_motion;
+    if (typeof font_scale !== 'undefined') prefs.font_scale = Number(font_scale);
+    if (typeof ui_language !== 'undefined') prefs.ui_language = String(ui_language);
+    if (typeof theme !== 'undefined') prefs.theme = String(theme);
+    const r = await fetchWithTimeout(url.toString(), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SRK}`, 'apikey': SRK },
+      body: JSON.stringify({ user_metadata: { prefs } })
+    });
+    if (!r.ok) return res.status(500).json({ error: 'Failed to update preferences' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('profile prefs', e?.message || e);
+    res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
+/** ------------------------- API: Billing Profile (no Stripe yet) ------------------------- */
+// Save billing profile fields to Supabase Auth user_metadata.billing_profile
+app.patch('/api/billing/profile', requireAuth, express.json(), async (req, res) => {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SRK) return res.status(500).json({ error: 'Missing Supabase service credentials' });
+    const url = new URL(`${SUPABASE_URL}/auth/v1/admin/users/${req.user.id}`);
+    const allowed = ['billing_email','company','address_1','address_2','city','country','postal_code','tax_id'];
+    const billing_profile = {};
+    for (const k of allowed) if (typeof req.body?.[k] !== 'undefined') billing_profile[k] = req.body[k];
+    const r = await fetchWithTimeout(url.toString(), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SRK}`, 'apikey': SRK },
+      body: JSON.stringify({ user_metadata: { billing_profile } })
+    });
+    if (!r.ok) return res.status(500).json({ error: 'Failed to update billing profile' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('billing profile', e?.message || e);
+    res.status(500).json({ error: 'Failed to update billing profile' });
+  }
+});
+
+// Read billing profile fields from Supabase Auth user_metadata.billing_profile
+app.get('/api/billing/profile', requireAuth, async (req, res) => {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SRK) return res.status(200).json({ billing_profile: {} });
+    const url = new URL(`${SUPABASE_URL}/auth/v1/admin/users/${req.user.id}`);
+    const r = await fetchWithTimeout(url.toString(), { headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
+    if (!r.ok) return res.status(200).json({ billing_profile: {} });
+    const data = await r.json();
+    res.json({ billing_profile: data?.user_metadata?.billing_profile || {} });
+  } catch (e) {
+    console.error('billing profile get', e?.message || e);
+    res.status(200).json({ billing_profile: {} });
+  }
+});
+
+/** ------------------------- API: Account (email verification state) ------------------------- */
+app.get('/api/account', requireAuth, async (req, res) => {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SRK) return res.json({ email: req.user?.email || null, email_confirmed: false });
+    const url = new URL(`${SUPABASE_URL}/auth/v1/admin/users/${req.user.id}`);
+    const r = await fetchWithTimeout(url.toString(), { headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
+    if (!r.ok) return res.json({ email: req.user?.email || null, email_confirmed: false });
+    const data = await r.json();
+    const email_confirmed = !!(data?.email_confirmed_at || data?.confirmed_at);
+    res.json({ email: data?.email || req.user?.email || null, email_confirmed });
+  } catch (e) {
+    console.error('account get', e?.message || e);
+    res.json({ email: req.user?.email || null, email_confirmed: false });
+  }
+});
+
+/** ------------------------- API: Auth Sessions (logout all) ------------------------- */
+app.post('/api/auth/sessions/revoke_all', requireAuth, async (req, res) => {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SRK) return res.status(500).json({ error: 'Missing Supabase service credentials' });
+    const url = new URL(`${SUPABASE_URL}/auth/v1/admin/users/${req.user.id}/logout`);
+    const r = await fetchWithTimeout(url.toString(), { method:'POST', headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
+    if (!r.ok) return res.status(500).json({ ok:false, error: 'Failed to revoke sessions' });
+    res.json({ ok:true });
+  } catch (e) {
+    console.error('revoke all sessions', e?.message || e);
+    res.status(500).json({ ok:false, error: 'Failed to revoke sessions' });
+  }
+});
+
+/** ------------------------- API: Delete Account ------------------------- */
+app.delete('/api/profile', requireAuth, async (req, res) => {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SRK) return res.status(500).json({ error: 'Missing Supabase service credentials' });
+    // Delete auth user
+    const url = new URL(`${SUPABASE_URL}/auth/v1/admin/users/${req.user.id}`);
+    const r = await fetchWithTimeout(url.toString(), { method:'DELETE', headers: { 'Authorization': `Bearer ${SRK}`, 'apikey': SRK } });
+    if (!r.ok) {
+      const t = await r.text().catch(()=> '');
+      console.warn('delete user failed', r.status, t);
+      return res.status(500).json({ ok:false, error: 'Failed to delete account' });
+    }
+    // Best-effort cleanup profile row
+    if (prisma) {
+      try { await prisma.profiles.delete({ where: { id: req.user.id } }); } catch {}
+    }
+    res.json({ ok:true });
+  } catch (e) {
+    console.error('delete account', e?.message || e);
+    res.status(500).json({ ok:false, error: 'Failed to delete account' });
+  }
+});
+
+/** ------------------------- SPA: Serve Settings Page ------------------------- */
+// Ensure /settings and nested paths serve the SPA index.html (use RegExp to avoid path-to-regexp parsing issues)
+app.get(/^\/settings(?:\/.*)?$/, (req, res) => {
+  try {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  } catch (e) {
+    res.status(500).send('Failed to load settings page');
+  }
 });
 
 
