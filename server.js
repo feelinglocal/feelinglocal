@@ -3895,7 +3895,7 @@ app.get('/api/usage/current',
       // For guests, return zero usage but show tier limits
       return res.json({
         used: 0,
-        limit: tierConfig.maxInputSize,
+        limit: tierConfig.maxMonthlyChars || tierConfig.maxInputSize,
         tier: 'guest',
         isGuest: true,
         percentage: 0
@@ -3910,7 +3910,7 @@ app.get('/api/usage/current',
       }
       return res.json({
         used: 0,
-        limit: tierConfig.maxInputSize,
+        limit: tierConfig.maxMonthlyChars || tierConfig.maxInputSize,
         tier: tier,
         isGuest: false,
         percentage: 0,
@@ -3962,11 +3962,12 @@ app.get('/api/usage/current',
     const outputChars = Number(rec?.output_tokens || 0) * CHARS_PER_TOKEN;
     const totalCharsUsed = Math.round(inputChars + outputChars);
     
-    const percentage = Math.min((totalCharsUsed / effectiveTierConfig.maxInputSize) * 100, 100);
+    const monthlyCap = effectiveTierConfig.maxMonthlyChars || effectiveTierConfig.maxInputSize;
+    const percentage = Math.min((totalCharsUsed / monthlyCap) * 100, 100);
     
     const result = {
       used: totalCharsUsed,
-      limit: effectiveTierConfig.maxInputSize,
+      limit: monthlyCap,
       tier: normalizedTier,
       isGuest: false,
       percentage: percentage,
