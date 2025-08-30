@@ -455,9 +455,11 @@ if (process.env.ENABLE_CSP !== 'false') {
     objectSrc: ["'none'"],
     frameAncestors: ["'none'"],
     imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-    scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
-    styleSrc: ["'self'", "'unsafe-inline'"],
-    fontSrc: ["'self'", 'data:'],
+    scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+    scriptSrcElem: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+    styleSrcElem: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+    fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
     connectSrc: ["'self'", 'https:', 'wss:', 'ws:']
   };
   app.use(helmet.contentSecurityPolicy({ directives: cspDirectives, reportOnly }));
