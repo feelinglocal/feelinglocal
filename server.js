@@ -471,8 +471,8 @@ let sessionStore;
 let redisClient = null;
 
 // Prefer Node Redis client for session store
-if (process.env.REDIS_URL || process.env.FORCE_REDIS_SESSIONS === 'true') {
-  const url = process.env.REDIS_URL || 'redis://localhost:6379';
+if (process.env.REDIS_URL || process.env.REDIS_TLS_URL || process.env.FORCE_REDIS_SESSIONS === 'true') {
+  const url = process.env.REDIS_URL || process.env.REDIS_TLS_URL || 'redis://localhost:6379';
   const isTLS = url.startsWith('rediss://') || process.env.REDIS_TLS === 'true';
   const hostForSni = (() => { try { return new URL(url).hostname; } catch { return undefined; } })();
   try {
