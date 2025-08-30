@@ -435,12 +435,15 @@ log.info('Application starting', {
 });
 
 // Security: Helmet baseline headers
+const INSECURE_HTTP = process.env.ALLOW_HTTP_IN_PROD === 'true';
 app.use(helmet({
   // Keep flexible due to SPA/CDN usage; tighten incrementally
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
-  crossOriginResourcePolicy: { policy: 'cross-origin' }
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  // If running on plain HTTP in prod (no TLS), disable HSTS
+  hsts: INSECURE_HTTP ? false : undefined
 }));
 
 // Optional CSP (report-only by default)
@@ -499,7 +502,8 @@ app.use(session({
   saveUninitialized: false,
   name: process.env.SESSION_COOKIE_NAME || 'sid',
   cookie: {
-    secure: NODE_ENV === 'production',
+    // Allow HTTP in prod when explicitly enabled via env
+    secure: (process.env.COOKIE_SECURE === 'true') ? true : (INSECURE_HTTP ? false : NODE_ENV === 'production'),
     httpOnly: true,
     sameSite: 'lax',
     domain: process.env.SESSION_COOKIE_DOMAIN || undefined,
