@@ -494,7 +494,6 @@
       transition: none !important;
       animation: none !important;
     }
-    
     /* Save button - keep original blue style always */
     #saveProfileBtn:hover,
     #saveProfileBtn:focus,
@@ -848,6 +847,10 @@
       box-shadow: 0 0 0 3px var(--accent-weak);
     }
 
+    /* Language modal close hover (specific) */
+    #langOverlay .lang-close{ border:1px solid var(--border) !important; border-radius:10px; padding:6px 10px; background:#fff; color:#6b7280; transition:border-color .18s ease, color .18s ease; }
+    #langOverlay .lang-close:hover{ border-color:var(--accent) !important; color:var(--accent) !important; }
+
   </style>
   <style>
     /* Minimal modal base styles */
@@ -947,7 +950,7 @@
       <div class="title" data-i18n="title">AI Localization Prototype</div>
       <div class="toolbar">
         <div class="toolbar-row" id="toolbarRow1">
-          <!-- Row 1 order: New Tab, History (injected), Language, Sign in -->
+          <!-- Row 1 order: New tab, History (injected), Language, Sign in -->
           <button id="addTextTabBtn" class="btn" title="New tab" data-i18n="new_tab">New Tab</button>
           <!-- History button will be injected before Language -->
           <button id="uiLangBtn" class="btn face-btn" aria-haspopup="dialog" aria-expanded="false" title="Change language">
@@ -1080,7 +1083,6 @@
                 <div id="segSrcBox" class="segbox" aria-label="Source segments"></div>
               </div>
 
-              <!-- FIX: removed stray extra '<' that broke the grid -->
               <div class="paneCard" id="resultPaneCard">
                 <div class="paneHead" data-i18n="pane_result">Result</div>
                 <div id="segTgtBox" class="segbox" aria-label="Target segments"></div>
@@ -1112,7 +1114,6 @@
         </div>
       </div>
     </div>
-
     <!-- Settings Page -->
     <div id="settingsPage" class="settings-page" aria-labelledby="settingsTitle">
       <div class="settings-container">
@@ -1356,7 +1357,6 @@
         </div>
       </div>
     </div>
-
     <!-- Billing Dialog -->
     <div id="billingDialog" class="billing-dialog-backdrop" aria-hidden="true" role="dialog" aria-modal="true">
       <div class="billing-dialog-card">
@@ -1611,7 +1611,8 @@
           "privacy-policies":"Kebijakan Privasi", constitutional:"Konstitusional",
           "patient-friendly-explanation":"Penjelasan Ramah Pasien", "research-abstracts":"Abstrak Riset",
           "clinical-documentation":"Dokumentasi Klinis", "health-campaigns":"Kampanye Kesehatan",
-          "news-reports":"Laporan Berita", "editorial-opinion":"Opini Editorial", "feature-articles":"Artikel Fitur",
+          "news-reports":"用于及时报道，以\"五何\"开篇（何人何事何时何地为何）。",
+          "editorial-opinion":"Opini Editorial", "feature-articles":"Artikel Fitur",
           "press-releases":"Siaran Pers", "internal-communications":"Komunikasi Internal",
           "investor-relations":"Hubungan Investor", "annual-reports":"Laporan Tahunan",
           "professional-presentations":"Presentasi Profesional",
@@ -1658,12 +1659,13 @@
           general:"Général", academic:"Académique", scientific:"Scientifique",
           chat:"Discussion", gaming:"Jeu vidéo", "street-talk":"Argot de rue", comedy:"Comédie", "social-media":"Réseaux sociaux",
           promotional:"Promotionnel", persuasive:"Persuasif", "product-descriptions":"Descriptions produit",
-          "brand-storytelling":"Récit de marque", "seo-friendly":"Optimisé SEO", "email-campaigns":"Campagnes e‑mail",
-          "event-promotion":"Promotion d’événement", "influencer-ugc-style":"Style influenceur/UGC",
+          "brand-storytelling":"Pour les pages \"À propos\" et des récits de campagne émotionnels.",
+          "seo-friendly":"Optimisé SEO", "email-campaigns":"Campagnes e‑mail",
+          "event-promotion":"Promotion d'événement", "influencer-ugc-style":"Style influenceur/UGC",
           dialogue:"Dialogue", narration:"Narration",
           "literary-adaptation":"Adaptation littéraire", "slogan-tagline-writing":"Slogan/Baseline",
           "poetic-tone":"Ton poétique", "narrative-prose":"Prose narrative",
-          "software-documentation":"Documentation logicielle", "engineering-manuals":"Manuels d’ingénierie",
+          "software-documentation":"Documentation logicielle", "engineering-manuals":"Manuels d'ingénierie",
           "product-specs":"Spécifications produit", "api-guides":"Guides API",
           contracts:"Contrats", "terms-conditions":"Conditions générales", "compliance-docs":"Documents de conformité",
           "privacy-policies":"Politiques de confidentialité", constitutional:"Constitutionnel",
@@ -1687,7 +1689,8 @@
           general:"General", academic:"Académico", scientific:"Científico",
           chat:"Chat", gaming:"Videojuegos", "street-talk":"Jerga callejera", comedy:"Comedia", "social-media":"Redes sociales",
           promotional:"Promocional", persuasive:"Persuasivo", "product-descriptions":"Descripciones de producto",
-          "brand-storytelling":"Relato de marca", "seo-friendly":"Optimizado para SEO", "email-campaigns":"Campañas de correo",
+          "brand-storytelling":"Para páginas \"Sobre nosotros\" y narrativas de campaña con emoción.",
+          "seo-friendly":"Optimizado para SEO", "email-campaigns":"Campañas de correo",
           "event-promotion":"Promoción de eventos", "influencer-ugc-style":"Estilo influencer/UGC",
           dialogue:"Diálogo", narration:"Narración",
           "literary-adaptation":"Adaptación literaria", "slogan-tagline-writing":"Slogan/Tagline",
@@ -1729,7 +1732,7 @@ window.STYLE_MICROCOPY = {
       promotional: "For offers and sales. Clear headlines and urgency.",
       persuasive: "For benefit-focused copy with a strong call to action.",
       "product-descriptions": "For product titles, features, specs, and benefits on product detail pages.",
-      "brand-storytelling": "For about pages and campaign narratives with emotion.",
+      "brand-storytelling": "Para páginas \"Sobre nosotros\" y narrativas de campaña con emoción.",
       "seo-friendly": "For keyword-smart copy, meta fields, and web/app copywriting.",
       "social-media": "For posts and ads. Hooks, hashtags, and short lines.",
       "email-campaigns": "For subject lines and body that drive clicks.",
@@ -1909,12 +1912,12 @@ window.STYLE_MICROCOPY = {
       promotional: "用于优惠与促销。标题清晰并营造紧迫感。",
       persuasive: "用于以收益为核心并带有强力行动号召的文案。",
       "product-descriptions": "用于产品标题、特性、规格与卖点，适配商品详情页。",
-      "brand-storytelling": "用于“关于我们”与活动叙事，注重情感共鸣。",
+      "brand-storytelling": "用于\"关于我们\"与活动叙事，注重情感共鸣。",
       "seo-friendly": "用于关键词优化文案、元信息字段和网站/应用文案。",
       "social-media": "用于帖子与广告，讲求开头抓人、话题标签与短句。",
       "email-campaigns": "用于提升点击率的主题与正文。",
       "event-promotion": "用于邀请与落地页，清晰呈现日期、地点与 CTA。",
-      "influencer-ugc-style": "用于第一人称、真实感强的“像用户写的”内容。"
+      "influencer-ugc-style": "用于第一人称、真实感强的\"像用户写的\"内容。"
     },
     dubbing: {
       general: "用于配音台词，自然顺畅、句子精炼、时序干净。",
@@ -1952,13 +1955,13 @@ window.STYLE_MICROCOPY = {
     },
     journalistic: {
       general: "用于基于事实、语气中立并经核实的信息写作。",
-      "news-reports": "用于及时报道，以“五何”开篇（何人何事何时何地为何）。",
+      "news-reports": "用于及时报道，以\"五何\"开篇（何人何事何时何地为何）。",
       "editorial-opinion": "用于观点明确、证据充分、脉络清晰的社论。",
       "feature-articles": "用于深度报道，兼顾背景、人情细节与叙事流畅。",
       "press-releases": "用于机构公告，包含要点、引语与联系方式。"
     },
     corporate: {
-      general: "用于商务写作，表达清楚、简洁并符合品牌。",
+      general: "用于商务写作，表达清晰、简洁并符合品牌。",
       "internal-communications": "用于备忘、公告与政策更新。",
       "investor-relations": "用于业绩更新、关键指标与风险披露。",
       "annual-reports": "用于绩效回顾、战略与 ESG 板块。",
@@ -1990,26 +1993,26 @@ window.STYLE_MICROCOPY = {
       general: "Pour des messages du quotidien, simples et chaleureux.",
       "social-media": "Pour des légendes et posts, lignes courtes et hashtags.",
       chat: "Pour des réponses rapides au ton conversationnel. Émojis autorisés.",
-      gaming: "Pour l’argot gamer, les appels courts et l’esprit d’équipe.",
+      gaming: "Pour l'argot gamer, les appels courts et l'esprit d'équipe.",
       "street-talk": "Pour un parler courant et local. Restez respectueux.",
       comedy: "Pour des formulations drôles avec une chute claire."
     },
     marketing: {
       general: "Pour un texte marketing cohérent avec la marque sur tous les canaux.",
-      promotional: "Pour les offres et promotions. Titres clairs et sentiment d’urgence.",
-      persuasive: "Pour un discours centré bénéfices avec un appel à l’action fort.",
+      promotional: "Pour les offres et promotions. Titres clairs et sentiment d'urgence.",
+      persuasive: "Pour un discours centré bénéfices avec un appel à l'action fort.",
       "product-descriptions": "Pour titres, fonctionnalités, spécifications et bénéfices sur les pages produit.",
-      "brand-storytelling": "Pour les pages « À propos » et des récits de campagne émotionnels.",
+      "brand-storytelling": "Pour les pages \"À propos\" et des récits de campagne émotionnels.",
       "seo-friendly": "Pour un contenu optimisé mots-clés, champs méta et rédaction web/app.",
       "social-media": "Pour posts et annonces. Accroches, hashtags, lignes courtes.",
-      "email-campaigns": "Pour objets et corps d’e-mail qui incitent au clic.",
+      "email-campaigns": "Pour objets et corps d'e-mail qui incitent au clic.",
       "event-promotion": "Pour invitations et landing pages avec date, lieu et CTA.",
       "influencer-ugc-style": "Pour une voix à la première personne authentique, façon utilisateur réel."
     },
     dubbing: {
       general: "Pour un doublage fluide, des lignes concises et un timing propre.",
       dialogue: "Pour des répliques adaptées au mouvement des lèvres et au rythme des scènes.",
-      narration: "Pour des voix off au débit régulier et à l’accentuation claire."
+      narration: "Pour des voix off au débit régulier et à l'accentuation claire."
     },
     creative: {
       general: "Pour une écriture imaginative à la voix naturelle et lisible.",
@@ -2023,12 +2026,12 @@ window.STYLE_MICROCOPY = {
       "software-documentation": "Pour guides utilisateur logiciel et notes de version avec étapes et exemples.",
       "engineering-manuals": "Pour procédures et consignes de sécurité avec pièces, tolérances et schémas.",
       "product-specs": "Pour fiches techniques avec mesures, matériaux et limites.",
-      "api-guides": "Pour endpoints et paramètres avec requêtes d’exemple et schémas de réponse."
+      "api-guides": "Pour endpoints et paramètres avec requêtes d'exemple et schémas de réponse."
     },
     legal: {
       general: "Pour une écriture juridique formelle, précise, cohérente et citable.",
       contracts: "Pour clauses, définitions, obligations et recours aux termes exacts.",
-      "terms-conditions": "Pour conditions d’utilisation, garanties et limitations de responsabilité.",
+      "terms-conditions": "Pour conditions d'utilisation, garanties et limitations de responsabilité.",
       "compliance-docs": "Pour politiques et rapports conformes aux exigences.",
       "privacy-policies": "Pour collecte, usage, conservation des données et droits des utilisateurs.",
       constitutional: "Pour textes constitutionnels et lois avec formulation exacte et renvois aux articles."
@@ -2048,14 +2051,14 @@ window.STYLE_MICROCOPY = {
       "press-releases": "Pour des annonces institutionnelles avec faits clés, citations et contact."
     },
     corporate: {
-      general: "Pour une écriture d’entreprise claire, concise et conforme à la marque.",
+      general: "Pour une écriture d'entreprise claire, concise et conforme à la marque.",
       "internal-communications": "Pour notes, annonces et mises à jour de politique interne.",
       "investor-relations": "Pour résultats, indicateurs et informations sur les risques.",
       "annual-reports": "Pour bilans de performance, stratégie et chapitres ESG.",
       "professional-presentations": "Pour titres de diapositives, notes orateur et messages clés."
     },
     entertainment: {
-      general: "Pour film, séries et contenus au ton engageant et au rythme régulier.",
+      general: "Pour film, série et contenus au ton engageant et au rythme régulier.",
       subtitling: "Pour sous-titres avec timing, césures et vitesse de lecture corrects.",
       screenwriting: "Pour en-têtes de scène, actions et dialogues au format standard.",
       "script-adaptation": "Pour des scripts localisés qui gardent intrigue, humour et intention.",
@@ -2065,8 +2068,8 @@ window.STYLE_MICROCOPY = {
       general: "Pour supports pédagogiques à la structure claire et au langage simple.",
       "e-learning": "Pour modules en ligne, diapositives et voix off au ton actif.",
       "step-by-step-guides": "Pour guides pas à pas, numérotés et formulés simplement.",
-      "academic-tutorials": "Pour notes de cours et pas-à-pas expliquant les concepts par l’exemple.",
-      "test-preparation": "Pour exercices, corrigés et conseils renforçant la confiance à l’examen."
+      "academic-tutorials": "Pour notes de cours et pas-à-pas expliquant les concepts par l'exemple.",
+      "test-preparation": "Pour exercices, corrigés et conseils renforçant la confiance à l'examen."
     }
   },
 
@@ -2089,7 +2092,7 @@ window.STYLE_MICROCOPY = {
       promotional: "Para ofertas y rebajas. Titulares claros y sentido de urgencia.",
       persuasive: "Para copys centrados en beneficios con un CTA contundente.",
       "product-descriptions": "Para títulos, funciones, especificaciones y beneficios en páginas de producto.",
-      "brand-storytelling": "Para páginas “Sobre nosotros” y narrativas de campaña con emoción.",
+      "brand-storytelling": "Para páginas \"Sobre nosotros\" y narrativas de campaña con emoción.",
       "seo-friendly": "Para textos con palabras clave, campos meta y copywriting web/app.",
       "social-media": "Para posts y anuncios. Ganchos, hashtags y líneas cortas.",
       "email-campaigns": "Para asuntos y cuerpos que impulsen los clics.",
@@ -2149,7 +2152,7 @@ window.STYLE_MICROCOPY = {
       subtitling: "Para subtítulos con timing correcto, cortes de línea y velocidad de lectura adecuada.",
       screenwriting: "Para encabezados de escena, acciones y diálogos en formato estándar.",
       "script-adaptation": "Para guiones localizados que mantengan trama, humor e intención.",
-      "character-dialogue": "Para voces acordes a cada personaje y al ritmo de la escena."
+      "character-dialogue": "Para voces acordes a cada personaje y el ritmo de la escena."
     },
     educational: {
       general: "Para materiales de enseñanza con estructura clara y lenguaje sencillo.",
@@ -2160,7 +2163,6 @@ window.STYLE_MICROCOPY = {
     }
   }
 };
-
     /* =======================
        1) Core helpers
        ======================= */
@@ -2208,7 +2210,7 @@ window.STYLE_MICROCOPY = {
       en:{title:"AI Localization Prototype",input_label:"Input Text",input_ph:"Paste or write your text here…",target_lang:"Target Language",loc_style:"Localization Style",substyle:"Sub-style",substyle_for:"Sub-style for",no_substyle:"No sub-style",submit:"Submit",result_label:"Result",split_view:"Split View",back:"Back",copy:"Copy",copied:"Copied!",pane_input:"Input",pane_result:"Result",clear_highlights:"Clear Highlights",rephrase:"Rephrase",choose_lang:"Select your language",toast_enter_text:"Please enter some text first.",toast_choose_target:"Choose a target language or Rephrase.",toast_choose_style:"Please choose a localization style.",toast_error_generic:"Something went wrong. Please try again.",or:"Or",upload_hint:"Drag & drop a .txt, .docx, .pdf, or .srt here",upload_sub:"…or click to browse",download_localized:"Download localized",download_all_zip:"Download all (.zip)",new_tab:"New Tab",open_files:"Open files",translate_all:"Translate all"},
       id:{title:"Prototipe Lokalisasi AI",input_label:"Teks Masukan",input_ph:"Tempel atau tulis teks di sini…",target_lang:"Bahasa Tujuan",loc_style:"Gaya Lokalisasi",substyle:"Sub-gaya",substyle_for:"Sub-gaya untuk",no_substyle:"Tanpa sub-gaya",submit:"Kirim",result_label:"Hasil",split_view:"Tampilan Terpisah",back:"Kembali",copy:"Salin",copied:"Tersalin!",pane_input:"Masukan",pane_result:"Hasil",clear_highlights:"Hapus Sorotan",rephrase:"Parafrase",choose_lang:"Pilih bahasa antarmuka",toast_enter_text:"Mohon isi teks terlebih dahulu.",toast_choose_target:"Pilih bahasa tujuan atau Parafrase.",toast_choose_style:"Pilih gaya lokalisasi.",toast_error_generic:"Terjadi kesalahan. Coba lagi.",or:"Atau",upload_hint:"Seret & lepas berkas .txt, .docx, .pdf, atau .srt",upload_sub:"…atau klik untuk memilih",download_localized:"Unduh hasil",download_all_zip:"Unduh semua (.zip)",new_tab:"Tab Baru",open_files:"Buka berkas",translate_all:"Terjemahkan semua"},
       zh:{title:"AI 本地化原型",input_label:"输入文本",input_ph:"在此粘贴或输入文本…",target_lang:"目标语言",loc_style:"本地化风格",substyle:"子风格",substyle_for:"子风格：",no_substyle:"无子风格",submit:"提交",result_label:"结果",split_view:"分屏视图",back:"返回",copy:"复制",copied:"已复制！",pane_input:"输入",pane_result:"结果",clear_highlights:"清除高亮",rephrase:"改写",choose_lang:"选择界面语言",toast_enter_text:"请先输入文本。",toast_choose_target:"请选择目标语言或改写。",toast_choose_style:"请选择本地化风格。",toast_error_generic:"出错了，请重试。",or:"或",upload_hint:"拖拽 .txt、.docx、.pdf 或 .srt 到此处",upload_sub:"…或点击选择",download_localized:"下载本地化文件",download_all_zip:"全部下载 (.zip)",new_tab:"新建标签",open_files:"打开文件",translate_all:"全部翻译"},
-      fr:{title:"Prototype de Localisation IA",input_label:"Texte d’entrée",input_ph:"Collez ou saisissez votre texte ici…",target_lang:"Langue cible",loc_style:"Style de localisation",substyle:"Sous-style",substyle_for:"Sous-style pour",no_substyle:"Aucun sous-style",submit:"Envoyer",result_label:"Résultat",split_view:"Vue scindée",back:"Retour",copy:"Copier",copied:"Copié !",pane_input:"Entrée",pane_result:"Résultat",clear_highlights:"Effacer les surlignages",rephrase:"Reformuler",choose_lang:"Choisissez votre langue",toast_enter_text:"Veuillez d’abord saisir du texte.",toast_choose_target:"Choisissez une langue cible ou Reformuler.",toast_choose_style:"Choisissez un style de localisation.",toast_error_generic:"Un problème est survenu. Réessayez.",or:"Ou",upload_hint:"Glissez-déposez un .txt, .docx, .pdf ou .srt",upload_sub:"…ou cliquez pour parcourir",download_localized:"Télécharger la version localisée",download_all_zip:"Tout télécharger (.zip)",new_tab:"Nouvel onglet",open_files:"Ouvrir des fichiers",translate_all:"Tout traduire"},
+      fr:{title:"Prototype de Localisation IA",input_label:"Texte d'entrée",input_ph:"Collez ou saisissez votre texte ici…",target_lang:"Langue cible",loc_style:"Style de localisation",substyle:"Sous-style",substyle_for:"Sous-style pour",no_substyle:"Aucun sous-style",submit:"Envoyer",result_label:"Résultat",split_view:"Vue scindée",back:"Retour",copy:"Copier",copied:"Copié !",pane_input:"Entrée",pane_result:"Résultat",clear_highlights:"Effacer les surlignages",rephrase:"Reformuler",choose_lang:"Choisissez votre langue",toast_enter_text:"Veuillez d'abord saisir du texte.",toast_choose_target:"Choisissez une langue cible ou Reformuler.",toast_choose_style:"Choisissez un style de localisation.",toast_error_generic:"Un problème est survenu. Réessayez.",or:"Ou",upload_hint:"Glissez-déposez un .txt, .docx, .pdf ou .srt",upload_sub:"…ou cliquez pour parcourir",download_localized:"Télécharger la version localisée",download_all_zip:"Tout télécharger (.zip)",new_tab:"Nouvel onglet",open_files:"Ouvrir des fichiers",translate_all:"Tout traduire"},
       es:{title:"Prototipo de Localización IA",input_label:"Texto de entrada",input_ph:"Pega o escribe tu texto aquí…",target_lang:"Idioma de destino",loc_style:"Estilo de localización",substyle:"Subestilo",substyle_for:"Subestilo para",no_substyle:"Sin subestilo",submit:"Enviar",result_label:"Resultado",split_view:"Vista dividida",back:"Volver",copy:"Copiar",copied:"¡Copiado!",pane_input:"Entrada",pane_result:"Resultado",clear_highlights:"Borrar resaltados",rephrase:"Reformular",choose_lang:"Selecciona tu idioma",toast_enter_text:"Primero escribe algún texto.",toast_choose_target:"Elige un idioma objetivo o Reformular.",toast_choose_style:"Elige un estilo de localización.",toast_error_generic:"Algo salió mal. Inténtalo de nuevo.",or:"O",upload_hint:"Arrastra y suelta un .txt, .docx, .pdf o .srt",upload_sub:"…o haz clic para elegir",download_localized:"Descargar localizado",download_all_zip:"Descargar todo (.zip)",new_tab:"Nueva pestaña",open_files:"Abrir archivos",translate_all:"Traducir todo"}
     };
     const DEFAULT_LANG='en';
@@ -2284,7 +2286,6 @@ window.STYLE_MICROCOPY = {
       $('#cardRoot')?.setAttribute('aria-busy','false');
       if(enableBtn){$('#submitBtn')?.removeAttribute('disabled');$('#submitAllBtn')?.removeAttribute('disabled')}
     }
-    
     // Upload progress functions
     function showUploadProgress(){
       console.log('🔄 showUploadProgress called');
@@ -2630,10 +2631,8 @@ window.STYLE_MICROCOPY = {
 
       $('#subStyleContainer')?.classList.add('is-hidden'); setChevron(false); renderSubstyles("");
       initDropzone();
-
       autosizeTextarea($('#inputText'));
       autosizeTextarea($('#outputText'));
-
       // First tab
       addTextTab();
 
@@ -2792,11 +2791,44 @@ window.STYLE_MICROCOPY = {
     }
     function renderHistoryGrid(){
       const grid=$('#histGrid'); if(!grid) return;
-      const items=readHistory();
+      let items=readHistory();
       if(!items.length){
         grid.innerHTML=`<div class="lang-item"><div>No history yet</div><div class="lang-code">—</div></div>`;
         return;
       }
+      
+      // Determine per-session dominant source language (cluster by createdAt within 2 minutes)
+      const WINDOW = 2 * 60 * 1000; // 2 minutes
+      const sorted = (items||[]).slice().sort((a,b)=> (a.createdAt||0) - (b.createdAt||0));
+      const groups = [];
+      let cur = [];
+      let prevTs = null;
+      for(const it of sorted){
+        const ts = Number(it.createdAt||0);
+        if(prevTs!==null && (ts - prevTs) > WINDOW){ groups.push(cur); cur = []; }
+        cur.push(it); prevTs = ts;
+      }
+      if(cur.length) groups.push(cur);
+
+      const dominantById = {};
+      for(const g of groups){
+        const counts = {};
+        for(const it of g){
+          const base = (it.srcLang && it.srcLang !== 'Auto') ? it.srcLang : detectLanguageName(it.srcText||'');
+          const key = base || 'Auto'; counts[key] = (counts[key]||0) + 1;
+        }
+        const dominant = Object.entries(counts).sort((a,b)=> b[1]-a[1])[0]?.[0] || 'Auto';
+        for(const it of g){ dominantById[String(it.id)] = (dominant === 'Auto' ? '' : dominant); }
+      }
+
+      items = items.map(it=>{
+        const explicit = (it.srcLang && it.srcLang!=='Auto') ? it.srcLang : '';
+        const guess = detectLanguageName(it.srcText||'');
+        const dom = dominantById[String(it.id)] || '';
+        const lang = explicit || guess || dom || 'Auto';
+        return { ...it, srcLang: lang };
+      });
+      
       grid.innerHTML = items.map((h,i)=>{
         const d=new Date(h.ts);
         const meta = [
@@ -2903,7 +2935,6 @@ window.STYLE_MICROCOPY = {
           if (file.size > 5 * 1024 * 1024) { // > 5MB
             setUploadProgressText(`Processing large file: ${file.name}...`);
           }
-          
           // Yield to main thread to prevent UI freezing
           await new Promise(resolve => setTimeout(resolve, 50));
           
@@ -2984,7 +3015,6 @@ window.STYLE_MICROCOPY = {
             results.push({ file: { originalName: file.name }, success: false, error: fileError.message });
             errorCount++;
           }
-          
           // Yield between files
           await new Promise(resolve => setTimeout(resolve, 100));
         }
@@ -3078,7 +3108,7 @@ window.STYLE_MICROCOPY = {
     function isInterjection(s){
       const x=(s||'').trim();
       if(/^(ah|oh|uh|um|erm?|eh|hmm|huh|well|hey|yo|oi|aduh|waduh|yah|ya|loh|lah|nah|duh|whoa|wow|alas|sob|hiks|uy|ehh|bah|euh|oula|hala)[.!?…]*$/i.test(x)) return true;
-      if(/^[啊呀哎唉嗯呃喔哦噢哇嘿噗嗨欸〜～…！]*$/.test(x)) return true;
+      if(/^[啊呀哎唉嗯呃唔哦噢哇嘿噗嗨欸〜～…！]*$/.test(x)) return true;
       return false;
     }
     function wordCount(s){return (String(s).trim().match(/[^\s]+/g)||[]).length}
@@ -3120,7 +3150,7 @@ window.STYLE_MICROCOPY = {
       const joined = [];
       for(const cur of healed){
         const prev = joined[joined.length-1];
-        if(prev && /[,;:]$/.test(prev) && /^["“”'’]/.test(cur)){
+        if(prev && /[,;:]$/.test(prev) && /^[""'']/.test(cur)){
           joined[joined.length-1] = (prev + ' ' + cur).replace(/\s+/g,' ').trim();
         }else{
           joined.push(cur);
@@ -3381,7 +3411,6 @@ window.STYLE_MICROCOPY = {
       b.addEventListener('scroll',()=>{ if(lock||isTyping) return; lock=true; a.scrollTop=b.scrollTop; lock=false; },{passive:true});
     }
     function debounce(fn,ms){let t;return()=>{clearTimeout(t);t=setTimeout(fn,ms)}}
-    
     /* (removed Edit Mode code) */
 
     function renderSrtBoxes(doc){
@@ -3407,7 +3436,7 @@ window.STYLE_MICROCOPY = {
             <div class="lineno">${i+1}</div>
             <div class="segcontent">
               <textarea data-srt="${i}">${escapeHTML(tgtVal)}</textarea>
-              <div class="segmeta" id="tmeta-${i}">${escapeHTML(c.start||'')} ${c.start||c.end ? '→' : '—'} ${escapeHTML(c.end||'')} · ${tgtWords} words · ${tgtChars} chars</div>
+              <div class="segmeta" id="tmeta-${i}">${escapeHTML(c.start||'')} ${c.start||c.end?'→':'—'} ${escapeHTML(c.end||'')} · ${tgtWords} words · ${tgtChars} chars</div>
             </div>
           </div>`;
         src.insertAdjacentHTML('beforeend',srcHTML);
@@ -3590,7 +3619,6 @@ window.STYLE_MICROCOPY = {
         }
       }
     }
-
     async function translateAllTabs(){
       if(!docs.length){ showToast('No tabs'); return; }
       if(!targetLanguage && !rephrase){showToast(t('toast_choose_target'));pulse($('#langButtonsRow'));return}
@@ -3623,7 +3651,6 @@ window.STYLE_MICROCOPY = {
       }catch(e){ console.error(e); showToast(t('toast_error_generic'))}
       finally{ setStatus('Localization done'); hideLoader(true); }
     }
-
     async function downloadLocalized(d){
       d = d || currentDoc(); if(!d) return;
       const base = (d.name||'output').replace(/\.[^.]+$/,'');
@@ -3654,7 +3681,6 @@ window.STYLE_MICROCOPY = {
         URL.revokeObjectURL(url);
       }catch(e){ console.error(e); showToast(t('toast_error_generic')) }
     }
-
     async function downloadAllZip(){
       const files = docs.map(d=>{
         if(d.isSrt){
@@ -3811,7 +3837,6 @@ window.STYLE_MICROCOPY = {
         border: 1px solid rgba(0,0,0,.08);
         box-shadow: 0 10px 40px rgba(0,0,0,.12);
 }
-
       /* Save bubble — glassy, never covers selection */
       .save-bubble{
         position:fixed;z-index:9999;transform:translate(-50%,-6px) scale(.98);opacity:0;
@@ -3917,7 +3942,7 @@ window.STYLE_MICROCOPY = {
 
 
       /* Advanced overlay + tabs */
-      #advOverlay .lang-sheet{max-width:90vw; width:1100px; overflow-x:hidden;}
+      #advOverlay .lang-sheet{max-width:95vw; width:1100px; overflow-x:hidden;}
       .adv-tabs{display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(0,0,0,0.08);position:sticky;top:0;background:rgba(255,255,255,0.1);backdrop-filter:blur(var(--sheet-glass-blur)) saturate(1.50);z-index:1}
       .adv-tab{border:1px solid rgba(0,0,0,0.08);background:rgba(255,255,255,0.2);backdrop-filter:blur(8px);border-radius:999px;padding:6px 12px;font-size:13px;font-family:"Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;transition:all .15s ease;}
       .adv-tab:hover{background:rgba(255,255,255,0.3);border-color:rgba(0,122,255,0.3);transform:translateY(-1px);}
@@ -3942,25 +3967,39 @@ window.STYLE_MICROCOPY = {
         outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak);
       }
       .bp-table td select{ 
-        min-width:160px; padding:8px 12px; border:1px solid #d1d5db; 
+        min-width:160px; padding:8px 32px 8px 12px; border:1px solid #d1d5db; 
         border-radius:8px; background:#fff; font-size:14px; font-family:inherit;
-        transition:border-color .2s ease, box-shadow .2s ease;
+        transition:border-color .2s ease, box-shadow .2s ease, background-position .2s ease;
+        -webkit-appearance:none; -moz-appearance:none; appearance:none;
+        background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 24 24" fill="none" stroke="%236b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>');
+        background-repeat:no-repeat; background-position:right 12px center;
       }
       .bp-table td select:focus{
         outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak);
       }
+      /* Hide default arrow for legacy Edge/IE */
+      #advOverlay .bp-table td select::-ms-expand{ display:none; }
       .bp-table.is-disabled{ opacity:.6 }
       .bp-toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
-      .mini{ 
-        padding:10px 16px; border:2px solid #e5e7eb; border-radius:12px; background:#fff; 
+      /* Align Glossary toolbar buttons with main toolbar styling */
+      #advOverlay .bp-toolbar .mini{ 
+        padding:10px 16px; border:1.5px solid #e5e7eb; border-radius:12px; background:#fff; 
         font-size:13px; font-weight:500; cursor:pointer; 
-        transition:all .18s ease; color:#374151; white-space:nowrap;
-        text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.08);
+        transition:border-color .18s ease, background-color .18s ease; color:#374151; white-space:nowrap;
+        text-align:center; box-shadow:none;
       }
-      .mini:hover{
-        background:#f8f9fa; transform:translateY(-1px);
-        border-color:#d1d5db; box-shadow:0 3px 8px rgba(0,0,0,.12);
+      #advOverlay .bp-toolbar .mini:hover{
+        background:#fff; border-color:var(--accent);
+        box-shadow:none; transform:none; color:#374151;
       }
+
+      /* Icon-only action within Glossary rows */
+      #advOverlay .bp-table .gl-row-del{ 
+        padding:6px; width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center;
+        border:1.5px solid #e5e7eb; border-radius:10px; background:#fff; box-shadow:none; cursor:pointer;
+        transition:border-color .18s ease, background-color .18s ease;
+      }
+      #advOverlay .bp-table .gl-row-del:hover{ background:#fff; border-color:var(--accent); }
       .mini.primary{ 
         background:var(--accent); color:#fff; font-weight:600;
         border:2px solid var(--accent); 
@@ -3986,26 +4025,31 @@ window.STYLE_MICROCOPY = {
       }
       .gl-switch.on::after{transform:translateX(24px)}
       .gl-label{font-size:13px; font-weight:500; color:#374151;}
-
       /* Phrasebook Saved (refined) */
       .pb-wrap{ display:grid; grid-template-columns:1fr; gap:12px; }
       /* When Saved sidebar is shown, use 2-column layout */
-      .pb-wrap[data-cols="2"]{ grid-template-columns:minmax(0,1fr) 320px; }
+      .pb-wrap[data-cols="2"]{ grid-template-columns:minmax(0,1fr) 480px; }
       .pb-wrap[data-cols="1"]{ grid-template-columns:1fr; }
       @media (max-width:980px){ .pb-wrap{ grid-template-columns:1fr } }
-      #advPhrasebook .pb-wrap{ grid-template-columns:1fr; } /* Phrasebook always full-width initially */
+      /* Ensure phrasebook can expand to two columns when sidebar visible */
+      #advPhrasebook .pb-wrap[data-cols="2"]{ grid-template-columns:minmax(0,1fr) 480px; }
       .pb-saved{ border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-soft); background:#fff; overflow:hidden; transition:transform .18s var(--ease), opacity .18s var(--ease) }
       .pb-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #f0f0f3; background:#fafafa; }
       .pb-head strong{ font-size:14px; font-weight:600; color:#1a1a1a; }
-      .pb-head .pb-search, .pb-head .pb-sort{ height:32px; padding:0 12px; border:1px solid #d1d5db; border-radius:8px; background:#fff; font-size:14px; font-family:inherit; transition:border-color .2s ease, box-shadow .2s ease; display:flex; align-items:center; line-height:1; }
-      .pb-head .pb-search:focus, .pb-head .pb-sort:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak); }
+      .pb-head .pb-search, .pb-head .pb-sort{ height:32px; padding:0 12px; border:1px solid #d1d5db; border-radius:8px; background:#fff; font-size:14px; font-family:inherit; transition:border-color .2s ease, box-shadow .2s ease, background-position .2s ease; display:flex; align-items:center; line-height:1; }
+      /* Align pb-sort caret like Glossary select */
+      .pb-head .pb-sort{ -webkit-appearance:none; -moz-appearance:none; appearance:none; padding-right:32px; background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 24 24" fill="none" stroke="%236b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'); background-repeat:no-repeat; background-position:right 10px center; }
+      #advOverlay .pb-head .pb-sort::-ms-expand{ display:none; }
+      .pb-head .pb-search:focus, .pb-head .pb-sort:focus{ outline:none; border-color:var(--accent) !important; box-shadow:0 0 0 3px var(--accent-weak) !important; }
+      /* Emphasize pb-sort outline on hover to match glossary */
+      .pb-head .pb-sort:hover{ border-color:var(--accent) !important; box-shadow:0 0 0 3px var(--accent-weak) !important; }
       .pb-list{ max-height:60vh; overflow:auto; padding:4px 4px }
       .pb-item{ display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-top:1px solid #f0f0f3; gap:12px; transition:background .15s ease; }
       .pb-item:hover{ background:#f8f9fa; }
       .pb-item:first-child{ border-top:none }
       .pb-meta{ font-size:12px; color:#6b7280; font-weight:400; }
-      .pb-star{ border:1px solid #e5e7eb; background:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; font-size:12px; font-weight:500; color:#374151; transition:all .15s ease; }
-      .pb-star:hover{ border-color:#d1d5db; background:#f9fafb; transform:translateY(-1px); }
+      .pb-star{ border:1.5px solid #e5e7eb; background:#fff; border-radius:10px; width:34px; height:34px; padding:0; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; color:#374151; transition:border-color .15s ease, background-color .15s ease; }
+      .pb-star:hover{ border-color:var(--accent); background:#fff; transform:none; }
       .pb-empty{ padding:20px; color:#6b7280; font-size:14px; text-align:center; background:#f8f9fa; border-radius:8px; margin:12px 0; }
 
       /* Slide-open affordance for small screens */
@@ -4043,6 +4087,28 @@ window.STYLE_MICROCOPY = {
       @media (pointer:coarse){
         .save-bubble{ transform:translate(-50%,-2px) scale(1) }
       }
+
+      /* Close button hover for Advanced Tools */
+      #advOverlay .lang-close{ border:1px solid var(--border); border-radius:10px; padding:6px 10px; background:#fff; color:#6b7280; transition:border-color .18s ease, color .18s ease; }
+      #advOverlay .lang-close:hover{ border-color:var(--accent); color:var(--accent); }
+      /* Close button hover for History and Brand Kit */
+      #histOverlay .lang-close{ border:1px solid var(--border); border-radius:10px; padding:6px 10px; background:#fff; color:#6b7280; transition:border-color .18s ease, color .18s ease; }
+      #histOverlay .lang-close:hover{ border-color:var(--accent); color:var(--accent); }
+      #brandOverlay .lang-close{ border:1px solid var(--border); border-radius:10px; padding:6px 10px; background:#fff; color:#6b7280; transition:border-color .18s ease, color .18s ease; }
+      #brandOverlay .lang-close:hover{ border-color:var(--accent); color:var(--accent); }
+
+      /* Brand Kit Reset button style */
+      #brandOverlay .mini{ border:1.5px solid #e5e7eb; background:#fff; border-radius:12px; padding:8px 12px; cursor:pointer; font-size:13px; font-weight:500; color:#374151; transition:border-color .15s ease }
+      #brandOverlay .mini:hover{ border-color:var(--accent); }
+
+      /* Phrasebook Clear button */
+      .pb-head .pb-clear{ height:32px; padding:0 12px; border:1.5px solid #e5e7eb; border-radius:8px; background:#fff; font-size:13px; font-weight:500; color:#374151; cursor:pointer; transition:border-color .18s ease; }
+      .pb-head .pb-clear:hover{ border-color:var(--accent); }
+
+      /* Brand Kit Save button — match main Submit */
+      #brandOverlay #bpSave{ background:var(--accent); color:#fff; border:1.5px solid var(--accent); border-radius:12px; padding:8px 16px; font-weight:500; transition:background .18s ease, color .18s ease, border-color .18s ease; box-shadow:none !important; transform:none !important; }
+      #brandOverlay #bpSave:hover{ background:#fff; color:#111; border-color:var(--accent); box-shadow:none !important; transform:none !important; }
+      #brandOverlay #bpSave:focus{ outline:none; }
     `;
     const st=document.createElement('style'); st.id='globalEnhanceCSS'; st.textContent=css; document.head.appendChild(st);
   }
@@ -4086,7 +4152,6 @@ window.STYLE_MICROCOPY = {
     btn.addEventListener('mouseenter',()=>{ btn.style.borderColor='var(--accent)'; btn.style.boxShadow='none'; });
     btn.addEventListener('mouseleave',()=>{ btn.style.borderColor=''; btn.style.boxShadow=''; });
   }
-
     /* ---------- Brand overlay (standalone) ---------- */
   function ensureBrandOverlay(){
     if(document.getElementById('brandOverlay')) return;
@@ -4214,8 +4279,8 @@ window.STYLE_MICROCOPY = {
       // Persist locally
       writeJSON(BRAND_KEY,next);
       // Optimistic flash
-      if (btn) { btn.classList.add('flash-save'); btn.textContent='Saved ✓'; }
-      setTimeout(()=>{ if(btn && btn.classList){ btn.classList.remove('flash-save'); btn.textContent='Save'; } },900);
+      if (btn) { btn.textContent='Saved ✓'; }
+      setTimeout(()=>{ if(btn){ btn.textContent='Save'; } },900);
 
       // Sync to server (upsert first kit for this user)
       try{
@@ -4268,14 +4333,12 @@ window.STYLE_MICROCOPY = {
       showToast('Brand kit reset');
     });
   }
-
   function openBrandOverlay(){
     const ov=document.getElementById('brandOverlay'); if(!ov) return;
     ov.classList.add('show'); ov.setAttribute('aria-hidden','false');
     const onKey=e=>{if(e.key==='Escape'){ ov.classList.remove('show'); ov.setAttribute('aria-hidden','true'); document.removeEventListener('keydown',onKey); }};
     document.addEventListener('keydown',onKey);
   }
-
   /* ---------- Advanced Tools overlay (Glossary + Phrasebook Saved) ---------- */
   function ensureAdvancedOverlay(){
     if(document.getElementById('advOverlay')) return;
@@ -4286,7 +4349,6 @@ window.STYLE_MICROCOPY = {
     wrap.setAttribute('role','dialog');
     wrap.setAttribute('aria-modal','true');
     wrap.setAttribute('aria-hidden','true');
-
     wrap.innerHTML=`
       <div class="lang-sheet" role="document" style="max-width:980px">
         <div class="lang-head">
@@ -4301,7 +4363,7 @@ window.STYLE_MICROCOPY = {
           <button class="adv-tab" data-pane="advPhrasebook">Phrasebook</button>
         </div>
 
-        <div class="lang-grid" id="advGrid">
+        <div class="lang-grid" id="advGrid" style="padding-right:8px">
           <!-- Glossary (with Saved sidebar) -->
           <div class="adv-pane active" id="advGlossary">
             <div class="pb-wrap" data-cols="1">
@@ -4324,16 +4386,17 @@ window.STYLE_MICROCOPY = {
                   <table id="glTable">
                     <thead>
                       <tr>
-                        <th style="width:25%">Source term</th>
-                        <th style="width:25%">Preferred translation</th>
-                        <th style="width:20%">Flags</th>
-                        <th style="width:30%">Notes</th>
+                        <th style="width:26%">Source term</th>
+                        <th style="width:26%">Preferred translation</th>
+                        <th style="width:18%">Flags</th>
+                        <th style="width:26%">Notes</th>
+                        <th style="width:4%"></th>
                       </tr>
                     </thead>
                     <tbody></tbody>
                   </table>
                 </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding:8px 16px;background:#f8f9fa;border-radius:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding:8px 0;">
                   <div id="glStats" style="font-size:13px; color:#6b7280; font-weight:400;">0 terms</div>
                   <div style="font-size:13px; color:#6b7280; font-weight:400;text-align:right;line-height:1.4;">Tip: leave "Preferred translation" blank + lock → keep product names untranslated.</div>
                 </div>
@@ -4372,11 +4435,12 @@ window.STYLE_MICROCOPY = {
                       <option value="az">A → Z</option>
                       <option value="za">Z → A</option>
                     </select>
+                    <button class="pb-clear" type="button" title="Clear all saved phrases">Clear</button>
                   </div>
                 </div>
                 <div class="pb-list"></div>
               </div>
-              <div id="pbHowTo" style="grid-column:1/-1;padding:16px 20px;background:#f8f9fa;border-radius:8px;margin-top:16px;">
+              <div id="pbHowTo" style="grid-column:1/-1;padding:8px 0;margin-top:8px;">
                 <div style="font-size:13px; color:#6b7280; font-weight:400; line-height:1.4;">
                   Tip: select text in the Result and click <strong style="color:#374151;">Save to Phrasebook</strong>. In Split View, it saves the paired source line automatically.
                 </div>
@@ -4499,7 +4563,7 @@ window.STYLE_MICROCOPY = {
   function buildGlossaryTable(focusLast=false){
     const tb=document.querySelector('#glTable tbody'); if(!tb) return;
     const rows=readJSON(GLOSSARY_KEY, defGlossary);
-    tb.innerHTML = rows.length ? '' : `<tr><td colspan="4" class="pb-empty">No glossary terms yet</td></tr>`;
+    tb.innerHTML = rows.length ? '' : `<tr><td colspan="5" class="pb-empty">No glossary terms yet</td></tr>`;
     rows.forEach((row,i)=>{
       const tr=document.createElement('tr');
       tr.innerHTML=`
@@ -4520,6 +4584,16 @@ window.STYLE_MICROCOPY = {
           </div>
         </td>
         <td><input data-k="notes" data-i="${i}" type="text" placeholder="Notes" value="${escapeHTML(row.notes||'')}"></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="gl-row-del" data-i="${i}" title="Remove this term" aria-label="Remove row">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2l-1-14"/>
+              <path d="M10 11v6M14 11v6"/>
+              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </td>
       `;
       tb.appendChild(tr);
     });
@@ -4536,6 +4610,15 @@ window.STYLE_MICROCOPY = {
       const stat=document.getElementById('glStats'); if(stat) stat.textContent = `${cur.length} term${cur.length!==1?'s':''}`;
     };
     tb.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',debounce(save,150)));
+    tb.querySelectorAll('.gl-row-del').forEach(btn=>btn.addEventListener('click', e=>{
+      const idx = Number(e.currentTarget.getAttribute('data-i'));
+      const cur = readJSON(GLOSSARY_KEY, defGlossary);
+      if(Number.isFinite(idx) && cur[idx]){
+        cur.splice(idx,1);
+        writeJSON(GLOSSARY_KEY, cur);
+        buildGlossaryTable();
+      }
+    }));
     const stat=document.getElementById('glStats'); if(stat) stat.textContent = `${rows.length} term${rows.length!==1?'s':''}`;
     if(focusLast){
       const last=tb.querySelector('tr:last-child input[data-k="src"]'); last?.focus();
@@ -4591,7 +4674,6 @@ window.STYLE_MICROCOPY = {
     const rows=parsePairsCSVorTSV(text);
     return rows.map(r=>({src:r.src,tgt:r.tgt,flags:{lock:true,case:'auto'},notes:r.notes||''}));
   }
-
   /* ---------- Compose injections (Brand + Glossary only) ---------- */
   function composeInjections(){
     const brand = readJSON(BRAND_KEY, defBrand);
@@ -4728,7 +4810,7 @@ ${lines.join('\n')}`);
     updateSplitButton();
   }
 
-  /* ---------- Phrasebook (server-backed “Saved”) ---------- */
+  /* ---------- Phrasebook (server-backed "Saved") ---------- */
   async function pbAPI(path, method='GET', body=null){
     const headers={'Content-Type':'application/json','Cache-Control':'no-cache'};
     const token = localStorage.getItem('authToken');
@@ -4811,6 +4893,88 @@ ${lines.join('\n')}`);
       throw error;
     }
   }
+  // Lightweight language detector for display purposes only
+  function detectLanguageName(text){
+    const s = String(text||'').trim(); if(!s) return '';
+    // Fast path: Scripts with unique Unicode blocks
+    if(/[\u4E00-\u9FFF]/.test(s)) return 'Chinese';           // Han
+    if(/[\u3040-\u30FF]/.test(s)) return 'Japanese';           // Hiragana/Katakana
+    if(/[\uAC00-\uD7AF]/.test(s)) return 'Korean';             // Hangul
+    if(/[\u0400-\u04FF]/.test(s)) return 'Cyrillic';           // Russian/Ukrainian/Bulgarian
+    if(/[\u0600-\u06FF]/.test(s)) return 'Arabic';             // Arabic/Persian/Urdu
+    if(/[\u0590-\u05FF]/.test(s)) return 'Hebrew';
+    if(/[\u0370-\u03FF]/.test(s)) return 'Greek';
+    if(/[\u0900-\u097F]/.test(s)) return 'Hindi';              // Devanagari
+    if(/[\u0980-\u09FF]/.test(s)) return 'Bengali';
+    if(/[\u0A00-\u0A7F]/.test(s)) return 'Punjabi';            // Gurmukhi
+    if(/[\u0A80-\u0AFF]/.test(s)) return 'Gujarati';
+    if(/[\u0B00-\u0B7F]/.test(s)) return 'Odia';
+    if(/[\u0B80-\u0BFF]/.test(s)) return 'Tamil';
+    if(/[\u0C00-\u0C7F]/.test(s)) return 'Telugu';
+    if(/[\u0C80-\u0CFF]/.test(s)) return 'Kannada';
+    if(/[\u0D00-\u0D7F]/.test(s)) return 'Malayalam';
+    if(/[\u0D80-\u0DFF]/.test(s)) return 'Sinhala';
+    if(/[\u0E00-\u0E7F]/.test(s)) return 'Thai';
+    if(/[\u0E80-\u0EFF]/.test(s)) return 'Lao';
+    if(/[\u1780-\u17FF]/.test(s)) return 'Khmer';
+    if(/[\u10A0-\u10FF]/.test(s)) return 'Georgian';
+    if(/[\u0530-\u058F]/.test(s)) return 'Armenian';
+
+    // Latin-based heuristics (order matters; use strong, unique signals first)
+    const lower = s.toLowerCase();
+
+    // Turkish (very distinctive)
+    if(/[ğüşöçıİ]/i.test(s)) return 'Turkish';
+
+    // Polish
+    if(/[ąćęłńóśźż]/i.test(s)) return 'Polish';
+
+    // Czech / Slovak (diacritics sets)
+    if(/[ěščřžůďťň]/i.test(s)) return 'Czech';
+    if(/[áäčďéíľĺňóôŕšťúýž]/i.test(s)) return 'Slovak';
+
+    // Romanian
+    if(/[ăâîșşţț]/i.test(s)) return 'Romanian';
+
+    // Portuguese (check before Spanish/French)
+    if(/[ãõ]/.test(lower) || /(ção|ções|ões|ção)/i.test(lower)) return 'Portuguese';
+    if(/\b(não|você|vocês|está|estão|também|porque|pois|pra|para|como|pode|ser|não)\b/.test(lower)) return 'Portuguese';
+
+    // Spanish
+    if(/[ñ¡¿]/.test(lower) || /\b(que|para|como|está|estás|están|pero|porque|gracias)\b/.test(lower)) return 'Spanish';
+
+    // French (avoid over-triggering on ç which appears in PT)
+    if(/[àâæçéèêëîïôœùûüÿ]/i.test(s) || /\b(avec|pour|sans|mais|merci)\b/.test(lower)) return 'French';
+
+    // German
+    if(/[äöüß]/i.test(s) || /\b(und|der|die|das|nicht|ich|danke|bitte|sein|mit)\b/.test(lower)) return 'German';
+
+    // Italian
+    if(/[àèéìòù]/i.test(s) || /\b(che|per|non|sono|grazie|ciao|questo|questa|con|una|uno)\b/.test(lower)) return 'Italian';
+
+    // Dutch
+    if(/\b(het|een|en|wij|jij|zijn|hebben|geen|met|voor)\b/.test(lower)) return 'Dutch';
+
+    // Hungarian
+    if(/[őű]/i.test(s)) return 'Hungarian';
+
+    // Scandinavian (rough grouping)
+    if(/[øæå]/i.test(s)) return 'Norwegian/Danish';
+    if(/[åäö]/i.test(s)) return 'Swedish';
+
+    // Vietnamese
+    if(/[ăâêôơưđ]/i.test(s)) return 'Vietnamese';
+
+    // Indonesian / Malay
+    const indoHits = (lower.match(/\b(yang|dan|tidak|itu|ini|atau|dengan|untuk|saya|kamu|kami|anda)\b/g)||[]).length;
+    if(indoHits>=2) return 'Bahasa';
+
+    // English
+    const engHits = (lower.match(/\b(the|and|you|are|is|to|of|in|for|with)\b/g)||[]).length;
+    if(engHits>=2) return 'English';
+
+    return '';
+  }
   async function pbDelete(id){ 
     try {
       console.log('📚 Starting delete for ID:', id);
@@ -4842,8 +5006,21 @@ ${lines.join('\n')}`);
     document.querySelectorAll('.pb-saved').forEach(box=>{
       const s=box.querySelector('.pb-search');
       const o=box.querySelector('.pb-sort');
+      const c=box.querySelector('.pb-clear');
       s?.addEventListener('input',()=>renderSavedPhrasebook(box));
       o?.addEventListener('change',()=>renderSavedPhrasebook(box));
+      c?.addEventListener('click', async ()=>{
+        try{
+          const items = await pbLoad(true);
+          for(const it of (items||[])){
+            if(it?.id) await pbDelete(it.id);
+          }
+          phrasebookCache = [];
+          lastCacheTime = Date.now();
+          await renderSavedPhrasebookAll();
+          window.showNotification && window.showNotification('Cleared', 'All saved phrases removed', 'success');
+        }catch(e){ console.error('Clear all failed', e); window.showNotification && window.showNotification('Clear failed','Could not remove all','error'); }
+      });
     });
     renderSavedPhrasebookAll();
   }
@@ -4865,6 +5042,7 @@ ${lines.join('\n')}`);
       console.error('Phrasebook load error:', e); 
       items = []; // Fallback to empty array
     }
+
     items = items.filter(it=>{
       if(!q) return true;
       const s = `${it.srcText} ${it.tgtText} ${it.srcLang} ${it.tgtLang}`.toLowerCase();
@@ -4879,10 +5057,10 @@ ${lines.join('\n')}`);
       return 0;
     });
 
-    if(!items.length){ listEl.innerHTML = `<div class="pb-empty">Nothing saved yet. Select text in the Result and click “Save to Phrasebook”.</div>`; return; }
+    if(!items.length){ listEl.innerHTML = `<div class="pb-empty">Nothing saved yet. Select text in the Result and click "Save to Phrasebook".</div>`; return; }
 
     listEl.innerHTML = items.map(it=>{
-      const dir = `${escapeHTML(it.srcLang||'Auto')} → ${escapeHTML(it.tgtLang||'')}`;
+      const dir = `${escapeHTML('Auto')} → ${escapeHTML(it.tgtLang||'')}`;
       const when = new Date(it.createdAt||Date.now()).toLocaleString();
       return `<div class="pb-item" data-id="${it.id}">
         <div style="min-width:0">
@@ -4890,7 +5068,14 @@ ${lines.join('\n')}`);
           <div class="pb-meta" title="${escapeHTML(it.srcText||'')}">${escapeHTML(it.srcText||'')}</div>
           <div class="pb-meta">${dir} · ${when}</div>
         </div>
-        <button class="pb-star" title="Remove">★</button>
+        <button class="pb-star" title="Remove" aria-label="Remove">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2l-1-14"/>
+            <path d="M10 11v6M14 11v6"/>
+            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+          </svg>
+        </button>
       </div>`;
     }).join('');
 
@@ -4948,9 +5133,9 @@ ${lines.join('\n')}`);
   function placeBubbleAtRect(r){
     const vpTop = window.scrollY;
     const centerX = window.scrollX + r.left + r.width/2;
-    const x = clamp(centerX, 80, document.documentElement.clientWidth - 80);
+    const x = clamp(centerX, 60, document.documentElement.clientWidth - 60);
     const roomAbove = r.top;
-    const top = (roomAbove > 64) ? (vpTop + r.top - 12) : (vpTop + r.bottom + 12);
+    const top = (roomAbove > 64) ? (vpTop + r.top - 10) : (vpTop + r.bottom + 10);
     return { x, y: top };
   }
   function showSaveBubbleAtRect(r, payload){
@@ -4970,7 +5155,7 @@ ${lines.join('\n')}`);
     try{
       await pbAdd({
         id:'pb_'+Date.now().toString(36)+Math.random().toString(36).slice(2),
-        srcLang: data.srcLang || 'Auto',
+        srcLang: 'Auto',
         tgtLang: data.tgtLang || (targetLanguage || ''),
         srcText: data.srcText || '',
         tgtText: data.tgtText || '',
@@ -4981,7 +5166,7 @@ ${lines.join('\n')}`);
       if (phrasebookCache) {
         phrasebookCache.unshift({
           id: 'pb_' + Date.now().toString(36) + Math.random().toString(36).slice(2),
-          srcLang: data.srcLang || 'Auto',
+          srcLang: 'Auto',
           tgtLang: data.tgtLang || (targetLanguage || ''),
           srcText: data.srcText || '',
           tgtText: data.tgtText || '',
@@ -5029,7 +5214,6 @@ ${lines.join('\n')}`);
       return (best && best.src) ? String(best.src) : srcSeg;
     }catch{ return srcSeg; }
   }
-
   function getSelectionRect(){
     const sel=window.getSelection();
     if(!sel || sel.rangeCount===0) return null;
@@ -5056,7 +5240,7 @@ ${lines.join('\n')}`);
 
   // Show bubble immediately, refine the payload when alignment returns
   function showNowThenRefine(rect, srcSeg, tgtSeg, txt){
-    const initial = { tgtText:txt, srcText:srcSeg||'', srcLang:'Auto', tgtLang: currentTargetLangLabel() };
+    const initial = { tgtText:txt, srcText:srcSeg||'', srcLang: 'Auto', tgtLang: currentTargetLangLabel() };
     showSaveBubbleAtRect(rect, initial);
     alignSrcForSelection(srcSeg, tgtSeg, txt).then(refined=>{
       try{
@@ -5070,7 +5254,6 @@ ${lines.join('\n')}`);
       }catch{}
     });
   }
-
   /* Wire selection listeners for: outputRich, outputText, split SRT & split non-SRT */
   function initSaveSelectionUI(){
     // Normal rich area
@@ -5127,10 +5310,16 @@ ${lines.join('\n')}`);
     // Split non-SRT (plain divs)
     const tgtBox = document.getElementById('segTgtBox');
     if(tgtBox){
-      tgtBox.addEventListener('mouseup', ()=>{
+      tgtBox.addEventListener('mouseup', (e)=>{
         const txt = (window.getSelection()?.toString()||'').trim();
         if(!txt) return;
-        const r=getSelectionRect(); if(!r) return;
+        let r=getSelectionRect();
+        if(!r){
+          // Fallback rect for non-text nodes in split view
+          const el = e.target.closest('.segrow') || tgtBox;
+          const rr = el.getBoundingClientRect();
+          r = { left: rr.left + rr.width/2, width:0, top: rr.top + 6, bottom: rr.top + 18, height:12 };
+        }
         const { srcSeg, tgtSeg } = findSegForSelectionInDoc(txt);
         showNowThenRefine(r, srcSeg, tgtSeg, txt);
       });
@@ -5157,7 +5346,6 @@ ${lines.join('\n')}`);
       if(saveBubble && !saveBubble.contains(e.target) && !e.target.closest('.save-bubble')) saveBubble.classList.remove('show');
     });
   }
-
   /* ---------- Tabs: enable drag-reorder ---------- */
   function initTabDnD(){
     const bar = document.getElementById('tabBar'); if(!bar) return;
@@ -5199,7 +5387,6 @@ ${lines.join('\n')}`);
       renderTabs(); // re-render reflect order
     });
   }
-
   /* ---------- Boot ---------- */
   document.addEventListener('DOMContentLoaded',()=>{
     // Usage mini dropdown handlers
@@ -5480,7 +5667,6 @@ ${lines.join('\n')}`);
       fetchSettingsTokens();
       refreshSettingsData();
     }
-
     function hideSettings(){
       // Check if billing dialog is open
       const billingDialog = document.getElementById('billingDialog');
@@ -5537,7 +5723,6 @@ ${lines.join('\n')}`);
       
       try{ history.replaceState(null, '', '/'); }catch{}
     }
-
     function activateSettingsTab(sel){
       const links = Array.from(document.querySelectorAll('.settings-link'));
       const btn = links.find(b=>b.dataset.target===sel);
@@ -5719,7 +5904,6 @@ ${lines.join('\n')}`);
       }
       return headers;
     }
-
     function wireSettings(){
       const btn = document.getElementById('settingsBtn');
       if (btn && !btn._wired){ btn._wired = true; btn.addEventListener('click', showSettings); }
@@ -5877,7 +6061,6 @@ ${lines.join('\n')}`);
           }
         });
       }
-      
       // Password visibility toggles for new security page
       const togglePassword = (inputId, btnId) => {
         const input = document.getElementById(inputId);
@@ -5961,7 +6144,6 @@ ${lines.join('\n')}`);
           } catch (e) { showToast('Logout failed'); }
         });
       }
-      
       // Accessibility: Theme switching functionality
       const themeButtons = document.querySelectorAll('.theme-btn');
       themeButtons.forEach(btn => {
@@ -6184,7 +6366,6 @@ ${lines.join('\n')}`);
         // Focus first field initially
         setTimeout(() => cardNumberInput.focus(), 100);
       }
-
       // Billing dialog
       const openDlg = document.getElementById('openBillingDialog');
       const dlg = document.getElementById('billingDialog');
@@ -6319,7 +6500,6 @@ ${lines.join('\n')}`);
     if (location.pathname.startsWith('/settings')){
       window.addEventListener('load', ()=>{ wireSettings(); showSettings(); });
     }
-
     // Render header auth state
     window.renderAuthHeader = function renderAuthHeader(){
       try{
@@ -6373,7 +6553,6 @@ ${lines.join('\n')}`);
       }catch{}
     }
     renderAuthHeader();
-
     // Character limit system
     const TIER_LIMITS = {
       free: { maxInputSize: 1000, name: 'Free' },
@@ -6390,7 +6569,6 @@ ${lines.join('\n')}`);
       // Compact meter relies on cumulative usage
       await updateCumulativeUsage();
     }
-
     async function updateCumulativeUsage() {
       const usageMini = document.getElementById('usageMini');
       const label = document.getElementById('usageMiniLabel');
@@ -6533,7 +6711,6 @@ ${lines.join('\n')}`);
       const tierConfig = window.getTierLimit ? window.getTierLimit(tier) : TIER_LIMITS[tier] || TIER_LIMITS.free;
       return text.length <= tierConfig.maxInputSize;
     }
-
     // Initialize character limit system
     async function initCharacterLimits() {
       if (window.updateCharacterLimit) {
@@ -6575,7 +6752,6 @@ ${lines.join('\n')}`);
     window.updateCurrentTabCharacterCount = updateCurrentTabCharacterCount;
     window.checkCharacterLimit = checkCharacterLimit;
     window.getTierLimit = getTierLimit;
-
     // Initialize character limits when DOM is ready
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initCharacterLimits);
@@ -6626,7 +6802,6 @@ ${lines.join('\n')}`);
     // Only show login modal if explicitly requested
   });
 </script>
-
 <!-- Socket.IO for real-time job progress -->
 <script src="/socket.io/socket.io.js"></script>
 
@@ -6885,7 +7060,6 @@ ${lines.join('\n')}`);
     // Close button
     notification.querySelector('.notification-close').addEventListener('click', removeNotification);
   };
-  
   // Quick authentication system
   window.quickLogin = async function() {
     try {
@@ -6927,7 +7101,6 @@ ${lines.join('\n')}`);
       throw error;
     }
   };
-  
   // Auto-login on page load if no token
   window.autoLogin = async function() {
     const token = localStorage.getItem('authToken');

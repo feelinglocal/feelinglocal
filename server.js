@@ -1560,6 +1560,23 @@ GLOBAL SUBTITLE/DUBBING RULES:
    Do NOT merge them into one line. Keep 1:1 line mapping with leading dashes.
 `;
 
+/** Language lock and censored-word rules (global) */
+const LANGUAGE_LOCK_RULES = `
+LANGUAGE LOCK (CRITICAL):
+- For translation: Output MUST be exclusively in {TARGET_LANG}. Do not code-switch.
+- For rephrase mode: Output MUST stay in the exact same language as the input.
+- Proper nouns/brand names may remain as-is, but surrounding grammar must be {TARGET_LANG}.
+- Do NOT add explanations or translator notes. Return only the result.
+`;
+
+const CENSORSHIP_RULES = `
+CENSORED/OBSCENITY HANDLING:
+- ONLY apply masking when the source item contains masked profanities. If the source is uncensored, do NOT introduce censorship.
+- When masking applies: infer the intended term, translate/localize it appropriately, then re-apply censorship using the same style.
+- Default mask style (if unclear): reveal the first letter only and replace the second letter with "*", keeping the rest intact (e.g., "Salope" → "S*lope", "Bitch" → "B*tch", "Slut" → "S*ut").
+- Preserve punctuation and surrounding context; never add extra masks or notes.
+`;
+
 /* ---------------- Helpers: local, non-redeclaring ---------------- */
 
 // Local versions so we never depend on globals defined elsewhere
@@ -1810,6 +1827,87 @@ function sanitizeWithSource(txt = '', srcText = '', targetLanguage = '') {
   out = out.replace(/\.\.\.\.+/g, '...'); // Preserve ... but not ....
   out = out.replace(/([^.])\.\.$/, '$1...'); // Fix broken ellipsis
   
+  // Ensure censored words remain censored if present in source
+  out = enforceCensoredMask(srcText, out, targetLanguage);
+  
+  return out;
+}
+
+/** Censored/profanity handling helpers */
+const PROFANITY = {
+  en: ['bitch','fuck','fucking','asshole','bastard','slut','whore','shit','dick','cunt'],
+  fr: ['salope','putain','connard','con','merde','enculé','enfoiré','pute'],
+  es: ['puta','puto','cabron','cabrón','mierda','coño','pendejo'],
+  id: ['kontol','memek','anjing','bangsat','goblok','cuk','tai']
+};
+
+function normalizeLangTag(s = '') {
+  const t = String(s || '').toLowerCase();
+  if (!t) return 'unknown';
+  if (/(^|\b)(en|english)(\b|$)/.test(t)) return 'en';
+  if (/(^|\b)(fr|fra|french|français|francais)(\b|$)/.test(t)) return 'fr';
+  if (/(^|\b)(es|spa|spanish|español|espanol)(\b|$)/.test(t)) return 'es';
+  if (/(^|\b)(id|ind|indonesian|bahasa indonesia)(\b|$)/.test(t)) return 'id';
+  if (/(^|\b)(zh|chi|chinese|中文|汉语|漢語)(\b|$)/.test(t)) return 'zh';
+  if (/(^|\b)(ja|jpn|japanese|日本語)(\b|$)/.test(t)) return 'ja';
+  if (/(^|\b)(ru|rus|russian|русский)(\b|$)/.test(t)) return 'ru';
+  if (/(^|\b)(ar|ara|arabic|العربية)(\b|$)/.test(t)) return 'ar';
+  return t.slice(0,2);
+}
+
+function detectLanguageSimple(text = '') {
+  const s = String(text || '').trim();
+  if (!s) return 'unknown';
+  // Script-based quick checks
+  if (/[\p{sc=Han}]/u.test(s)) return 'zh';
+  if (/[\p{sc=Hiragana}\p{sc=Katakana}]/u.test(s)) return 'ja';
+  if (/[\p{sc=Cyrillic}]/u.test(s)) return 'ru';
+  if (/[\p{sc=Arabic}]/u.test(s)) return 'ar';
+
+  const lower = s.toLowerCase();
+  let scores = { en:0, fr:0, es:0, id:0 };
+  // English markers
+  for (const w of [' the ',' and ',' you ',' of ',' to ',' in ',' that ',' it ',' for ',' i ']) if (lower.includes(w)) scores.en++;
+  // French markers
+  for (const w of [' le ',' la ',' les ',' et ',' je ',' est ',' pas ',' que ',' pour ',' avec ']) if (lower.includes(w)) scores.fr++;
+  // Spanish markers
+  for (const w of [' el ',' la ',' los ',' y ',' que ',' no ',' es ',' con ',' para ',' una ',' un ',' por ']) if (lower.includes(w)) scores.es++;
+  if (/[¡¿]/.test(s)) scores.es += 2;
+  // Indonesian markers
+  for (const w of [' yang ',' dan ',' di ',' ke ',' dari ',' ini ',' itu ',' tidak ',' aku ',' kamu ',' dia ',' kita ',' mereka ']) if (lower.includes(w)) scores.id++;
+
+  const best = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0];
+  if (!best || best[1] === 0) return 'unknown';
+  return best[0];
+}
+
+function maskWordSimple(word) {
+  if (!word) return word;
+  // If the token already includes a mask, keep it as-is
+  if (word.includes('*')) return word;
+  if (word.length < 2) return word;
+  // Reveal first letter, mask the second, keep rest intact
+  return word[0] + '*' + word.slice(2);
+}
+
+function enforceCensoredMask(srcText = '', outText = '', targetLanguage = '') {
+  // Only apply masking if source contains a masked token
+  const srcHasMask = /\b\p{L}+[\p{L}'-]*\*+[\p{L}'-]+\b/iu.test(String(srcText||''));
+  if (!srcHasMask) return outText;
+
+  // If target already includes masked tokens, keep as-is
+  if (/\b\p{L}+[\p{L}'-]*\*+[\p{L}'-]+\b/iu.test(String(outText||''))) return outText;
+
+  // Attempt to re-apply masking to localized profane tokens
+  const tgtCode = normalizeLangTag(targetLanguage) || detectLanguageSimple(outText);
+  const badList = PROFANITY[tgtCode] || [];
+  let out = outText;
+  if (badList.length) {
+    for (const bad of badList) {
+      const re = new RegExp(`\\b(${bad})\\b`, 'gi');
+      out = out.replace(re, (m) => maskWordSimple(m));
+    }
+  }
   return out;
 }
 
@@ -1884,11 +1982,18 @@ QUALITY CHECK BEFORE RETURN:
       TEXT: text,
     });
 
+    const renderedLockRules = safeRenderTemplate(LANGUAGE_LOCK_RULES, {
+      TARGET_LANG: 'the same language as the input'
+    });
+
     const commonTail = `
 ${STYLE_GUARD}
 ${needsSubtitleRules ? SUBTITLE_OVERRIDES : ''}
 
 ${injBlock ? injBlock + '\n' : ''}
+
+${renderedLockRules}
+${CENSORSHIP_RULES}
 
 ${renderedQA}
 
@@ -1918,11 +2023,18 @@ ${commonTail}`.trim();
     TEXT: text,
   });
 
+  const renderedLockRules = safeRenderTemplate(LANGUAGE_LOCK_RULES, {
+    TARGET_LANG: targetLanguage || 'the same language as the input'
+  });
+
   const commonTail = `
 ${STYLE_GUARD}
 ${needsSubtitleRules ? SUBTITLE_OVERRIDES : ''}
 
 ${injBlock ? injBlock + '\n' : ''}
+
+${renderedLockRules}
+${CENSORSHIP_RULES}
 
 ${renderedQA}
 
@@ -3163,6 +3275,26 @@ app.post('/api/translate',
         let arr = parseJsonArrayStrict(raw, chunk.length);
         for (let i = 0; i < arr.length; i++) {
           arr[i] = sanitizeWithSource(arr[i] || '', chunk[i] || '', targetLanguage);
+          // Language lock QA: ensure translated output is in target language when applicable
+          if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
+            const det = detectLanguageSimple(arr[i]);
+            const want = normalizeLangTag(targetLanguage);
+            if (det !== 'unknown' && want && det !== want) {
+              // If mismatch, force minimal correction via a tiny prompt pass
+              try {
+                const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${arr[i]}\n\n<result>`;
+                const fixRaw = await callOpenAIWithRetry({
+                  messages: [
+                    { role: 'system', content: 'You convert text to the requested language without altering meaning.' },
+                    { role: 'user', content: fixPrompt }
+                  ],
+                  temperature: Math.max(0, Math.min(0.2, temperature || 0))
+                });
+                const fixed = (extractResultTagged ? extractResultTagged(fixRaw) : fixRaw) || arr[i];
+                arr[i] = sanitizeWithSource(fixed, chunk[i] || '', targetLanguage);
+              } catch {}
+            }
+          }
         }
         results.push(...arr);
       }
@@ -3196,7 +3328,45 @@ app.post('/api/translate',
 
     const raw = (completion.choices?.[0]?.message?.content || '').trim();
     const body = extractResultTagged(raw) || '(no output)';
-    const clean = sanitizeWithSource(body, text, targetLanguage);
+    let clean = sanitizeWithSource(body, text, targetLanguage);
+    // Language lock QA for single translation
+    if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
+      const det = detectLanguageSimple(clean);
+      const want = normalizeLangTag(targetLanguage);
+      if (det !== 'unknown' && want && det !== want) {
+        try {
+          const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
+          const fixRaw = await callOpenAIWithRetry({
+            messages: [
+              { role: 'system', content: 'You convert text to the requested language without altering meaning.' },
+              { role: 'user', content: fixPrompt }
+            ],
+            temperature: 0
+          });
+          const fixed = extractResultTagged(fixRaw) || clean;
+          clean = sanitizeWithSource(fixed, text, targetLanguage);
+        } catch {}
+      }
+    }
+    // Rephrase mode: ensure language remains the same as input
+    if (rephrase && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
+      const srcLang = detectLanguageSimple(text);
+      const outLang = detectLanguageSimple(clean);
+      if (srcLang !== 'unknown' && outLang !== 'unknown' && srcLang !== outLang) {
+        try {
+          const fixPrompt = `Rephrase the following text in the EXACT SAME LANGUAGE as the input (do not translate). Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
+          const fixRaw = await callOpenAIWithRetry({
+            messages: [
+              { role: 'system', content: 'You rephrase without changing the language.' },
+              { role: 'user', content: fixPrompt }
+            ],
+            temperature: 0
+          });
+          const fixed = extractResultTagged(fixRaw) || clean;
+          clean = sanitizeWithSource(fixed, text, targetLanguage);
+        } catch {}
+      }
+    }
     
     // Defer usage accounting until response finishes successfully
     const usedCharsTotal = text.length + clean.length;
@@ -3285,6 +3455,11 @@ ${STYLE_GUARD}
 ${needsSubtitleRules ? SUBTITLE_OVERRIDES : ''}
 
 ${injBlock ? injBlock + '\n' : ''}
+
+${safeRenderTemplate(LANGUAGE_LOCK_RULES, {
+  TARGET_LANG: targetLanguage || 'the same language as the input'
+})}
+${CENSORSHIP_RULES}
 
 ${safeRenderTemplate(QA_BLOCK, {
   TARGET_LANG: targetLanguage || 'the same language as the input'
@@ -3635,7 +3810,10 @@ app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
       return res.json({ items });
     }
     // Fallback to PG (dev/local)
-    const rows = await prisma.$queryRaw`select id, src_text, tgt_text, src_lang, tgt_lang, extract(epoch from created_at)*1000 as created_ms from public.phrasebook_items where user_id = ${userId} order by created_at desc`;
+    const rows = await prisma.$queryRawUnsafe(
+      'select id, src_text, tgt_text, src_lang, tgt_lang, extract(epoch from created_at)*1000 as created_ms from public.phrasebook_items where user_id = $1::uuid order by created_at desc',
+      userIdForDb
+    );
     const items = (rows||[]).map(r=>({ id: String(r.id), srcLang: String(r.src_lang||''), tgtLang: String(r.tgt_lang||''), srcText: String(r.src_text||''), tgtText: String(r.tgt_text||''), createdAt: Number(r.created_ms)||Date.now() }));
     return res.json({ items });
   }catch(e){ console.error('pb list', e?.message||e); res.status(500).json({ items: [] }); }
@@ -3672,7 +3850,14 @@ app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), asyn
       return res.json({ ok:true, id: String(created.id||''), createdAt: new Date(created.created_at||Date.now()).getTime() });
     }
     // Fallback PG
-    const rows = await prisma.$queryRaw`insert into public.phrasebook_items (user_id, src_text, tgt_text, src_lang, tgt_lang) values (${userId}, ${String(it.srcText||'')}, ${String(it.tgtText||'')}, ${String(it.srcLang||'Auto')}, ${String(it.tgtLang||'')}) returning id, extract(epoch from created_at)*1000 as created_ms`;
+    const rows = await prisma.$queryRawUnsafe(
+      'insert into public.phrasebook_items (user_id, src_text, tgt_text, src_lang, tgt_lang) values ($1::uuid, $2, $3, $4, $5) returning id, extract(epoch from created_at)*1000 as created_ms',
+      userIdForDb,
+      String(it.srcText||''),
+      String(it.tgtText||''),
+      String(it.srcLang||'Auto'),
+      String(it.tgtLang||'')
+    );
     const created = Array.isArray(rows)&&rows[0]?rows[0]:{};
     return res.json({ ok:true, id: String(created.id||''), createdAt: Number(created.created_ms)||Date.now() });
     const data = pbRead(userId);
@@ -3713,7 +3898,11 @@ app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), a
       return res.json({ ok:true });
     }
     // Fallback PG (dev)
-    const result = await prisma.$executeRaw`delete from public.phrasebook_items where id = ${id} and user_id = ${userId}`;
+    await prisma.$executeRawUnsafe(
+      'delete from public.phrasebook_items where id = $1::uuid and user_id = $2::uuid',
+      id,
+      userIdForDb
+    );
     return res.json({ ok:true });
     const data = pbRead(userId);
     data.items = (data.items||[]).filter(x=>String(x.id)!==String(id));
