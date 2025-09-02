@@ -1550,7 +1550,6 @@
       <div class="lang-grid" id="langGrid"></div>
     </div>
   </div>
-
   <!-- GSAP for animations -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script>
@@ -1611,7 +1610,7 @@
           "privacy-policies":"Kebijakan Privasi", constitutional:"Konstitusional",
           "patient-friendly-explanation":"Penjelasan Ramah Pasien", "research-abstracts":"Abstrak Riset",
           "clinical-documentation":"Dokumentasi Klinis", "health-campaigns":"Kampanye Kesehatan",
-          "news-reports":"用于及时报道，以\"五何\"开篇（何人何事何时何地为何）。",
+          "news-reports":"Laporan Berita",
           "editorial-opinion":"Opini Editorial", "feature-articles":"Artikel Fitur",
           "press-releases":"Siaran Pers", "internal-communications":"Komunikasi Internal",
           "investor-relations":"Hubungan Investor", "annual-reports":"Laporan Tahunan",
@@ -1659,7 +1658,7 @@
           general:"Général", academic:"Académique", scientific:"Scientifique",
           chat:"Discussion", gaming:"Jeu vidéo", "street-talk":"Argot de rue", comedy:"Comédie", "social-media":"Réseaux sociaux",
           promotional:"Promotionnel", persuasive:"Persuasif", "product-descriptions":"Descriptions produit",
-          "brand-storytelling":"Pour les pages \"À propos\" et des récits de campagne émotionnels.",
+          "brand-storytelling":"Narration de Marque",
           "seo-friendly":"Optimisé SEO", "email-campaigns":"Campagnes e‑mail",
           "event-promotion":"Promotion d'événement", "influencer-ugc-style":"Style influenceur/UGC",
           dialogue:"Dialogue", narration:"Narration",
@@ -1689,7 +1688,7 @@
           general:"General", academic:"Académico", scientific:"Científico",
           chat:"Chat", gaming:"Videojuegos", "street-talk":"Jerga callejera", comedy:"Comedia", "social-media":"Redes sociales",
           promotional:"Promocional", persuasive:"Persuasivo", "product-descriptions":"Descripciones de producto",
-          "brand-storytelling":"Para páginas \"Sobre nosotros\" y narrativas de campaña con emoción.",
+          "brand-storytelling":"Narrativa de Marca",
           "seo-friendly":"Optimizado para SEO", "email-campaigns":"Campañas de correo",
           "event-promotion":"Promoción de eventos", "influencer-ugc-style":"Estilo influencer/UGC",
           dialogue:"Diálogo", narration:"Narración",
@@ -1732,7 +1731,7 @@ window.STYLE_MICROCOPY = {
       promotional: "For offers and sales. Clear headlines and urgency.",
       persuasive: "For benefit-focused copy with a strong call to action.",
       "product-descriptions": "For product titles, features, specs, and benefits on product detail pages.",
-      "brand-storytelling": "Para páginas \"Sobre nosotros\" y narrativas de campaña con emoción.",
+      "brand-storytelling": "For About pages and campaign narratives with emotion.",
       "seo-friendly": "For keyword-smart copy, meta fields, and web/app copywriting.",
       "social-media": "For posts and ads. Hooks, hashtags, and short lines.",
       "email-campaigns": "For subject lines and body that drive clicks.",
@@ -3773,11 +3772,26 @@ window.STYLE_MICROCOPY = {
 
         /* ---------- Copy helper ---------- */
     async function copyText(sel, btnSel){
+      const n=$(sel);
+      const v=n?.value ?? n?.textContent ?? '';
+      const text=String(v||'');
       try{
-        const n=$(sel); const v=n?.value || n?.textContent || '';
-        await navigator.clipboard.writeText(v);
+        if(window.navigator?.clipboard?.writeText){
+          await window.navigator.clipboard.writeText(text);
+        }else{
+          throw new Error('Clipboard API unavailable');
+        }
+      }catch{
+        try{
+          const ta=document.createElement('textarea');
+          ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; ta.style.pointerEvents='none';
+          document.body.appendChild(ta); ta.focus(); ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }catch{}
+      }finally{
         const b=$(btnSel); if(b) animateCopy(b);
-      }catch{}
+      }
     }
 
     // ===========================================================
@@ -4679,14 +4693,15 @@ window.STYLE_MICROCOPY = {
     const brand = readJSON(BRAND_KEY, defBrand);
     const glossary = readJSON(GLOSSARY_KEY, defGlossary);
     const glossaryEnabled = readJSON(GLOSSARY_ENABLED_KEY, true)!==false;
+    const brandEnabled = readJSON('brandEnabled:v1', false) === true;
 
     const parts=[];
     // Brand
     const tone = (brand.tone||[]).filter(Boolean).join(', ');
     const name = (brand.name||'').trim();
-    if(tone || brand.audience || brand.doList || brand.dontList || brand.examples || name){
-      parts.push(`[BRAND VOICE]
-${name?`Brand: ${name}\n`:''}${tone?`Tone: ${tone}\n`:''}${brand.audience?`Audience: ${brand.audience}\n`:''}${brand.doList?`Do: ${brand.doList}\n`:''}${brand.dontList?`Don't: ${brand.dontList}\n`:''}${brand.examples?`Examples:\n${brand.examples}\n`:''}`.trim());
+    if(brandEnabled && (tone || brand.audience || brand.doList || brand.dontList || brand.examples || name)){
+      parts.push(`[BRAND VOICE — MANDATORY RULES]
+${name?`Brand: ${name}\n`:''}${tone?`Tone (apply consistently): ${tone}\n`:''}${brand.audience?`Audience (write for them): ${brand.audience}\n`:''}${brand.doList?`MUST DO:\n- ${String(brand.doList).replace(/\r?\n/g,'\n- ')}\n`:''}${brand.dontList?`DO NOT:\n- ${String(brand.dontList).replace(/\r?\n/g,'\n- ')}\n`:''}${brand.examples?`STYLE EXAMPLES (imitate voice, not wording):\n${brand.examples}\n`:''}Deviations from BRAND VOICE are errors unless they conflict with locked glossary terms.`.trim());
     }
 
     // Glossary (capped + only if enabled)

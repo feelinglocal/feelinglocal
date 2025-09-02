@@ -2031,7 +2031,7 @@ ${commonTail}`.trim();
 ${STYLE_GUARD}
 ${needsSubtitleRules ? SUBTITLE_OVERRIDES : ''}
 
-${injBlock ? injBlock + '\n' : ''}
+${injBlock ? '[FOLLOW BRAND VOICE EXACTLY — Tone, Audience, MUST DO, DO NOT, and Examples apply.]\n' + injBlock + '\n' : ''}
 
 ${renderedLockRules}
 ${CENSORSHIP_RULES}
@@ -3268,6 +3268,7 @@ app.post('/api/translate',
         const raw = await callOpenAIWithRetry({
           messages: [
             { role: 'system', content: 'You are an expert localization and translation assistant.' },
+            ...(renderInjections(injections) ? [{ role: 'system', content: renderInjections(injections) }] : []),
             { role: 'user', content: prompt }
           ],
           temperature
@@ -3322,6 +3323,8 @@ app.post('/api/translate',
       temperature: pickTemperature(mode, subStyle, rephrase),
       messages: [
         { role: 'system', content: 'You are an expert localization and translation assistant.' },
+        // Elevate brand/glossary/phrasebook injections as a high-priority system message when present
+        ...((renderInjections(injections) && renderInjections(injections).trim()) ? [{ role: 'system', content: renderInjections(injections) }] : []),
         { role: 'user', content: prompt },
       ],
     });
@@ -3450,11 +3453,11 @@ REPHRASE MODE (CRITICAL):
 
   const header = `
 You are an expert localization and translation assistant with advanced skills in cultural adaptation, style consistency, and terminology accuracy.
-Always strictly follow the provided style, substyle, tone, and language style guidelines.
+Always strictly follow the provided style, substyle, tone, and language style guidelines. Treat BRAND VOICE rules as mandatory unless they conflict with locked glossary terms.
 ${STYLE_GUARD}
 ${needsSubtitleRules ? SUBTITLE_OVERRIDES : ''}
 
-${injBlock ? injBlock + '\n' : ''}
+${injBlock ? '[FOLLOW BRAND VOICE EXACTLY — Tone, Audience, MUST DO, DO NOT, and Examples apply.]\n' + injBlock + '\n' : ''}
 
 ${safeRenderTemplate(LANGUAGE_LOCK_RULES, {
   TARGET_LANG: targetLanguage || 'the same language as the input'
@@ -3674,13 +3677,32 @@ app.post('/api/translate-batch',
         const raw = await callOpenAIWithRetry({
           messages: [
             { role: 'system', content: 'You are an expert localization and translation assistant.' },
+            ...(renderInjections(injections) ? [{ role: 'system', content: renderInjections(injections) }] : []),
             { role: 'user', content: prompt }
           ],
           temperature
         });
         let arr = parseJsonArrayStrict(raw, job.items.length);
         for (let i = 0; i < arr.length; i++) {
-          const sanitized = sanitizeWithSource(arr[i] || '', job.items[i] || '', targetLanguage);
+          let sanitized = sanitizeWithSource(arr[i] || '', job.items[i] || '', targetLanguage);
+          if (rephrase && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
+            const srcLang = detectLanguageSimple(job.items[i] || '');
+            const outLang = detectLanguageSimple(sanitized);
+            if (srcLang !== 'unknown' && outLang !== 'unknown' && srcLang !== outLang) {
+              try {
+                const fixPrompt = `Rephrase the following text in the EXACT SAME LANGUAGE as the input (do not translate). Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${sanitized}\n\n<result>`;
+                const fixRaw = await callOpenAIWithRetry({
+                  messages: [
+                    { role: 'system', content: 'You rephrase without changing the language.' },
+                    { role: 'user', content: fixPrompt }
+                  ],
+                  temperature: 0
+                });
+                const fixed = extractResultTagged(fixRaw) || sanitized;
+                sanitized = sanitizeWithSource(fixed, job.items[i] || '', targetLanguage);
+              } catch {}
+            }
+          }
           out[job.start + i] = sanitized;
         }
       }
