@@ -2498,11 +2498,78 @@ window.STYLE_MICROCOPY = {
                   <span class="tab-close" data-close="${d.id}" title="Close">×</span>
                 </button>`;
       }).join('');
-      // Click to activate
+      // Click to activate (defer to allow double-click detection)
       bar.querySelectorAll('.tab').forEach(el=>{
         el.addEventListener('click',e=>{
           if(e.target && e.target.matches('.tab-close')) return;
-          const id=el.getAttribute('data-id'); if(id){ activeId=id; renderTabs(); loadDocToUI(currentDoc());}
+          // Ignore clicks while renaming
+          if(el.classList.contains('renaming')) { clearTimeout(el._singleTimer); return; }
+          if(e.target && (e.target.tagName==='INPUT' || e.target.closest('input'))) { clearTimeout(el._singleTimer); return; }
+          clearTimeout(el._singleTimer);
+          el._singleTimer = setTimeout(()=>{
+            const id=el.getAttribute('data-id');
+            if(id){ activeId=id; renderTabs(); loadDocToUI(currentDoc()); }
+          }, 200);
+        });
+
+        // Double‑click to rename (cancel single-click)
+        el.addEventListener('dblclick', e=>{
+          clearTimeout(el._singleTimer);
+          const tab=el; const id=tab.getAttribute('data-id'); if(!id) return;
+          if(e.target && e.target.matches('.tab-close')) return;
+          const doc=docs.find(d=>d.id===id); if(!doc) return;
+          const titleSpan=tab.querySelector('.tab-title'); if(!titleSpan) return;
+          const old=doc.name||'';
+          const titleStyle = getComputedStyle(titleSpan);
+          const input=document.createElement('input');
+          input.type='text';
+          input.value=old;
+          input.className='tab-rename';
+          input.setAttribute('aria-label','Rename tab');
+          input.style.border='1px solid var(--border)';
+          input.style.borderRadius='8px';
+          input.style.font='inherit';
+          input.style.fontSize='13px';
+          input.style.padding='2px 6px';
+          input.style.minWidth='20px';
+          input.style.maxWidth='320px';
+          input.style.background='#fff';
+          input.style.outline='none';
+          input.style.width = Math.min(320, Math.max(20, measureTextWidth(old, titleStyle) + 14)) + 'px';
+          // Mark tab as editing and replace title with input
+          tab.classList.add('renaming');
+          titleSpan.replaceWith(input);
+          input.focus();
+          input.select();
+
+          const commit=(val)=>{
+            const name=(val||'').trim()||old;
+            if(name!==doc.name){ doc.name=name; }
+            // Re-render tabs to restore normal DOM and ensure ext/close remain
+            renderTabs();
+            // Keep the same active document
+            loadDocToUI(currentDoc());
+          };
+          const cancel=()=>{ renderTabs(); loadDocToUI(currentDoc()); };
+
+          // Prevent parent button activation while editing
+          ['click','mousedown','mouseup','dblclick'].forEach(evt=>{
+            input.addEventListener(evt, ev=>{ ev.stopPropagation(); }, true);
+          });
+          
+          input.addEventListener('keydown', ev=>{
+            // Handle commit/cancel and keep events local to the input
+            ev.stopPropagation();
+            if(ev.key==='Enter'){ ev.preventDefault(); ev.stopPropagation(); commit(input.value); }
+            else if(ev.key==='Escape'){ ev.preventDefault(); ev.stopPropagation(); cancel(); }
+          });
+          input.addEventListener('blur', ()=>commit(input.value));
+
+          // Live resize while typing
+          input.addEventListener('input', ()=>{
+            const px = Math.min(320, Math.max(20, measureTextWidth(input.value, titleStyle) + 14));
+            input.style.width = px + 'px';
+          });
         });
       });
       // Click to close
@@ -2511,6 +2578,19 @@ window.STYLE_MICROCOPY = {
       });
       enableDragScroll(bar);
       updateSplitButton();
+    }
+    // Measure text width with current styles to auto-size rename input / tab
+    function measureTextWidth(text, style){
+      try{
+        const canvas = measureTextWidth._c || (measureTextWidth._c=document.createElement('canvas'));
+        const ctx = canvas.getContext('2d');
+        const font = `${style.fontWeight||'normal'} ${style.fontSize||'13px'} ${style.fontFamily||'Inter, system-ui, sans-serif'}`;
+        ctx.font = font;
+        return ctx.measureText(String(text||'')).width;
+      }catch(_){
+        // Fallback approximate width per char
+        return String(text||'').length * 7;
+      }
     }
     /* Grab-to-scroll for tabs — fixed so clicks still work */
     function enableDragScroll(node){
