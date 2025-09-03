@@ -1243,12 +1243,17 @@ Adapt dates and citation formats to {TARGET_LANG} standards without altering sub
   },
 
   medical: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, ensuring it is clear, accurate, and suitable for a general medical context. Act as a {TARGET_LANG} medical translator. Deliver professional, easy-to-understand copy.
+    general: `"Translate and localize the following text into {TARGET_LANG} for a general medical context. Act as a {TARGET_LANG} medical translator. Deliver professional, clear, easy-to-understand copy.
 Guidelines
-Preserve meaning exactly.
-Use standard medical terminology; briefly explain complex terms if needed.
+Preserve meaning exactly; no additions or omissions.
+Use standard medical terms; briefly explain complex terms if needed.
 Keep tone neutral and factual; avoid jargon-heavy or oversimplified wording.
-Follow official {TARGET_LANG} grammar and spelling; ensure natural professional flow."\n\nText:\n{TEXT}`,
+Follow official {TARGET_LANG} grammar/spelling and natural professional flow.
+Terminology (authoritative)
+Prefer Dorland’s for human medical terms; use SNOMED CT (clinical concepts), ICD-10/11 (diagnoses), LOINC + UCUM/SI (labs/units), INN + ATC (drug names/classes), MedDRA/CTCAE (safety).
+Keep codes/units unchanged; prefer INN over brands.
+If official {TARGET_LANG} labels exist (e.g., national formulary/regulator), use them verbatim.
+Do not paraphrase standardized terms; a provided glossary overrides all"\n\nText:\n{TEXT}`,
     'patient-friendly-explanation': `"Translate and localize the following text into {TARGET_LANG}, making it clear, simple, and reassuring for patients. Act as a {TARGET_LANG} medical translator. Deliver accurate, culturally sensitive patient-facing copy.
 Guidelines
 Preserve meaning exactly (no additions or omissions).
