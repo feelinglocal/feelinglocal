@@ -59,6 +59,8 @@ A Node.js/Express application for translating and localizing text and document f
    - `S3_ENDPOINT` - S3 endpoint for compatible services like MinIO (optional)
    - `DEFAULT_FILE_TTL_HOURS` - Default file retention time in hours (default: 24)
    - `BACKUP_RETENTION_DAYS` - Database backup retention in days (default: 30)
+   - `STRICT_LANGUAGE_LOCK` - Enforce target-language lock and rephrase language preservation (default: true)
+   - `INJECTION_CAP` - Maximum characters for brand/glossary/phrasebook injections (default: 12000)
 
 ### Running the Application
 

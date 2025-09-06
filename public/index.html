@@ -233,6 +233,7 @@
     .settings-container{ padding:20px; min-height:85vh; display:flex; flex-direction:column }
     .settings-inner{ max-width:1000px; margin:0 auto; width:100%; flex:1; display:flex; flex-direction:column }
     .settings-logo{ font-size:32px; font-weight:700; color:var(--text); margin:0 0 20px; text-align:left }
+    .settings-logo img{ height:72px; width:auto; display:block }
     .settings-main-container{ background:#fff; border:none; border-radius:20px; box-shadow:var(--shadow-soft); overflow:hidden; flex:1; display:flex; flex-direction:column }
     .settings-header{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border) }
     .settings-nav-header{ display:flex; align-items:center; gap:8px }
@@ -545,6 +546,8 @@
     .shell{max-width:1100px;margin:28px auto 48px;padding:0 20px; position:relative; z-index:1; will-change:opacity, transform; min-height:calc(100vh - 76px)}
     .titlebar{display:flex;align-items:center;justify-content:space-between;gap:12px; position:relative; z-index:20; will-change:opacity, transform}
     .title{font-weight:700;letter-spacing:.2px;font-size:28px;margin:6px 0 18px}
+    .title-logo{display:flex;align-items:center;margin:6px 0 18px}
+    .title-logo img{height:72px;width:auto;display:block}
     .toolbar{display:flex;flex-direction:column;gap:8px;align-items:stretch}
     .toolbar-row{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
     .btn{appearance:none;border:1px solid var(--border);background:#fafafa;padding:9px 14px;border-radius:12px;font-size:14px;font-family:"Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.2px;transition:transform .12s var(--ease),box-shadow .12s var(--ease),background .12s,border-color .12s,opacity .12s;box-shadow:var(--shadow-soft);user-select:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:36px; transition:
@@ -947,7 +950,9 @@
 <body class="no-js">
   <div class="shell">
     <div class="titlebar">
-      <div class="title" data-i18n="title">AI Localization Prototype</div>
+      <div class="title-logo" aria-label="Feels Local">
+        <img src="./brand/FL-Logo2-Blue.svg" alt="Feels Local Logo" />
+      </div>
       <div class="toolbar">
         <div class="toolbar-row" id="toolbarRow1">
           <!-- Row 1 order: New tab, History (injected), Language, Sign in -->
@@ -1119,7 +1124,9 @@
       <div class="settings-container">
         <div class="settings-inner">
           <!-- Logo Header -->
-          <div class="settings-logo">AI Localization Prototype</div>
+          <div class="settings-logo">
+            <img src="./brand/FL-Logo2-Blue.svg" alt="Feels Local Logo" />
+          </div>
           
           <!-- Main Container with Header and Content -->
           <div class="settings-main-container">
