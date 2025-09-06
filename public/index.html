@@ -1159,7 +1159,7 @@
             <div style="margin-bottom:20px">
               <h3 style="font-size:16px; font-weight:500; color:var(--text); margin:0 0 4px">Name</h3>
               <p style="font-size:12px; color:var(--text); margin:0 0 8px">The name associated with this account</p>
-              <input id="profileDisplayName" class="settings-input" value="Reyhan Putra Pertama" style="width:400px; height:32px; padding:10px 12px; font-size:14px" />
+              <input id="profileDisplayName" class="settings-input" value="" style="width:400px; height:32px; padding:10px 12px; font-size:14px" />
             </div>
             
             <!-- Email Address Section -->
@@ -1249,31 +1249,9 @@
                         <th style="text-align:left; font-size:16px; color:#006cff; padding:8px 0; border-bottom:1px solid #eaeaea;"></th>
                   </tr>
                 </thead>
-                <tbody id="invoicesBody">
-                      <tr>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">REF-0003</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">Paid</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">$13</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">Feb 8, 2025, 10.46 PM</td>
-                        <td><button class="invoice-view-btn" data-invoice="REF-0003" style="font-size:16px; font-weight:bold; color:#006cff; padding:12px 0; cursor:pointer; background:none; border:none;">View</button></td>
-                      </tr>
-                      <tr style="border-bottom:1px solid #eaeaea;">
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">REF-0002</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">Paid</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">$45</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">Jan 10, 2025, 9.07 AM</td>
-                        <td><button class="invoice-view-btn" data-invoice="REF-0002" style="font-size:16px; font-weight:bold; color:#006cff; padding:12px 0; cursor:pointer; background:none; border:none;">View</button></td>
-                      </tr>
-                      <tr>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">REF-0001</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">Paid</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">$0</td>
-                        <td style="font-size:16px; color:var(--text); padding:12px 0;">Dec 10, 2024, 12.35 PM</td>
-                        <td><button class="invoice-view-btn" data-invoice="REF-0001" style="font-size:16px; font-weight:bold; color:#006cff; padding:12px 0; cursor:pointer; background:none; border:none;">View</button></td>
-                      </tr>
-                </tbody>
+                <tbody id="invoicesBody"></tbody>
               </table>
-                  <div class="settings-muted" id="invoicesEmpty" style="display:none;">No invoices yet</div>
+                  <div class="settings-muted" id="invoicesEmpty" style="display:block;">No invoices yet</div>
                 </div>
               </div>
             </div>
@@ -5985,8 +5963,9 @@ ${lines.join('\n')}`);
           const empty = document.getElementById('invoicesEmpty');
           if (body){
             body.innerHTML = '';
-            const rows = s.invoices || [];
+            const rows = Array.isArray(s.invoices) ? s.invoices : [];
             if (rows.length){ empty.style.display='none'; }
+            else { empty.style.display='block'; }
             rows.forEach(row=>{
               const tr=document.createElement('tr');
               tr.innerHTML = `<td>${row.ref||''}</td><td>${row.status||''}</td><td>${row.amount||''}</td><td>${row.date||''}</td><td><span class="inv-view">View</span></td>`;
