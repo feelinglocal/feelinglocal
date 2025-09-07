@@ -165,6 +165,59 @@ async function createTables() {
         )
       `);
 
+      // User feature/flag storage (e.g., free batch trial)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS user_flags (
+          user_id INTEGER NOT NULL,
+          key TEXT NOT NULL,
+          value TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, key),
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      `);
+
+      // Active devices for concurrency enforcement
+      db.run(`
+        CREATE TABLE IF NOT EXISTS active_devices (
+          user_id INTEGER NOT NULL,
+          device_id TEXT NOT NULL,
+          last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, device_id),
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      `);
+
+      // Document localization jobs
+      db.run(`
+        CREATE TABLE IF NOT EXISTS doc_jobs (
+          id TEXT PRIMARY KEY,
+          user_id TEXT,
+          status TEXT NOT NULL,
+          file_key_in TEXT,
+          file_key_out TEXT,
+          src_lang TEXT,
+          tgt_lang TEXT,
+          mode TEXT,
+          substyle TEXT,
+          cache_key TEXT,
+          meta TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS doc_segments (
+          job_id TEXT NOT NULL,
+          segment_id TEXT NOT NULL,
+          src TEXT,
+          tgt TEXT,
+          meta TEXT,
+          PRIMARY KEY (job_id, segment_id)
+        )
+      `);
+
       // Idempotency keys table
       db.run(`
         CREATE TABLE IF NOT EXISTS idempotency_keys (

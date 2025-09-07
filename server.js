@@ -18,6 +18,7 @@ require('dotenv').config();
 const db = require('./database');
 const { requireAuth, requireApiKey, checkTierPermission, passport, TIERS } = require('./auth');
 const { quotaMiddleware, rateLimiters, validateInputSize, recordUsage } = require('./rate-limit');
+const { enforceMonthlyLimit, allowFreeBatchTrial, enforceDeviceLimit, setUserFlag, getUserFlag } = require('./limits');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const { RedisStore } = require('connect-redis');
@@ -3240,6 +3241,8 @@ app.post('/api/translate',
   },
   rateLimiters.translation,
   quotaMiddleware,
+  enforceMonthlyLimit,
+  enforceDeviceLimit,
   validateInputSize,
   idempotencyMiddleware,
   async (req, res) => {
@@ -3616,6 +3619,7 @@ async function callOpenAIWithRetry({ messages, temperature }) {
 
 app.post('/api/translate-batch',
   allowGuests,
+  allowFreeBatchTrial,
   (req, res, next) => {
     // Debug authentication for translate-batch
     console.log('🔍 Translate-batch Auth Debug:', {
@@ -3630,7 +3634,21 @@ app.post('/api/translate-batch',
   },
   rateLimiters.translation,
   quotaMiddleware,
-  checkTierPermission('batch'), // Batch requires Pro or Team tier
+  // Batch requires Pro or Team tier, but allow one-time Free trial
+  (req, res, next) => {
+    const tier = (req.user?.tier || 'free').toLowerCase();
+    if (tier === 'free') {
+      if (req.freeBatchTrialGranted) return next();
+      return res.status(403).json({
+        error: 'Batch processing requires Pro or Team tier',
+        code: 'batch_not_allowed',
+        upgradeMessage: 'Upgrade to Pro or Team to continue using batch translation'
+      });
+    }
+    return next();
+  },
+  enforceMonthlyLimit,
+  enforceDeviceLimit,
   validateInputSize,
   idempotencyMiddleware,
   async (req, res) => {
@@ -3666,7 +3684,9 @@ app.post('/api/translate-batch',
     const results = [];
 
     // Run with limited concurrency to keep UI responsive
-    const CONCURRENCY = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 2) : Number(process.env.BATCH_CONCURRENCY || 2);
+    const isTeamTier = (req.user?.tier || '').toLowerCase() === 'team';
+    const baseConc = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 2) : Number(process.env.BATCH_CONCURRENCY || 2);
+    const CONCURRENCY = isTeamTier ? Math.max(baseConc + 1, Number(process.env.BATCH_CONCURRENCY_TEAM || (baseConc + 1))) : baseConc;
     // Build indexed jobs so we can reconstruct results in original order
     const jobs = [];
     {
@@ -3726,6 +3746,13 @@ app.post('/api/translate-batch',
           try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars, outputChars }); } catch {}
           recordMetrics.translation('batch', mode, targetLanguage, req.user?.tier || 'anonymous', true, totalChars);
           log.translation('batch', items.join('').length, resultsOut.join('').length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+          // If free trial was granted, mark it used after a successful response
+          try {
+            const tierNow = (req.user?.tier || 'free').toLowerCase();
+            if (tierNow === 'free' && req.freeBatchTrialGranted && req.user?.id) {
+              await setUserFlag(req.user.id, 'free_batch_trial_used', '1');
+            }
+          } catch {}
         }
       } catch (e) { /* non-fatal */ }
     });

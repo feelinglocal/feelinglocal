@@ -39,6 +39,14 @@ class LocalizationClient {
       headers['Idempotency-Key'] = idempotencyKey;
     }
 
+    // Attach a stable device ID for concurrency enforcement
+    try {
+      const k = 'device_id_v1';
+      let did = localStorage.getItem(k);
+      if (!did) { did = `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`; localStorage.setItem(k, did); }
+      headers['X-Device-ID'] = did;
+    } catch {}
+
     return headers;
   }
 
@@ -350,7 +358,7 @@ class LocalizationClient {
           batchAllowed: true,
           zipDownloadAllowed: true,
           maxInputSize: 10000,
-          maxRequestsPerDay: 1000
+          maxRequestsPerDay: 500
         },
         team: {
           batchAllowed: true,

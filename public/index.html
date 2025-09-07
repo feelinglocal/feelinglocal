@@ -6826,6 +6826,39 @@ ${lines.join('\n')}`);
       };
     }
 
+    // Attach a stable device ID header to fetch, for routes not using localization-client.
+    (function installDeviceHeader(){
+      try{
+        const k='device_id_v1';
+        let did=localStorage.getItem(k);
+        if(!did){ did=`dev_${Date.now()}_${Math.random().toString(36).slice(2)}`; localStorage.setItem(k,did); }
+        const _fetch = window.fetch;
+        window.fetch = function(input, init){
+          try{
+            const url = (typeof input === 'string') ? input : (input && input.url) || '';
+            // Only attach header for same-origin API calls to avoid CORS on external resources
+            const sameOrigin = url.startsWith('/') || url.startsWith(location.origin);
+            const path = url.startsWith(location.origin) ? url.slice(location.origin.length) : url;
+            const isApi = sameOrigin && (path.startsWith('/api/'));
+            if (isApi){
+              const o = init ? { ...init } : {};
+              const headers = o.headers || {};
+              if (typeof headers.set === 'function') {
+                headers.set('X-Device-ID', did);
+              } else if (Array.isArray(headers)) {
+                // Headers as array of tuples
+                o.headers = [...headers, ['X-Device-ID', did]];
+              } else {
+                o.headers = { ...headers, 'X-Device-ID': did };
+              }
+              return _fetch(input, o);
+            }
+          }catch{}
+          return _fetch(input, init);
+        }
+      }catch{}
+    })();
+
     // Make functions globally accessible
     window.updateCharacterLimit = updateCharacterLimit;
     window.updateCharacterCount = updateCharacterCount;
