@@ -3634,16 +3634,14 @@ app.post('/api/translate-batch',
   },
   rateLimiters.translation,
   quotaMiddleware,
-  // Batch requires Pro or Team tier, but allow one-time Free trial
+  // Batch requires Pro or Team tier; for Free without trial, fallback to single (non-subtitle) instead of 403
   (req, res, next) => {
     const tier = (req.user?.tier || 'free').toLowerCase();
     if (tier === 'free') {
       if (req.freeBatchTrialGranted) return next();
-      return res.status(403).json({
-        error: 'Batch processing requires Pro or Team tier',
-        code: 'batch_not_allowed',
-        upgradeMessage: 'Upgrade to Pro or Team to continue using batch translation'
-      });
+      // Signal the route handler to use single-translate fallback when appropriate
+      req.batchFallbackToSingle = true;
+      return next();
     }
     return next();
   },
@@ -3669,6 +3667,64 @@ app.post('/api/translate-batch',
     // For subtitling/dubbing/dialogue, we CAN enforce strict 1:1 by micro-batching,
     // but keep it opt-in via env to avoid regressions under load.
     const isSubtitleLike = String(mode).toLowerCase() === 'dubbing' || String(subStyle).toLowerCase() === 'subtitling' || String(subStyle).toLowerCase() === 'dialogue';
+
+    // Free users without trial fall back to single translate for non-subtitle requests
+    if (req.batchFallbackToSingle) {
+      if (isSubtitleLike) {
+        return res.status(403).json({
+          error: 'Batch subtitling requires Pro or Team tier',
+          code: 'batch_not_allowed',
+          upgradeMessage: 'Upgrade to Pro or Team to continue translating subtitles/files'
+        });
+      }
+
+      const combined = items.join('\n\n');
+      const temperatureSingle = pickTemperature(mode, subStyle, rephrase);
+      const promptSingle = buildPrompt({ text: combined, mode, subStyle, targetLanguage, rephrase, injections });
+      const rawSingle = await callOpenAIWithRetry({
+        messages: [
+          { role: 'system', content: 'You are an expert localization and translation assistant.' },
+          ...(renderInjections(injections) ? [{ role: 'system', content: renderInjections(injections) }] : []),
+          { role: 'user', content: promptSingle }
+        ],
+        temperature: temperatureSingle
+      });
+      const bodySingle = extractResultTagged(rawSingle) || '(no output)';
+      let cleanSingle = sanitizeWithSource(bodySingle, combined, targetLanguage);
+      if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
+        const det = detectLanguageSimple(cleanSingle);
+        const want = normalizeLangTag(targetLanguage);
+        if (det !== 'unknown' && want && det !== want) {
+          try {
+            const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${cleanSingle}\n\n<result>`;
+            const fixRaw = await callOpenAIWithRetry({
+              messages: [
+                { role: 'system', content: 'You convert text to the requested language without altering meaning.' },
+                { role: 'user', content: fixPrompt }
+              ],
+              temperature: Math.max(0, Math.min(0.2, temperatureSingle || 0))
+            });
+            const fixed = extractResultTagged(fixRaw) || cleanSingle;
+            cleanSingle = sanitizeWithSource(fixed, combined, targetLanguage);
+          } catch {}
+        }
+      }
+
+      // Usage accounting
+      const totalCharsSingle = combined.length + cleanSingle.length;
+      res.once('finish', async () => {
+        try {
+          if (res.statusCode < 400) {
+            await recordUsage(req, 'translate-batch(fallback-single)', 0, totalCharsSingle);
+            try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: combined.length, outputChars: cleanSingle.length }); } catch {}
+            recordMetrics.translation('single', mode, targetLanguage, req.user?.tier || 'anonymous', true, totalCharsSingle);
+            log.translation('single', combined.length, cleanSingle.length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+          }
+        } catch {}
+      });
+
+      return res.json({ result: cleanSingle });
+    }
     const strict1to1 = process.env.STRICT_SUBTITLE_1TO1 === 'true';
     const useMicroBatch = isSubtitleLike && strict1to1;
     const chunks = useMicroBatch

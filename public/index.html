@@ -4814,11 +4814,12 @@ ${lines.join('\n')}`);
     }
     
     setStatus('Localizing');
-    const res=await fetch('/api/translate-batch',{
+    // For simple text input, prefer the single endpoint. Batch is used for subtitle-like flows.
+    const res=await fetch('/api/translate',{
       method:'POST',
       headers: headers,
       body:JSON.stringify({
-        items:srcSegs,
+        text: input,
         mode:selectedMode,
         targetLanguage: rephrase ? '' : targetLanguage,
         subStyle:selectedSubStyle,
@@ -4828,8 +4829,7 @@ ${lines.join('\n')}`);
     });
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
-    d.lastAlignedTgt = Array.isArray(data.items) ? data.items.map(s=>s||'') : [(data.result||'')];
-    d.output = d.lastAlignedTgt.join('\n');
+    d.output = String(data.result||'');
     setStatus('Localizing done');
     
     // Refresh usage after successful submission (small delay to ensure backend processing is complete)
