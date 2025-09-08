@@ -590,7 +590,20 @@ app.use(encryptionMiddleware);
 app.use(gdprConsentMiddleware);
 app.use(advancedAuditMiddleware);
 app.use(cdnMiddleware);
-app.use(cacheMiddleware);
+// Temporarily disable caching to debug carry-over issue
+// app.use(cacheMiddleware);
+app.use((req, res, next) => { 
+  req.cache = { 
+    get: () => null, 
+    set: () => {}, 
+    getBatch: () => null, 
+    setBatch: () => {},
+    invalidate: () => {},
+    getStats: () => ({ disabled: true }),
+    healthCheck: () => ({ status: 'disabled' })
+  }; 
+  next(); 
+});
 app.use(translationMemoryMiddleware);
 app.use(encryptResponseMiddleware);
 
@@ -3483,6 +3496,13 @@ app.post('/api/translate',
     let first; let engineUsed = decision.engine;
     
     try {
+      const requestId = `translate_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+      console.log('🔍 About to call engine:', {
+        requestId,
+        engine: decision.engine,
+        promptPreview: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+        inputText: text.substring(0, 50) + (text.length > 50 ? '...' : '')
+      });
       first = await run(decision.engine, prompt, temperature, {});
     } catch (e) {
       const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
@@ -3496,7 +3516,22 @@ app.post('/api/translate',
         throw e;
       }
     }
-    let clean = sanitizeWithSource(first.text || '', text, targetLanguage);
+    // Debug: log the raw response before sanitization
+    const rawText = first.text || '';
+    console.log('🔍 Raw engine output:', {
+      requestId,
+      length: rawText.length,
+      preview: rawText.substring(0, 100) + (rawText.length > 100 ? '...' : ''),
+      inputPreview: text.substring(0, 50) + (text.length > 50 ? '...' : '')
+    });
+    
+    let clean = sanitizeWithSource(rawText, text, targetLanguage);
+    
+    console.log('🔍 After sanitization:', {
+      requestId,
+      length: clean.length,
+      preview: clean.substring(0, 100) + (clean.length > 100 ? '...' : '')
+    });
 
     // Expose routing info via headers
     const modelUsed = engineUsed === 'gpt-4o' ? MODEL_GPT4O : (engineUsed === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
@@ -3905,10 +3940,24 @@ async function runWithEngine(engine, prompt, temperature, { system=null } = {}) 
   
   // Defensive: clear any per-request cached buffers and force fresh context
   if (this) {
+    // Clear all possible contamination sources
+    Object.keys(this).forEach(key => {
+      if (key.startsWith('last') || key.startsWith('prev') || key.startsWith('cache')) {
+        delete this[key];
+      }
+    });
     this.lastRaw = undefined;
     this.lastBatch = undefined;
     this.prevResult = undefined;
     this.cached = undefined;
+    this._result = undefined;
+    this._output = undefined;
+  }
+  
+  // Clear any module-level contamination
+  if (typeof global !== 'undefined') {
+    if (global._translationCache) delete global._translationCache;
+    if (global._lastResult) delete global._lastResult;
   }
 
   const model = engine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
@@ -3920,16 +3969,19 @@ async function runWithEngine(engine, prompt, temperature, { system=null } = {}) 
 }
 
 function makeEngineCtx(req){
-  return {
-    req,
-    userTier: (req.user?.tier || 'anonymous'),
-    openaiClient: openai,
-    run: runWithEngine,
-    // Clear any potential state
-    lastRaw: undefined,
-    lastBatch: undefined,
-    timestamp: Date.now()
-  };
+  // Force complete state isolation per request
+  const ctx = Object.create(null);
+  ctx.req = req;
+  ctx.userTier = (req.user?.tier || 'anonymous');
+  ctx.openaiClient = openai;
+  ctx.run = runWithEngine;
+  ctx.requestId = `ctx_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+  
+  // Clear any global contamination
+  if (global._lastTranslationResult) delete global._lastTranslationResult;
+  if (global._cachedResponse) delete global._cachedResponse;
+  
+  return ctx;
 }
 
 app.post('/api/translate-batch',
