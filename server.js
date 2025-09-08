@@ -3482,27 +3482,8 @@ app.post('/api/translate',
     const temperature = pickTemperature(mode, subStyle, rephrase);
     let first; let engineUsed = decision.engine;
     
-    // Debug: log request details to trace carry-over
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-    console.log('🔍 /api/translate debug:', { 
-      requestId,
-      text: text.substring(0, 50) + (text.length > 50 ? '...' : ''), 
-      engine: decision.engine, 
-      userId: req.user?.id,
-      timestamp: Date.now()
-    });
-    
     try {
       first = await run(decision.engine, prompt, temperature, {});
-      
-      // Debug: log response details
-      console.log('🔍 Engine response:', { 
-        requestId,
-        engine: decision.engine,
-        responseLength: (first?.text || '').length,
-        responsePreview: (first?.text || '').substring(0, 50) + ((first?.text || '').length > 50 ? '...' : ''),
-        userId: req.user?.id
-      });
     } catch (e) {
       const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
       const status = e?.status;

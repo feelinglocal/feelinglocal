@@ -6729,10 +6729,33 @@ ${lines.join('\n')}`);
     }
 
     async function updateCharacterLimit() {
+      // Rate limiting to prevent cascade calls
+      const now = Date.now();
+      if (window._lastCharLimitUpdate && (now - window._lastCharLimitUpdate) < 2000) {
+        console.log('🚫 Character limit update rate limited');
+        return;
+      }
+      window._lastCharLimitUpdate = now;
+      
       // Compact meter relies on cumulative usage
       await updateCumulativeUsage();
     }
     async function updateCumulativeUsage() {
+      // Rate limiting to prevent spam requests
+      const now = Date.now();
+      if (window._lastUsageUpdate && (now - window._lastUsageUpdate) < 2000) {
+        console.log('🚫 Usage update rate limited');
+        return;
+      }
+      
+      // Prevent concurrent calls
+      if (window._usageUpdateRunning) {
+        console.log('🚫 Usage update already running');
+        return;
+      }
+      window._usageUpdateRunning = true;
+      window._lastUsageUpdate = now;
+      
       const usageMini = document.getElementById('usageMini');
       const label = document.getElementById('usageMiniLabel');
       const bar = document.getElementById('usageMiniBar');
@@ -6740,6 +6763,8 @@ ${lines.join('\n')}`);
       const pctEl = document.getElementById('usageMiniPct');
       const resetEl = document.getElementById('usageMiniReset');
       if (!usageMini || !label || !bar) return;
+      
+      console.log('📊 Updating cumulative usage...');
       
       try {
         // Fetch current usage from backend
@@ -6770,7 +6795,9 @@ ${lines.join('\n')}`);
           }
         }
         
-        const response = await fetch(`/api/usage/current?t=${Date.now()}`, { 
+        const fetchUrl = `/api/usage/current?t=${Date.now()}`;
+        console.log('📡 Fetching usage from:', fetchUrl);
+        const response = await fetch(fetchUrl, { 
           headers,
           cache: 'no-cache'
         });
@@ -6805,6 +6832,9 @@ ${lines.join('\n')}`);
         // Minimal fallback
         label.textContent = '0 / 0';
         bar.style.width = '0%';
+      } finally {
+        // Clear running flag
+        window._usageUpdateRunning = false;
       }
     }
 
