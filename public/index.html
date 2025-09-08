@@ -3635,7 +3635,8 @@ window.STYLE_MICROCOPY = {
       const glSwitch = document.querySelector('#glSwitch');
       const glOn = glSwitch ? glSwitch.classList.contains('on') : (readJSON('glossaryEnabled:v1', true)!==false);
       const maxBtn = document.getElementById('maxToggle');
-      const maxOn = isTeam && !!maxBtn && maxBtn.classList.contains('active');
+      const maxStored = readJSON('maxEnabled:v1', false)===true;
+      const maxOn = isTeam && ((!!maxBtn && maxBtn.classList.contains('active')) || maxStored);
       const parts = [];
       if(maxOn) parts.push('Max on');
       if(brandOn) parts.push('Brand Kit on');
@@ -3655,8 +3656,10 @@ window.STYLE_MICROCOPY = {
       const userNow = JSON.parse(localStorage.getItem('user')||'{}');
       const teamNow = String(userNow?.tier||'free').toLowerCase()==='team';
       section.style.display = teamNow ? 'block' : 'none';
-      btn.classList.toggle('active', false);
-      btn.setAttribute('aria-pressed','false');
+      // Restore previous state from storage
+      const wasOn = readJSON('maxEnabled:v1', false)===true;
+      btn.classList.toggle('active', teamNow && wasOn);
+      btn.setAttribute('aria-pressed', (teamNow && wasOn)?'true':'false');
       // Overwrite previous handlers to avoid duplicates
       btn.onclick = function(){
         const u = JSON.parse(localStorage.getItem('user')||'{}');
@@ -3664,6 +3667,8 @@ window.STYLE_MICROCOPY = {
         if(!isTeam){ showToast('Max Localization is Team-only'); return; }
         btn.classList.toggle('active');
         btn.setAttribute('aria-pressed', btn.classList.contains('active')?'true':'false');
+        // Persist state
+        writeJSON('maxEnabled:v1', btn.classList.contains('active'));
         updateSubmitHints();
       };
       updateSubmitHints();
