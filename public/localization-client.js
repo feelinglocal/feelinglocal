@@ -26,7 +26,8 @@ class LocalizationClient {
   createHeaders(idempotencyKey) {
     const headers = {
       'Content-Type': 'application/json',
-      'X-Request-Id': this.generateRequestId()
+      'X-Request-Id': this.generateRequestId(),
+      'Cache-Control': 'no-store'
     };
 
     if (this.config.apiKey) {

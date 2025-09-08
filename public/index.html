@@ -2710,17 +2710,24 @@ window.STYLE_MICROCOPY = {
       // Initialize Max Localization toggle
       initMaxToggle();
       // Re-evaluate toggle visibility when user tier changes (after async profile fetch)
-      try { window.addEventListener('user-updated', initMaxToggle); } catch {}
-      // Patch localStorage.setItem to emit user-updated when user key is changed
-      try {
-        const _lsSet = localStorage.setItem.bind(localStorage);
-        localStorage.setItem = function(k, v){
-          _lsSet(k, v);
-          if (k === 'user') {
-            try { window.dispatchEvent(new CustomEvent('user-updated')); } catch {}
+      setTimeout(() => {
+        try { 
+          window.addEventListener('user-updated', initMaxToggle);
+          // Safe localStorage override to detect user updates
+          if (!window._lsPatched) {
+            const _lsSet = localStorage.setItem.bind(localStorage);
+            localStorage.setItem = function(k, v){
+              _lsSet(k, v);
+              if (k === 'user') {
+                setTimeout(() => {
+                  try { window.dispatchEvent(new CustomEvent('user-updated')); } catch {}
+                }, 10);
+              }
+            };
+            window._lsPatched = true;
           }
-        };
-      } catch {}
+        } catch(e) { console.warn('localStorage patch failed:', e); }
+      }, 100);
       
       window.addEventListener('resize',debounce(()=>{if(splitView)equalizeRowHeights();adjustWrapHeight(true)},120));
     });
@@ -4889,7 +4896,7 @@ ${lines.join('\n')}`);
     
     const res=await fetch('/api/translate',{
       method:'POST',
-      headers: headers,
+      headers: { ...headers, 'Cache-Control':'no-store' },
       body:JSON.stringify({
         text: input,
         mode:selectedMode,
@@ -4940,7 +4947,7 @@ ${lines.join('\n')}`);
           
           const res = await fetch('/api/translate-batch',{
             method:'POST',
-            headers: headers,
+            headers: { ...headers, 'Cache-Control':'no-store' },
             body:JSON.stringify({
               items,
               mode:selectedMode,

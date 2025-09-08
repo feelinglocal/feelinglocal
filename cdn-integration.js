@@ -309,6 +309,15 @@ function cdnMiddleware(req, res, next) {
     healthCheck: () => cdnManager.healthCheck()
   };
 
+  // Never cache non-GET requests to avoid stale/carry-over results
+  if (req.method !== 'GET') {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache'
+    });
+    return next();
+  }
+
   // Add cache control headers based on route
   let cacheType = 'api';
   
@@ -346,3 +355,5 @@ module.exports = {
   cdnMiddleware,
   initCDN
 };
+
+

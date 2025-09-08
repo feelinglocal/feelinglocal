@@ -165,6 +165,12 @@ const routerPolicy = safeRequire('./router/model-router', {
   decideEngine: ({ prefer }) => ({ engine: prefer || 'gpt-4o', reason: 'fallback', risk: 0 }),
   shouldCollaborate: () => false
 });
+
+// Emergency fallback: if Gemini is causing issues, force GPT-4o temporarily
+const FORCE_GPT4O = process.env.FORCE_GPT4O === 'true';
+if (FORCE_GPT4O) {
+  console.warn('🚨 FORCE_GPT4O=true - All requests will use GPT-4o only');
+}
 const committee = safeRequire('./collab/committee', {
   firstPassReview: async (_ctx, { srcText }) => ({ text: srcText, meta: { note: 'committee_stub' } }),
   committeeOfTwo: async (_ctx, { srcText }) => ({ text: srcText, meta: { note: 'committee_stub' } })
@@ -174,7 +180,10 @@ const committee = safeRequire('./collab/committee', {
 let gemini;
 try {
   gemini = require('./gemini');
-} catch {}
+  console.log('✅ Gemini client loaded');
+} catch (e) {
+  console.warn('⚠️ Gemini client not available:', e.message);
+}
 
 // HTTP timeout helper (shared)
 const HTTP_TIMEOUT_MS = parseInt(process.env.HTTP_TIMEOUT_MS || '5000', 10);
@@ -692,7 +701,7 @@ Act as a professional academic translator in {TARGET_LANG}.
 Style: Formal | Substyle: Academic | Purpose: Present ideas and findings clearly and objectively.
 Tone: Analytical, neutral, and scholarly.
 Use complete sentences with formal academic vocabulary.
-Write in third person unless first person plural (“we”) is contextually required.
+Write in third person unless first person plural ("we") is contextually required.
 Apply discipline-consistent terminology.
 Maintain logical flow, coherent argumentation, and clear paragraphing.
 Ensure phrasing reads naturally and professionally in {TARGET_LANG} academic writing while preserving meaning and scholarly intent.
@@ -784,7 +793,7 @@ Informal grammar and vocabulary as naturally used in speech.
 
 May include mild slang or contractions for realism.
 
-Follow the official grammar and spelling rules of {TARGET_LANG} only where it doesn’t break casual flow.
+Follow the official grammar and spelling rules of {TARGET_LANG} only where it doesn't break casual flow.
 
 Localization Goal: Make it sound like a real conversation between friends or acquaintances in {TARGET_LANG}.
 
@@ -917,7 +926,7 @@ Highlight benefits over features
 Adapt emotional triggers to {TARGET_LANG}
 Balance emotion with credibility; avoid over-promises
 Ensure smooth, spoken-like readability"\n\nText:\n{TEXT}`,
-    'brand-storytelling': `"Translate and localize the following text into {TARGET_LANG}, ensuring it tells the brand’s journey in a compelling and relatable way. Act as a {TARGET_LANG} brand storyteller. Produce output that is authentic, emotional, and trust-building.
+    'brand-storytelling': `"Translate and localize the following text into {TARGET_LANG}, ensuring it tells the brand's journey in a compelling and relatable way. Act as a {TARGET_LANG} brand storyteller. Produce output that is authentic, emotional, and trust-building.
 Context
 Style: Marketing | Substyle: Brand Storytelling
 Purpose: Build an emotional connection with the audience
@@ -926,7 +935,7 @@ Guidelines
 Use narrative, flowing sentences
 Include relatable references when natural
 Follow official grammar and spelling standards while allowing creative storytelling flow
-Preserve the brand’s core message and emotional arc
+Preserve the brand's core message and emotional arc
 Adapt cultural touchpoints to resonate with {TARGET_LANG} audiences
 Avoid literal phrasing that feels cold or corporate"\n\nText:\n{TEXT}`,
     'seo-friendly': `"Translate and localize the following text into {TARGET_LANG}, ensuring it is optimized for relevant search terms while preserving meaning. Act as a {TARGET_LANG} SEO content translator. Produce output that is keyword-optimized, natural, and persuasive.
@@ -969,7 +978,7 @@ Keep language concise, persuasive, and professional
 Follow official grammar and spelling standards"\n\nText:\n{TEXT}`,
     'influencer-ugc-style': `"Translate and localize the following text into {TARGET_LANG}, making it authentic, personal, and conversational. Act as a {TARGET_LANG} influencer content translator. Deliver copy that is natural, first-person, and relatable.
 Guidelines
-Use first-person voice (“I” statements: I love, I tried, I recommend)
+Use first-person voice ("I" statements: I love, I tried, I recommend)
 Keep tone friendly, enthusiastic, and personal
 Ensure voice feels genuine and trustworthy
 Adapt product/cultural references for local familiarity
@@ -980,16 +989,16 @@ Maintain casual, relatable flow while following grammar and spelling standards"\
     general: `"Translate and localize the following text into {TARGET_LANG}, ensuring it flows naturally for dubbing. Act as a {TARGET_LANG} dubbing translator. Deliver lines that are smooth, clear, and performance-ready.
 Guidelines
 Context-based: Consider scene, speaker–listener relations, and avoid literal mapping.
-Kinship/titles: Translate accurately (e.g., “Bu” → Mom vs. Ma’am) and keep consistent within scenes.
+Kinship/titles: Translate accurately (e.g., "Bu" → Mom vs. Ma'am) and keep consistent within scenes.
 Split-lines: If a sentence spans multiple lines, keep the split but translate continuously.
-Timing: Match rhythm and syllable count; don’t add length unless clarity requires it.
+Timing: Match rhythm and syllable count; don't add length unless clarity requires it.
 Onomatopoeia: Adapt sound effects and expressive sounds to natural {TARGET_LANG} forms.
 Character voice: Preserve personality, tone, slang, idioms; adapt humor culturally.
 Delivery: Keep lines smooth, lip-sync feasible, and ready for performance."\n\nText:\n{TEXT}`,
     dialogue: `"Translate and localize the following text into {TARGET_LANG}, ensuring it matches natural speech and is easy to perform by voice actors. Act as a {TARGET_LANG} dubbing translator. Deliver output that is smooth, clear, and performance-ready.
 Guidelines
 Context-based: Consider scene, relationships, and setting; avoid literal mapping.
-Honorifics/kinship: Translate accurately (e.g., “Bu” → Mom vs. Ma’am) and stay consistent.
+Honorifics/kinship: Translate accurately (e.g., "Bu" → Mom vs. Ma'am) and stay consistent.
 Split-lines: If one sentence spans multiple lines, keep the split but translate continuously.
 Timing: Match pacing and syllable count; avoid extra length unless clarity requires it.
 Onomatopoeia: Adapt sound effects naturally and vividly in {TARGET_LANG}.
@@ -1002,7 +1011,7 @@ Spoken-friendly {TARGET_LANG}, natural rhythm, avoid long/complex sentences.
 Adapt vocabulary to audience (general, historical, children).
 Onomatopoeia: translate/adapt sound effects naturally and vividly.
 Context-based: consider scene, audience, and setting.
-Honorifics/kinship: translate correctly (e.g., “Bu” → Mom vs. Ma’am).
+Honorifics/kinship: translate correctly (e.g., "Bu" → Mom vs. Ma'am).
 Split-lines: keep splits but translate continuously.
 Timing: match pacing and syllable count; avoid unnecessary length.
 Tone/voice: preserve narrative voice and adjust (serious, formal, playful) as needed.
@@ -1039,7 +1048,7 @@ Instructions:
 
 Context-based translation – Consider the surrounding lines, speaker–listener relationships, and scene setting before translating. Avoid purely literal mapping.
 
-Honorific & kinship accuracy – If a term can mean either a family role or polite title (e.g., “Bu” → “Mom” vs. “Ma’am”), choose the meaning that matches the relationship and setting. Maintain consistency within the same scene or episode.
+Honorific & kinship accuracy – If a term can mean either a family role or polite title (e.g., "Bu" → "Mom" vs. "Ma'am"), choose the meaning that matches the relationship and setting. Maintain consistency within the same scene or episode.
 
 Split-line handling – If a sentence is split across multiple subtitle/dubbing lines, keep the split in the output but translate it continuously to preserve meaning and flow.
 
@@ -1047,7 +1056,7 @@ Performance timing – Match pacing and syllable count closely to the original. 
 
 Onomatopoeia adaptation – Translate or replace sound effects and expressive sounds with equivalents that feel natural and vivid in {TARGET_LANG}. Maintain emotional impact.
 
-Character voice – Preserve each character’s unique style, tone, and personality. Adapt slang, idioms, or humor to culturally relevant expressions.
+Character voice – Preserve each character's unique style, tone, and personality. Adapt slang, idioms, or humor to culturally relevant expressions.
 
 Delivery quality – Keep lines clear, smooth, and suitable for spoken performance. Ensure lip-sync feasibility when possible.
 
@@ -1060,11 +1069,11 @@ Hard rules:
 - Output one line per input cue, 1:1."\n\nText:\n{TEXT}`,
     kids: `Translate and localize the following text into {TARGET_LANG}, ensuring it is fun, clear, and engaging for young audiences.
 
-Act as a professional bilingual dubbing translator with expertise in {TARGET_LANG} children’s content. Produce output that is age-appropriate, lively, and easy for kids to understand.
+Act as a professional bilingual dubbing translator with expertise in {TARGET_LANG} children's content. Produce output that is age-appropriate, lively, and easy for kids to understand.
 
 Context Details:
 
-Text Type: Children’s Dialogue / Narration for Dubbing
+Text Type: Children's Dialogue / Narration for Dubbing
 
 Style: Dubbing
 
@@ -1084,13 +1093,13 @@ Follow the official grammar and spelling rules of {TARGET_LANG} while keeping ch
 
 Translate and localize onomatopoeia so they feel natural, expressive, and relevant for {TARGET_LANG} audiences.
 
-Localization Goal: Make it feel like an original {TARGET_LANG} children’s show or story.
+Localization Goal: Make it feel like an original {TARGET_LANG} children's show or story.
 
 Instructions:
 
 Context-based translation – Consider the surrounding lines, speaker–listener relationships, and scene setting before translating. Avoid purely literal mapping.
 
-Honorific & kinship accuracy – If a term can mean either a family role or polite title (e.g., “Bu” → “Mom” vs. “Ma’am”), choose the meaning that matches the relationship and setting. Maintain consistency within the same scene or episode.
+Honorific & kinship accuracy – If a term can mean either a family role or polite title (e.g., "Bu" → "Mom" vs. "Ma'am"), choose the meaning that matches the relationship and setting. Maintain consistency within the same scene or episode.
 
 Split-line handling – If a sentence is split across multiple subtitle/dubbing lines, keep the split in the output but translate it continuously to preserve meaning and flow.
 
@@ -1098,7 +1107,7 @@ Performance timing – Match pacing and syllable count closely to the original. 
 
 Onomatopoeia adaptation – Translate or replace sound effects and expressive sounds with equivalents that feel natural and vivid in {TARGET_LANG}. Maintain emotional impact.
 
-Character voice – Preserve each character’s unique style, tone, and personality. Adapt slang, idioms, or humor to culturally relevant expressions.
+Character voice – Preserve each character's unique style, tone, and personality. Adapt slang, idioms, or humor to culturally relevant expressions.
 
 Delivery quality – Keep lines clear, smooth, and suitable for spoken performance. Ensure lip-sync feasibility when possible.
 
@@ -1209,7 +1218,7 @@ Return only the localized specifications."\n\nText:\n{TEXT}`,
     'api-guides': `"Translate and localize the following text into {TARGET_LANG} for an API guide/reference. Act as a {TARGET_LANG} API-docs translator. Produce clear, precise, developer-friendly copy.
 Guidelines
 Do not change code: code blocks, inline code, endpoints/paths, placeholders (e.g., {id}), params/fields, HTTP methods/status codes, payload keys, JSON examples, CLI commands, file names/paths, versions.
-Translate only prose: headings, body text, notes, comments, and table cells that aren’t code.
+Translate only prose: headings, body text, notes, comments, and table cells that aren't code.
 Preserve formatting: markdown structure, lists, tables, code fences/backticks.
 Use standard {TARGET_LANG} terminology; keep established English tech terms (API, SDK, JSON, OAuth, webhook) as is.
 Keep terminology consistent; do not add, omit, or reinterpret content."\n\nText:\n{TEXT}`,
@@ -1223,7 +1232,7 @@ Use standard {TARGET_LANG} legal terminology; avoid colloquial or vague wording.
 Keep defined terms, capitalization, references, numbering, clauses, and structure intact.
 Maintain official grammar/spelling.
 Prefer natural legal phrasing over literal mappings that could create ambiguity.
-If the content concerns tax or transfer pricing, apply OECD-aligned terminology and map local paraphrases to recognized TP terms in {TARGET_LANG} (e.g., “prinsip kewajaran dan kelaziman usaha” → “arm's length principle”). Keep method names and acronyms consistent (CUP, RPM, CPM, TNMM, PSM, APA, MAP)."\n\nText:\n{TEXT}`,
+If the content concerns tax or transfer pricing, apply OECD-aligned terminology and map local paraphrases to recognized TP terms in {TARGET_LANG} (e.g., "prinsip kewajaran dan kelaziman usaha" → "arm's length principle"). Keep method names and acronyms consistent (CUP, RPM, CPM, TNMM, PSM, APA, MAP)."\n\nText:\n{TEXT}`,
     contracts: `"Translate and localize the following text into {TARGET_LANG}, for a contract/agreement. Act as a {TARGET_LANG} contract-law translator. Deliver formal, precise, enforceable copy aligned with local drafting conventions.
 Guidelines
 Preserve legal effect; no additions or omissions.
@@ -1271,7 +1280,7 @@ Use standard medical terms; briefly explain complex terms if needed.
 Keep tone neutral and factual; avoid jargon-heavy or oversimplified wording.
 Follow official {TARGET_LANG} grammar/spelling and natural professional flow.
 Terminology (authoritative)
-Prefer Dorland’s for human medical terms; use SNOMED CT (clinical concepts), ICD-10/11 (diagnoses), LOINC + UCUM/SI (labs/units), INN + ATC (drug names/classes), MedDRA/CTCAE (safety).
+Prefer Dorland's for human medical terms; use SNOMED CT (clinical concepts), ICD-10/11 (diagnoses), LOINC + UCUM/SI (labs/units), INN + ATC (drug names/classes), MedDRA/CTCAE (safety).
 Keep codes/units unchanged; prefer INN over brands.
 If official {TARGET_LANG} labels exist (e.g., national formulary/regulator), use them verbatim.
 Do not paraphrase standardized terms; a provided glossary overrides all"\n\nText:\n{TEXT}`,
@@ -1324,7 +1333,7 @@ Prefer natural phrasing over literal calques; avoid source-like sentence pattern
     'editorial-opinion': `"Translate and localize the following text into {TARGET_LANG}, as a journalistic editorial/opinion piece. Act as a {TARGET_LANG} editorial translator. Deliver persuasive, coherent copy that fits opinion-page conventions.
 Guidelines
 Use formal or semi-formal register as appropriate.
-Preserve the author’s stance, argument, and supporting points.
+Preserve the author's stance, argument, and supporting points.
 Ensure clear logic and flow between paragraphs.
 Adapt cultural references for {TARGET_LANG} readers.
 Use standard grammar and spelling.
@@ -1398,14 +1407,14 @@ Avoid literal or stiff phrasing that reduces entertainment value."\n\nText:\n{TE
     subtitling: `"Translate and localize the following text into {TARGET_LANG} as entertainment subtitles (clear, concise, engaging). Act as a {TARGET_LANG} AV subtitle translator. Produce accurate, natural lines timed for easy reading.
 Guidelines
 Keep lines short to meet reading-speed norms.
-Match the scene’s tone; maintain natural spoken flow.
+Match the scene's tone; maintain natural spoken flow.
 Adapt idioms, jokes, and slang to {TARGET_LANG}.
 Use official grammar and spelling.
 Avoid literal or stiff phrasing that hurts readability."\n\nText:\n{TEXT}`,
     screenwriting: `"Translate and localize the following text into {TARGET_LANG}, making it production-ready for film/TV. Act as a {TARGET_LANG} screenwriter-translator. Deliver natural, dramatic dialogue that works for local actors and audiences.
 Guidelines
 Keep spoken-friendly lines and preserve screenplay formatting (character names, parentheticals, action).
-Match the scene’s tone (drama, comedy, romance, suspense).
+Match the scene's tone (drama, comedy, romance, suspense).
 Preserve character voice and intent.
 Adapt humor, idioms, and cultural references to {TARGET_LANG} equivalents.
 Keep pacing performable; avoid stiff or literal phrasing that hurts flow."\n\nText:\n{TEXT}`,
@@ -1416,7 +1425,7 @@ Preserve script formatting (character names, parentheticals, action).
 Use audience-friendly phrasing; adapt humor, idioms, and references to {TARGET_LANG} equivalents.
 Replace untranslatable items with culturally relevant ones.
 Ensure smooth, performable dialogue; avoid stiff or overly literal phrasing."\n\nText:\n{TEXT}`,
-    'character-dialogue': `"Translate and localize the following text into {TARGET_LANG}, staying true to each character’s voice and the scene’s mood. Act as a {TARGET_LANG} character-dialogue translator. Deliver natural, performable lines.
+    'character-dialogue': `"Translate and localize the following text into {TARGET_LANG}, staying true to each character's voice and the scene's mood. Act as a {TARGET_LANG} character-dialogue translator. Deliver natural, performable lines.
 Guidelines
 Preserve character voice, intent, relationships, and emotional beats.
 Use spoken {TARGET_LANG} suited to age/role; keep delivery concise and believable.
@@ -1639,10 +1648,12 @@ function fixCapsAfterTerminals2(text = '') {
   for (let i = 1; i < lines.length; i++) {
     const prev = (lines[i - 1] || '').trim();
     const cur = lines[i] || '';
-    const prevEnds = /[.!?…？！。]["'”’)\]]*\s*$/.test(prev);
+    // Previous line ends with terminal punctuation optionally followed by closing quotes/brackets
+    const prevEnds = /[.!?…？！。]["'”')\]）】»>]*\s*$/.test(prev);
     if (!prevEnds) continue;
+    // Capitalize first lowercase letter after optional opening quotes/brackets
     lines[i] = cur.replace(
-      /^(\s*["'“‘(\[]*)(\p{Ll})/u,
+      /^(\s*["'“‘(（\[]*)(\p{Ll})/u,
       (_, pfx, ch) => pfx + (ch.toLocaleUpperCase ? ch.toLocaleUpperCase() : ch.toUpperCase())
     );
   }
@@ -1852,7 +1863,7 @@ function sanitizeWithSource(txt = '', srcText = '', targetLanguage = '') {
       if (tgtDashCount !== srcDashCount) {
         // Try splitting into sentences first
         const parts = String(out)
-          .split(/(?<=[.!?…]["'”’)?\]]*)\s+/)
+          .split(/(?<=[.!?…]["'"'）\]]*)\s+/)
           .map(s => s.trim())
           .filter(Boolean);
         if (parts.length === srcDashCount) {
@@ -3286,7 +3297,7 @@ app.post('/api/download-zip',
       return Buffer.concat([...localParts, centralBuf, eocd]);
     };
 
-    // Build all files’ buffers
+    // Build all files' buffers
     const out = [];
     for (const f of files) {
       try {
@@ -3457,9 +3468,11 @@ app.post('/api/translate',
 
     // Router decision
     const allowPro = Boolean(req.body?.allowPro) && (String(req.user?.tier||'free').toLowerCase()==='team');
-    const decision = routerPolicy.decideEngine({
-      text, mode, subStyle, targetLanguage, rephrase, injections, prefer: engine, allowPro
-    });
+    const decision = FORCE_GPT4O ? 
+      { engine: 'gpt-4o', reason: 'force_gpt4o', risk: 0 } :
+      routerPolicy.decideEngine({
+        text, mode, subStyle, targetLanguage, rephrase, injections, prefer: engine, allowPro
+      });
     try { recordMetrics.routerDecision(decision.engine, decision.reason, mode, subStyle, targetLanguage); } catch {}
 
     const ctx = makeEngineCtx(req);
@@ -3861,8 +3874,38 @@ async function runWithEngine(engine, prompt, temperature, { system=null } = {}) 
     return { text: extractResultTagged(raw) || raw || '', raw, engine: 'gpt-4o' };
   }
 
-  // Gemini family
-  if (!gemini || !gemini.generateContent) throw new Error('Gemini client not available');
+  // Gemini family - fallback to GPT-4o if Gemini unavailable
+  if (!gemini || !gemini.generateContent) {
+    console.warn('Gemini client not available, falling back to GPT-4o');
+    if (chatComplete) {
+      const { content } = await chatComplete(this.req, this.openaiClient, {
+        model: MODEL_GPT4O,
+        temperature,
+        messages: [
+          { role: 'system', content: 'You are an expert localization and translation assistant.' },
+          ...(system ? [{ role: 'system', content: system }] : []),
+          { role: 'user', content: prompt }
+        ]
+      }, { userTier: this.userTier });
+      return { text: extractResultTagged(content) || content || '', raw: content, engine: 'gpt-4o' };
+    }
+    const raw = await callOpenAIWithRetry({
+      messages: [
+        { role: 'system', content: 'You are an expert localization and translation assistant.' },
+        ...(system ? [{ role: 'system', content: system }] : []),
+        { role: 'user', content: prompt }
+      ],
+      temperature
+    });
+    return { text: extractResultTagged(raw) || raw || '', raw, engine: 'gpt-4o' };
+  }
+  
+  // Defensive: clear any per-request cached buffers
+  if (this) {
+    this.lastRaw = undefined;
+    this.lastBatch = undefined;
+  }
+
   const model = engine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
   // Pass thinkingBudget=0 for flash-lite if ROUTER_THINKING_DISABLED=true
   const thinkingOff = (process.env.ROUTER_THINKING_DISABLED || 'false') === 'true';
@@ -3996,10 +4039,10 @@ app.post('/api/translate-batch',
     const chunks = useMicroBatch
       ? items.map(x => [x])
       : chunkByTokenBudget(items, {
-          maxTokensPerRequest: Number(process.env.BATCH_TOKENS || 7000),
-          overheadTokens: 1200,
-          outputFactor: 1.15,
-          maxItemsPerChunk: 250
+          maxTokensPerRequest: Number(process.env.BATCH_TOKENS || 4000),
+          overheadTokens: 900,
+          outputFactor: 1.10,
+          maxItemsPerChunk: 120
         });
 
     const temperature = pickTemperature(mode, subStyle, rephrase);
@@ -4007,7 +4050,7 @@ app.post('/api/translate-batch',
 
     // Run with limited concurrency to keep UI responsive
     const isTeamTier = (req.user?.tier || '').toLowerCase() === 'team';
-    const baseConc = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 2) : Number(process.env.BATCH_CONCURRENCY || 2);
+    const baseConc = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 1) : Number(process.env.BATCH_CONCURRENCY || 1);
     const CONCURRENCY = isTeamTier ? Math.max(baseConc + 1, Number(process.env.BATCH_CONCURRENCY_TEAM || (baseConc + 1))) : baseConc;
     // Build indexed jobs so we can reconstruct results in original order
     const jobs = [];

@@ -12,7 +12,7 @@ if (!GEMINI_API_KEY && process.env.NODE_ENV !== 'development') {
   console.warn('⚠️ GEMINI_API_KEY is not set; Gemini calls will fail in production');
 }
 
-async function generateContent({ text, system = null, model = GEMINI_MODEL, apiKey = GEMINI_API_KEY, timeoutMs = Number(process.env.GEMINI_TIMEOUT || 60000), thinkingBudget }) {
+async function generateContent({ text, system = null, model = GEMINI_MODEL, apiKey = GEMINI_API_KEY, timeoutMs = Number(process.env.GEMINI_TIMEOUT || 15000), thinkingBudget }) {
   const url = `${GEMINI_BASE_URL}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const started = Date.now();
   let ok = false;
@@ -33,7 +33,7 @@ async function generateContent({ text, system = null, model = GEMINI_MODEL, apiK
     ...(allowThinkingCfg && Number.isFinite(tb) ? { thinkingConfig: { thinkingBudget: Math.max(0, Math.floor(tb)) } } : {})
   };
 
-  const maxAttempts = Number(process.env.GEMINI_MAX_ATTEMPTS || 3);
+  const maxAttempts = Number(process.env.GEMINI_MAX_ATTEMPTS || 2);
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
