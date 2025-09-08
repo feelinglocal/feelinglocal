@@ -3404,7 +3404,8 @@ app.post('/api/translate',
         });
         
         const ctx = makeEngineCtx(req);
-        const run = runWithEngine.bind({ ...ctx });
+        // Avoid bind to prevent context contamination - use call instead
+        const run = (engine, prompt, temperature, options) => runWithEngine.call({ ...ctx }, engine, prompt, temperature, options);
         let first;
         try {
           first = await run(decision.engine, prompt, temperature, {});
@@ -3476,11 +3477,32 @@ app.post('/api/translate',
     try { recordMetrics.routerDecision(decision.engine, decision.reason, mode, subStyle, targetLanguage); } catch {}
 
     const ctx = makeEngineCtx(req);
-    const run = runWithEngine.bind({ ...ctx });
+    // Avoid bind to prevent context contamination - use call instead
+    const run = (engine, prompt, temperature, options) => runWithEngine.call({ ...ctx }, engine, prompt, temperature, options);
     const temperature = pickTemperature(mode, subStyle, rephrase);
     let first; let engineUsed = decision.engine;
+    
+    // Debug: log request details to trace carry-over
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+    console.log('🔍 /api/translate debug:', { 
+      requestId,
+      text: text.substring(0, 50) + (text.length > 50 ? '...' : ''), 
+      engine: decision.engine, 
+      userId: req.user?.id,
+      timestamp: Date.now()
+    });
+    
     try {
       first = await run(decision.engine, prompt, temperature, {});
+      
+      // Debug: log response details
+      console.log('🔍 Engine response:', { 
+        requestId,
+        engine: decision.engine,
+        responseLength: (first?.text || '').length,
+        responsePreview: (first?.text || '').substring(0, 50) + ((first?.text || '').length > 50 ? '...' : ''),
+        userId: req.user?.id
+      });
     } catch (e) {
       const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
       const status = e?.status;
@@ -3900,10 +3922,12 @@ async function runWithEngine(engine, prompt, temperature, { system=null } = {}) 
     return { text: extractResultTagged(raw) || raw || '', raw, engine: 'gpt-4o' };
   }
   
-  // Defensive: clear any per-request cached buffers
+  // Defensive: clear any per-request cached buffers and force fresh context
   if (this) {
     this.lastRaw = undefined;
     this.lastBatch = undefined;
+    this.prevResult = undefined;
+    this.cached = undefined;
   }
 
   const model = engine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
@@ -3919,7 +3943,11 @@ function makeEngineCtx(req){
     req,
     userTier: (req.user?.tier || 'anonymous'),
     openaiClient: openai,
-    run: runWithEngine
+    run: runWithEngine,
+    // Clear any potential state
+    lastRaw: undefined,
+    lastBatch: undefined,
+    timestamp: Date.now()
   };
 }
 
@@ -4076,7 +4104,8 @@ app.post('/api/translate-batch',
         try { recordMetrics.routerDecision(decision.engine, decision.reason, mode, subStyle, targetLanguage); } catch {}
 
         const ctx = makeEngineCtx(req);
-        const run = runWithEngine.bind({ ...ctx });
+        // Avoid bind to prevent context contamination - use call instead
+        const run = (engine, prompt, temperature, options) => runWithEngine.call({ ...ctx }, engine, prompt, temperature, options);
         let first;
         try {
           first = await run(decision.engine, prompt, temperature, {});
