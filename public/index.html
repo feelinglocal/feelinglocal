@@ -3648,21 +3648,24 @@ window.STYLE_MICROCOPY = {
     window.updateSubmitHints = updateSubmitHints;
 
     function initMaxToggle(){
-      const user = JSON.parse(localStorage.getItem('user')||'{}');
-      const isTeam = String(user?.tier||'free').toLowerCase()==='team';
       const section = document.getElementById('maxSection');
       const row = document.getElementById('maxRow');
       const btn = document.getElementById('maxToggle');
       if(!section||!row||!btn) return;
-      section.style.display = isTeam ? 'block' : 'none';
+      const userNow = JSON.parse(localStorage.getItem('user')||'{}');
+      const teamNow = String(userNow?.tier||'free').toLowerCase()==='team';
+      section.style.display = teamNow ? 'block' : 'none';
       btn.classList.toggle('active', false);
       btn.setAttribute('aria-pressed','false');
-      btn.addEventListener('click',()=>{
+      // Overwrite previous handlers to avoid duplicates
+      btn.onclick = function(){
+        const u = JSON.parse(localStorage.getItem('user')||'{}');
+        const isTeam = String(u?.tier||'free').toLowerCase()==='team';
         if(!isTeam){ showToast('Max Localization is Team-only'); return; }
         btn.classList.toggle('active');
         btn.setAttribute('aria-pressed', btn.classList.contains('active')?'true':'false');
         updateSubmitHints();
-      });
+      };
       updateSubmitHints();
     }
 
