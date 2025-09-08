@@ -996,7 +996,6 @@
     <div class="tabs-wrap">
       <div id="tabBar" class="tabs" role="tablist" aria-label="Documents"></div>
     </div>
-
     <div class="card" id="cardRoot" aria-live="polite" aria-busy="false">
       <div id="modeWrap" class="mode-wrap">
         <!-- STACK (normal) -->
@@ -1052,10 +1051,18 @@
             </div>
           </div>
 
+          <div class="section" id="maxSection">
+            <div id="maxRow" class="brand-toggle-section">
+              <button id="maxToggle" class="brand-toggle" type="button" aria-pressed="false" title="Enable Gemini 2.5 Pro (Team only)"></button>
+              <span class="brand-toggle-label">Max Localization</span>
+            </div>
+          </div>
+
           <div class="section">
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <button id="submitBtn" class="btn primary" type="button" data-i18n="submit">Submit</button>
               <button id="submitAllBtn" class="btn is-hidden" type="button" title="Submit all open files">Submit All</button>
+              <span id="submitHints" style="font-size:12px;color:#006cff;display:none;margin-left:8px"></span>
             </div>
           </div>
 
@@ -1694,7 +1701,6 @@
         }
       }
     };
-
     // Full microcopy dictionary (EN/ID/ZH/FR/ES)
 window.STYLE_MICROCOPY = {
   en: {
@@ -2370,7 +2376,6 @@ window.STYLE_MICROCOPY = {
         }
       }
     }
-    
     // Generic status helpers (centralized status tab)
     function showStatus(message){ showUploadProgress(); setUploadProgressText(message||'Working…'); }
     function setStatus(message){ setUploadProgressText(message||''); const el=$('#uploadProgressBar'); if(el){ if(/done|complete|success/i.test(message||'')){ el.classList.remove('is-busy'); } else { el.classList.add('is-busy'); } } }
@@ -2701,9 +2706,12 @@ window.STYLE_MICROCOPY = {
       addTextTab();
 
       adjustWrapHeight(); updateSplitButton();
+      
+      // Initialize Max Localization toggle
+      initMaxToggle();
+      
       window.addEventListener('resize',debounce(()=>{if(splitView)equalizeRowHeights();adjustWrapHeight(true)},120));
     });
-
     /* ---------------- History (client-side only) ---------------- */
     const HISTORY_KEY='locHistory';
     const HISTORY_MAX=30;
@@ -3052,7 +3060,6 @@ window.STYLE_MICROCOPY = {
               cues: Array.isArray(data.cues)?data.cues:[],
               ext
             };
-            
             // Show completion message
             setStatus(`Finalizing ${file.name}…`);
             
@@ -3606,6 +3613,47 @@ window.STYLE_MICROCOPY = {
     function selectTarget(lang){if(targetLanguage===lang){targetLanguage=''; $$('.lang-btn').forEach(b=>{if(b.dataset.lang===lang)b.classList.remove('active')})}else{targetLanguage=lang; rephrase=false; $('#btnRephrase')?.classList.remove('active'); $$('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang))} adjustWrapHeight()}
     function toggleRephrase(){rephrase=!rephrase; $('#btnRephrase')?.classList.toggle('active',rephrase); if(rephrase){targetLanguage=''; $$('.lang-btn').forEach(b=>b.classList.remove('active'))} adjustWrapHeight()}
 
+    // --- Max Localization toggle (Team-only) + hints ---
+    function updateSubmitHints(){
+      const hints = document.getElementById('submitHints'); if(!hints) return;
+      const user = JSON.parse(localStorage.getItem('user')||'{}');
+      const isTeam = String(user?.tier||'free').toLowerCase()==='team';
+      const brandOn = readJSON('brandEnabled:v1', false)===true;
+      // Check actual glossary toggle state from UI if available, fallback to storage
+      const glSwitch = document.querySelector('#glSwitch');
+      const glOn = glSwitch ? glSwitch.classList.contains('on') : (readJSON('glossaryEnabled:v1', true)!==false);
+      const maxBtn = document.getElementById('maxToggle');
+      const maxOn = isTeam && !!maxBtn && maxBtn.classList.contains('active');
+      const parts = [];
+      if(maxOn) parts.push('Max on');
+      if(brandOn) parts.push('Brand Kit on');
+      if(glOn) parts.push('Glossary on');
+      hints.style.display = parts.length? 'inline' : 'none';
+      hints.textContent = parts.join('  ·  ');
+    }
+    
+    // Expose globally so Brand Kit and Glossary can update hints
+    window.updateSubmitHints = updateSubmitHints;
+
+    function initMaxToggle(){
+      const user = JSON.parse(localStorage.getItem('user')||'{}');
+      const isTeam = String(user?.tier||'free').toLowerCase()==='team';
+      const section = document.getElementById('maxSection');
+      const row = document.getElementById('maxRow');
+      const btn = document.getElementById('maxToggle');
+      if(!section||!row||!btn) return;
+      section.style.display = isTeam ? 'block' : 'none';
+      btn.classList.toggle('active', false);
+      btn.setAttribute('aria-pressed','false');
+      btn.addEventListener('click',()=>{
+        if(!isTeam){ showToast('Max Localization is Team-only'); return; }
+        btn.classList.toggle('active');
+        btn.setAttribute('aria-pressed', btn.classList.contains('active')?'true':'false');
+        updateSubmitHints();
+      });
+      updateSubmitHints();
+    }
+
     function setMode(modeId){
       const container=$('#subStyleContainer'), panel=$('#subStylePanel');
       if(selectedMode===modeId){
@@ -3620,9 +3668,6 @@ window.STYLE_MICROCOPY = {
       container?.classList.remove('is-hidden'); panel?.classList.remove('open'); setChevron(false);
       adjustWrapHeight();
     }
-
-
-
     async function submitActiveDoc(doc, opts={}){
       const d=doc||currentDoc(); if(!d) { showToast('No tab'); return; }
       if(d.isSrt){
@@ -3654,6 +3699,8 @@ window.STYLE_MICROCOPY = {
       if(!targetLanguage && !rephrase){showToast(t('toast_choose_target'));pulse($('#langButtonsRow'));return}
       if(!selectedMode){showToast(t('toast_choose_style'));pulse($('#styleButtonsRow'));return}
 
+      updateSubmitHints();
+
       try{
         if(!opts.silent) showLoader(true,'Localizing…');
         await runTextDoc(d);
@@ -3672,6 +3719,7 @@ window.STYLE_MICROCOPY = {
       if(!items.length){ showToast('No SRT cues'); return; }
       if(!targetLanguage && !rephrase){showToast(t('toast_choose_target'));pulse($('#langButtonsRow'));return}
       if(!selectedMode){showToast(t('toast_choose_style'));pulse($('#styleButtonsRow'));return}
+      updateSubmitHints();
       try{
         if(!opts.silent) showLoader(true,'Localizing…');
         await runSrtDoc(d);
@@ -4121,7 +4169,7 @@ window.STYLE_MICROCOPY = {
       #advOverlay .pb-head .pb-sort::-ms-expand{ display:none; }
       .pb-head .pb-search:focus, .pb-head .pb-sort:focus{ outline:none; border-color:var(--accent) !important; box-shadow:0 0 0 3px var(--accent-weak) !important; }
       /* Emphasize pb-sort outline on hover to match glossary */
-      .pb-head .pb-sort:hover{ border-color:var(--accent) !important; box-shadow:0 0 0 3px var(--accent-weak) !important; }
+      .pb-head .pb-sort:hover{ border-color:var(--accent); background:#fff; transform:none; }
       .pb-list{ max-height:60vh; overflow:auto; padding:4px 4px }
       .pb-item{ display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-top:1px solid #f0f0f3; gap:12px; transition:background .15s ease; }
       .pb-item:hover{ background:#f8f9fa; }
@@ -4140,7 +4188,7 @@ window.STYLE_MICROCOPY = {
       @keyframes flash{ 0%{box-shadow:0 0 0 0 rgba(0,122,255,.35)} 100%{box-shadow:0 0 0 0 transparent} }
 
       /* Compact Usage Meter */
-      .usage-mini{ display:inline-flex; align-items:center; gap:10px; border:1px solid var(--border); background:var(--card); border-radius:10px; padding:8px 10px; box-shadow:var(--shadow-soft); position:relative; cursor:pointer; transition:transform .12s var(--ease), box-shadow .12s var(--ease), border-color .12s; z-index:1010 }
+      .usage-mini{ display:inline-flex; align-items:center; gap:10px; border:1px solid var(--border); background:var(--card); border-radius:10px; padding:8px 10px; box-shadow:var(--shadow-soft); position:relative; cursor:pointer; transition:transform .12s var(--ease), box-shadow .12s var(--ease), border-color .12s var(--ease); z-index:1010 }
       .usage-mini:hover{ transform:translateY(-1px); border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak), var(--shadow-soft) }
       .usage-mini:focus{ outline:none; box-shadow:0 0 0 3px var(--accent-weak), var(--shadow-soft) }
       .usage-mini-main{ display:flex; align-items:center; gap:10px }
@@ -4324,6 +4372,7 @@ window.STYLE_MICROCOPY = {
       brandToggle.classList.toggle('active', enabled);
       brandToggleLabel.textContent = enabled ? 'Brand Injection On' : 'Brand Injection Off';
       writeJSON('brandEnabled:v1', enabled);
+      if (window.updateSubmitHints) window.updateSubmitHints();
     }
     
     updateBrandToggle(brandEnabled);
@@ -4585,6 +4634,7 @@ window.STYLE_MICROCOPY = {
       glLabel.textContent = on ? 'Glossary On' : 'Glossary Off';
       hostTable.classList.toggle('is-disabled', !on);
       writeJSON(GLOSSARY_ENABLED_KEY, !!on);
+      if (window.updateSubmitHints) window.updateSubmitHints();
     }
     setGlUI(readJSON(GLOSSARY_ENABLED_KEY, true)!==false);
     glSwitch.addEventListener('click',()=> setGlUI(!(glSwitch.classList.contains('on'))));
@@ -4613,7 +4663,6 @@ window.STYLE_MICROCOPY = {
     adjustPbWrapGrid();
     buildGlossaryTable(); // Build glossary table on initial load
   }
-
   function openAdvancedOverlay(){
     const ov=document.getElementById('advOverlay'); if(!ov) return;
     ov.classList.add('show'); ov.setAttribute('aria-hidden','false');
@@ -4814,7 +4863,10 @@ ${lines.join('\n')}`);
     }
     
     setStatus('Localizing');
-    // For simple text input, prefer the single endpoint. Batch is used for subtitle-like flows.
+    const user = JSON.parse(localStorage.getItem('user')||'{}');
+    const isTeam = String(user?.tier||'free').toLowerCase()==='team';
+    const allowPro = isTeam && !!$('#maxToggle')?.classList.contains('active');
+    
     const res=await fetch('/api/translate',{
       method:'POST',
       headers: headers,
@@ -4824,7 +4876,8 @@ ${lines.join('\n')}`);
         targetLanguage: rephrase ? '' : targetLanguage,
         subStyle:selectedSubStyle,
         rephrase: !!rephrase,
-        injections
+        injections,
+        allowPro
       })
     });
     if(!res.ok) throw new Error('HTTP '+res.status);
@@ -4861,6 +4914,9 @@ ${lines.join('\n')}`);
           } else if (guestId) {
             headers['X-Guest-ID'] = guestId;
           }
+          const user = JSON.parse(localStorage.getItem('user')||'{}');
+          const isTeam = String(user?.tier||'free').toLowerCase()==='team';
+          const allowPro = isTeam && !!$('#maxToggle')?.classList.contains('active');
           
           const res = await fetch('/api/translate-batch',{
             method:'POST',
@@ -4871,7 +4927,8 @@ ${lines.join('\n')}`);
               targetLanguage: rephrase ? '' : targetLanguage,
               subStyle:selectedSubStyle,
               rephrase: !!rephrase,
-              injections
+              injections,
+              allowPro
             })
           });
     if(!res.ok) throw new Error('HTTP '+res.status);
@@ -5849,7 +5906,6 @@ ${lines.join('\n')}`);
         try{ currentSection.focus(); }catch{}
       }
     }
-
     async function refreshSettingsData(){
       // Function to update billing page with current usage data
       window.updateBillingPageData = function updateBillingPageData() {
@@ -6351,7 +6407,6 @@ ${lines.join('\n')}`);
           console.log('Viewing invoice:', invoiceId);
         });
       });
-
       // Smart Card Input Functionality - Separate Fields with Auto-jump
       function initSmartCardInput() {
         const cardNumberInput = document.getElementById('cardNumberInput');
@@ -6825,7 +6880,6 @@ ${lines.join('\n')}`);
         }, 100);
       };
     }
-
     // Attach a stable device ID header to fetch, for routes not using localization-client.
     (function installDeviceHeader(){
       try{
@@ -7131,7 +7185,6 @@ ${lines.join('\n')}`);
     
     console.log('✅ Enhanced UI styles loaded');
   });
-  
   // Enhanced notification system with smart positioning
   window.showNotification = function(title, message, type = 'info') {
     // Calculate position based on existing notifications

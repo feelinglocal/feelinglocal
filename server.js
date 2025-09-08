@@ -159,6 +159,23 @@ const { initTranslationMemory, translationMemory, translationMemoryMiddleware } 
   translationMemoryMiddleware: (req, res, next) => { req.tm = {}; next(); }
 });
 
+// Router & collaboration (safe)
+const { chatComplete } = safeRequire('./providers/openai', { chatComplete: null });
+const routerPolicy = safeRequire('./router/model-router', {
+  decideEngine: ({ prefer }) => ({ engine: prefer || 'gpt-4o', reason: 'fallback', risk: 0 }),
+  shouldCollaborate: () => false
+});
+const committee = safeRequire('./collab/committee', {
+  firstPassReview: async (_ctx, { srcText }) => ({ text: srcText, meta: { note: 'committee_stub' } }),
+  committeeOfTwo: async (_ctx, { srcText }) => ({ text: srcText, meta: { note: 'committee_stub' } })
+});
+
+// Gemini client
+let gemini;
+try {
+  gemini = require('./gemini');
+} catch {}
+
 // HTTP timeout helper (shared)
 const HTTP_TIMEOUT_MS = parseInt(process.env.HTTP_TIMEOUT_MS || '5000', 10);
 async function fetchWithTimeout(resource, options = {}, timeoutMs = HTTP_TIMEOUT_MS) {
@@ -555,6 +572,7 @@ app.use(securityHeadersMiddleware);
 app.use(requestLoggingMiddleware);
 app.use(rateLimitHitMiddleware);
 app.use(sentryUserMiddleware);
+app.use(circuitBreakerMiddleware);
 
 // Apply Advanced Features middleware
 app.use(webSocketMiddleware);
@@ -571,6 +589,8 @@ app.use(encryptResponseMiddleware);
 app.use(rateLimiters.general);
 
 app.use(express.static('public'));
+
+// Gemini endpoint is declared below after allowGuests to avoid TDZ
 
 // Setup SSO authentication routes
 setupSSORoutes(app);
@@ -1577,10 +1597,12 @@ LANGUAGE LOCK (CRITICAL):
 
 const CENSORSHIP_RULES = `
 CENSORED/OBSCENITY HANDLING:
-- ONLY apply masking when the source item contains masked profanities. If the source is uncensored, do NOT introduce censorship.
-- When masking applies: infer the intended term, translate/localize it appropriately, then re-apply censorship using the same style.
-- Default mask style (if unclear): reveal the first letter only and replace the second letter with "*", keeping the rest intact (e.g., "Salope" → "S*lope", "Bitch" → "B*tch", "Slut" → "S*ut").
-- Preserve punctuation and surrounding context; never add extra masks or notes.
+- PRESERVE INPUT CENSORSHIP STATE: If input contains asterisk-masked words (e.g., "b*tch", "f*ck"), output MUST also be censored with asterisks.
+- If input is completely uncensored, output MUST be uncensored.
+- When translating masked words: infer the intended term, translate it, then re-apply the same masking pattern (first letter + "*" + remaining letters).
+- Examples: "b*tch" → "p*lacur" (Indonesian), "f*ck" → "m*rde" (French), "sh*t" → "sch*iße" (German).
+- Preserve exact punctuation and surrounding context; never add extra masks or change masking style.
+- If unsure about censorship state, default to matching the input's style exactly.
 `;
 
 /* ---------------- Helpers: local, non-redeclaring ---------------- */
@@ -1728,6 +1750,39 @@ function stabilizeMoodEN(srcText = '', tgtText = '') {
   return tgtLines.join('\n');
 }
 
+/**
+ * Apply censorship to output if input was censored
+ */
+function preserveCensorshipState(output, input) {
+  if (!output || !input) return output;
+  
+  const inputCensored = hasCensoredWords(input);
+  if (!inputCensored) return output; // Input uncensored, keep output uncensored
+  
+  // Input was censored, apply censorship to likely profanity in output
+  let result = String(output);
+  
+  // Common profanity patterns to censor in output (expand as needed)
+  const profanityPatterns = [
+    // English
+    /\b(fuck|shit|bitch|damn|hell|ass|crap)\b/gi,
+    // Indonesian  
+    /\b(anjing|bangsat|babi|kontol|memek|pelacur|bajingan)\b/gi,
+    // French
+    /\b(merde|putain|salope|connard|bordel)\b/gi,
+    // Spanish
+    /\b(mierda|joder|puta|cabrón|coño)\b/gi,
+    // German
+    /\b(scheiße|fick|hure|arsch|verdammt)\b/gi
+  ];
+  
+  for (const pattern of profanityPatterns) {
+    result = result.replace(pattern, (match) => applyCensorship(match));
+  }
+  
+  return result;
+}
+
 /** Final sanitize with source awareness */
 function sanitizeWithSource(txt = '', srcText = '', targetLanguage = '') {
   if (!txt) return txt;
@@ -1833,8 +1888,8 @@ function sanitizeWithSource(txt = '', srcText = '', targetLanguage = '') {
   out = out.replace(/\.\.\.\.+/g, '...'); // Preserve ... but not ....
   out = out.replace(/([^.])\.\.$/, '$1...'); // Fix broken ellipsis
   
-  // Ensure censored words remain censored if present in source
-  out = enforceCensoredMask(srcText, out, targetLanguage);
+  // Preserve input censorship state - if input was censored, censor output; if uncensored, keep uncensored
+  out = preserveCensorshipState(out, srcText);
   
   return out;
 }
@@ -1844,7 +1899,7 @@ const PROFANITY = {
   en: ['bitch','fuck','fucking','asshole','bastard','slut','whore','shit','dick','cunt'],
   fr: ['salope','putain','connard','con','merde','enculé','enfoiré','pute'],
   es: ['puta','puto','cabron','cabrón','mierda','coño','pendejo'],
-  id: ['kontol','memek','anjing','bangsat','goblok','cuk','tai']
+  id: ['kontol','memek','anjing','bangsat','goblok','cuk','tai','pelacur','lonte','jalang']
 };
 
 function normalizeLangTag(s = '') {
@@ -2033,6 +2088,13 @@ ${commonTail}`.trim();
     TARGET_LANG: targetLanguage || 'the same language as the input'
   });
 
+  const OBFUSCATION_NORMALIZATION_SINGLE = `
+OBFUSCATION NORMALIZATION RULES (ALL LANGUAGES):
+- If the text contains masking characters (e.g., *, •, ·, spaces between letters) hiding a profanity/insult term, reconstruct the canonical word in the SOURCE language before translating.
+- Examples: "S*lope" → "Salope" (fr), "b*tch" → "bitch" (en).
+- Remove only masking characters; preserve punctuation/casing. Do NOT keep masking in the translation unless asked.
+`;
+
   const commonTail = `
 ${STYLE_GUARD}
 ${needsSubtitleRules ? SUBTITLE_OVERRIDES : ''}
@@ -2041,6 +2103,7 @@ ${injBlock ? '[FOLLOW BRAND VOICE EXACTLY — Tone, Audience, MUST DO, DO NOT, a
 
 ${renderedLockRules}
 ${CENSORSHIP_RULES}
+${OBFUSCATION_NORMALIZATION_SINGLE}
 
 ${renderedQA}
 
@@ -2920,6 +2983,52 @@ app.post('/api/upload',
   }
 });
 
+/** ------------------------- API: Gemini generate ------------------------- */
+app.post('/api/gemini/generate',
+  allowGuests,
+  rateLimiters.translation,
+  quotaMiddleware,
+  validateInputSize,
+  async (req, res) => {
+    try {
+      if (!gemini || !gemini.generateContent) {
+        return res.status(503).json({ error: 'Gemini client not available' });
+      }
+      const { text } = req.body || {};
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ error: 'Missing text' });
+      }
+
+      // Use circuit breaker if available
+      let result;
+      if (req.circuitBreaker?.wrapGemini) {
+        const breaker = req.circuitBreaker.wrapGemini(async () => {
+          return await gemini.generateContent({ text });
+        });
+        result = await breaker.fire();
+      } else {
+        result = await gemini.generateContent({ text });
+      }
+
+      const clean = String(result?.text || '').trim();
+      const usedCharsTotal = text.length + clean.length;
+      res.once('finish', async () => {
+        try {
+          if (res.statusCode < 400) {
+            await recordUsage(req, 'gemini-generate', 0, usedCharsTotal);
+            recordMetrics.translation('single', 'gemini', '', req.user?.tier || 'anonymous', true, usedCharsTotal);
+          }
+        } catch {}
+      });
+
+      return res.json({ result: clean });
+    } catch (e) {
+      console.error('gemini.generate', e?.message || e);
+      return res.status(500).json({ error: 'Gemini request failed' });
+    }
+  }
+);
+
 /** ------------------------- API: download ------------------------- */
 app.post('/api/download', async (req, res) => {
   try {
@@ -3247,7 +3356,7 @@ app.post('/api/translate',
   idempotencyMiddleware,
   async (req, res) => {
   try {
-    const { text = '', mode = '', targetLanguage = '', subStyle = '', rephrase = false, injections = '' } = req.body || {};
+    const { text = '', mode = '', targetLanguage = '', subStyle = '', rephrase = false, injections = '', engine = (process.env.ROUTER_DEFAULT || 'auto'), policy = {} } = req.body || {};
     if (!text || !mode) return res.status(400).json({ result: 'Missing text or mode.' });
 
     // Auto-route large inputs via batch to improve reliability
@@ -3271,17 +3380,37 @@ app.post('/api/translate',
 
       const temperature = pickTemperature(mode, subStyle, rephrase);
       const results = [];
+      const allowPro = Boolean(req.body?.allowPro) && (String(req.user?.tier||'free').toLowerCase()==='team');
+      
       for (const chunk of chunks) {
-        const prompt = buildBatchPrompt({ items: chunk, mode, subStyle, targetLanguage, rephrase, injections });
-        const raw = await callOpenAIWithRetry({
-          messages: [
-            { role: 'system', content: 'You are an expert localization and translation assistant.' },
-            ...(renderInjections(injections) ? [{ role: 'system', content: renderInjections(injections) }] : []),
-            { role: 'user', content: prompt }
-          ],
-          temperature
+        // For auto-batch in single translate, process each chunk as a single unit
+        const joined = chunk.join('\n\n');
+        const prompt = buildPrompt({ text: joined, mode, subStyle, targetLanguage, rephrase, injections });
+        
+        // Use router for auto-batch chunks too
+        const decision = routerPolicy.decideEngine({
+          text: joined, mode, subStyle, targetLanguage, rephrase, injections, prefer: engine, allowPro
         });
-        let arr = parseJsonArrayStrict(raw, chunk.length);
+        
+        const ctx = makeEngineCtx(req);
+        const run = runWithEngine.bind({ ...ctx });
+        let first;
+        try {
+          first = await run(decision.engine, prompt, temperature, {});
+        } catch (e) {
+          const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
+          const status = e?.status;
+          const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+          if (retryable && decision.engine !== 'gpt-4o') {
+            first = await run('gpt-4o', prompt, temperature, {});
+          } else {
+            throw e;
+          }
+        }
+        
+        // For auto-batch, treat as single response and split back to array
+        const chunkResult = sanitizeWithSource(first.text || '', joined, targetLanguage);
+        const arr = chunkResult.split('\n\n').map(s => s.trim());
         for (let i = 0; i < arr.length; i++) {
           arr[i] = sanitizeWithSource(arr[i] || '', chunk[i] || '', targetLanguage);
           // Language lock QA: ensure translated output is in target language when applicable
@@ -3326,20 +3455,40 @@ app.post('/api/translate',
 
     const prompt = buildPrompt({ text, mode, subStyle, targetLanguage, rephrase, injections });
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      temperature: pickTemperature(mode, subStyle, rephrase),
-      messages: [
-        { role: 'system', content: 'You are an expert localization and translation assistant.' },
-        // Elevate brand/glossary/phrasebook injections as a high-priority system message when present
-        ...((renderInjections(injections) && renderInjections(injections).trim()) ? [{ role: 'system', content: renderInjections(injections) }] : []),
-        { role: 'user', content: prompt },
-      ],
+    // Router decision
+    const allowPro = Boolean(req.body?.allowPro) && (String(req.user?.tier||'free').toLowerCase()==='team');
+    const decision = routerPolicy.decideEngine({
+      text, mode, subStyle, targetLanguage, rephrase, injections, prefer: engine, allowPro
     });
+    try { recordMetrics.routerDecision(decision.engine, decision.reason, mode, subStyle, targetLanguage); } catch {}
 
-    const raw = (completion.choices?.[0]?.message?.content || '').trim();
-    const body = extractResultTagged(raw) || '(no output)';
-    let clean = sanitizeWithSource(body, text, targetLanguage);
+    const ctx = makeEngineCtx(req);
+    const run = runWithEngine.bind({ ...ctx });
+    const temperature = pickTemperature(mode, subStyle, rephrase);
+    let first; let engineUsed = decision.engine;
+    try {
+      first = await run(decision.engine, prompt, temperature, {});
+    } catch (e) {
+      const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
+      const status = e?.status;
+      const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+      if (retryable && decision.engine !== 'gpt-4o') {
+        try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gpt-4o', reason: 'fallback_retryable' }); } catch {}
+        first = await run('gpt-4o', prompt, temperature, {});
+        engineUsed = 'gpt-4o';
+      } else {
+        throw e;
+      }
+    }
+    let clean = sanitizeWithSource(first.text || '', text, targetLanguage);
+
+    // Expose routing info via headers
+    const modelUsed = engineUsed === 'gpt-4o' ? MODEL_GPT4O : (engineUsed === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
+    try {
+      res.set('X-Engine', engineUsed);
+      res.set('X-Model', modelUsed);
+      res.set('X-Router-Reason', decision.reason || '');
+    } catch {}
     // Language lock QA for single translation
     if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
       const det = detectLanguageSimple(clean);
@@ -3347,15 +3496,9 @@ app.post('/api/translate',
       if (det !== 'unknown' && want && det !== want) {
         try {
           const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
-          const fixRaw = await callOpenAIWithRetry({
-            messages: [
-              { role: 'system', content: 'You convert text to the requested language without altering meaning.' },
-              { role: 'user', content: fixPrompt }
-            ],
-            temperature: 0
-          });
-          const fixed = extractResultTagged(fixRaw) || clean;
-          clean = sanitizeWithSource(fixed, text, targetLanguage);
+          const fixed = await run('gpt-4o', fixPrompt, 0);
+          clean = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
+          try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gpt-4o', reason: 'language_lock' }); } catch {}
         } catch {}
       }
     }
@@ -3366,15 +3509,8 @@ app.post('/api/translate',
       if (srcLang !== 'unknown' && outLang !== 'unknown' && srcLang !== outLang) {
         try {
           const fixPrompt = `Rephrase the following text in the EXACT SAME LANGUAGE as the input (do not translate). Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
-          const fixRaw = await callOpenAIWithRetry({
-            messages: [
-              { role: 'system', content: 'You rephrase without changing the language.' },
-              { role: 'user', content: fixPrompt }
-            ],
-            temperature: 0
-          });
-          const fixed = extractResultTagged(fixRaw) || clean;
-          clean = sanitizeWithSource(fixed, text, targetLanguage);
+          const fixed = await run('gpt-4o', fixPrompt, 0);
+          clean = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
         } catch {}
       }
     }
@@ -3392,6 +3528,9 @@ app.post('/api/translate',
       } catch (e) { /* non-fatal */ }
     });
 
+    if (String(req.headers['x-route-explain'] || '').toLowerCase() === 'true') {
+      return res.json({ result: clean, meta: { engine: engineUsed, model: modelUsed, reason: decision.reason, risk: decision.risk } });
+    }
     return res.json({ result: clean });
   } catch (e) {
     console.error(e);
@@ -3415,6 +3554,66 @@ function jitter(ms) { return Math.max(0, Math.floor(ms * (0.85 + Math.random() *
 const CHARS_PER_TOKEN = 4; // ~4 chars per token (mixed Latin)
 const estimateTokens = (s = '') => Math.ceil(String(s).length / CHARS_PER_TOKEN);
 
+// Minimal multilingual profanity/obfuscation lexicon (seed set; can be extended)
+const PROFANITY_LEXICON = [
+  // French
+  { lang: 'fr', lemma: 'salope', patterns: [/s\W*\*\W*lope/i, /s\W*a\W*l\W*o\W*p\W*e/i] },
+  { lang: 'fr', lemma: 'connard', patterns: [/c\W*\*\W*n\W*ard/i, /c\W*o\W*n\W*n\W*a\W*r\W*d/i] },
+  // English
+  { lang: 'en', lemma: 'bitch', patterns: [/b\W*\*\W*tch/i, /b\W*i\W*t\W*c\W*h/i] },
+  { lang: 'en', lemma: 'whore', patterns: [/w\W*\*\W*re/i, /w\W*h\W*o\W*r\W*e/i] },
+  // Indonesian (for symmetry; often target)
+  { lang: 'id', lemma: 'pelacur', patterns: [/p\W*\*\W*lacur/i] },
+];
+
+/**
+ * Detect if text contains asterisk-censored words
+ */
+function hasCensoredWords(text) {
+  if (!text) return false;
+  // Look for pattern: letter + * + letters (common censorship pattern)
+  return /\b\w\*\w+\b/i.test(String(text));
+}
+
+/**
+ * Apply censorship to a word using asterisk pattern (first letter + * + rest)
+ */
+function applyCensorship(word) {
+  if (!word || word.length <= 2) return word;
+  const w = String(word);
+  return w[0] + '*' + w.slice(2);
+}
+
+/**
+ * Enhanced profanity handling that preserves input censorship state
+ */
+function normalizeObfuscatedProfanity(input, srcLangHint) {
+  if (!input) return input;
+  
+  const inputHasCensorship = hasCensoredWords(input);
+  let out = String(input);
+  
+  // Only normalize obfuscated profanity for processing, but note if input was censored
+  const all = PROFANITY_LEXICON.filter(x => !srcLangHint || x.lang === srcLangHint.toLowerCase());
+  for (const entry of all) {
+    for (const re of entry.patterns) {
+      out = out.replace(re, match => {
+        // Preserve casing heuristically
+        const isCaps = match === match.toUpperCase();
+        const isTitle = /^[A-Z]/.test(match);
+        let lemma = entry.lemma;
+        if (isCaps) lemma = lemma.toUpperCase();
+        else if (isTitle) lemma = lemma.slice(0,1).toUpperCase() + lemma.slice(1);
+        return lemma;
+      });
+    }
+  }
+  
+  // Store censorship state for later use
+  out._hadCensorship = inputHasCensorship;
+  return out;
+}
+
 /**
  * Build one prompt that instructs the model to translate N items and return a JSON array
  * of N strings. We keep your style guard + subtitle overrides + QA checklist.
@@ -3430,6 +3629,15 @@ function buildBatchPrompt({ items, mode, subStyle, targetLanguage, rephrase, inj
 
   const needsSubtitleRules =
     modeKey === 'dubbing' || subKey === 'subtitling' || subKey === 'dialogue';
+
+  const OBFUSCATION_NORMALIZATION = `
+CENSORSHIP PRESERVATION RULES (ALL LANGUAGES):
+- CRITICAL: Analyze the input censorship state first. If input contains asterisk-masked words (e.g., "b*tch", "f*ck", "sh*t"), the output MUST preserve this censorship.
+- If input is uncensored (e.g., "bitch", "fuck", "shit"), output MUST be uncensored.
+- For censored input: understand the intended word, translate it properly, then re-apply asterisk masking: first letter + "*" + remaining letters.
+- Examples: "b*tch" (censored input) → "p*lacur" (censored Indonesian), "bitch" (uncensored input) → "pelacur" (uncensored Indonesian).
+- Never change the censorship level - preserve the user's intended content rating exactly.
+`;
 
   const QA_BLOCK = `
 QUALITY CHECK BEFORE RETURN:
@@ -3471,6 +3679,7 @@ ${safeRenderTemplate(LANGUAGE_LOCK_RULES, {
   TARGET_LANG: targetLanguage || 'the same language as the input'
 })}
 ${CENSORSHIP_RULES}
+${OBFUSCATION_NORMALIZATION}
 
 ${safeRenderTemplate(QA_BLOCK, {
   TARGET_LANG: targetLanguage || 'the same language as the input'
@@ -3617,6 +3826,60 @@ async function callOpenAIWithRetry({ messages, temperature }) {
   }
 }
 
+// --- Engine aliases from env or defaults
+const MODEL_GEMINI_2P = process.env.GEMINI_2P_MODEL || 'gemini-2.5-pro';
+const MODEL_GEMINI_FL = process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-2.5-flash-lite';
+const MODEL_GPT4O     = process.env.OPENAI_MODEL_GPT4O || 'gpt-4o';
+
+/**
+ * Run a single engine with a prompt-string.
+ * Returns: { text, raw, engine }
+ */
+async function runWithEngine(engine, prompt, temperature, { system=null } = {}) {
+  engine = String(engine || '').toLowerCase();
+  if (engine === 'gpt-4o' || engine === 'openai' || engine === 'gpt4o') {
+    if (chatComplete) {
+      const { content } = await chatComplete(this.req, this.openaiClient, {
+        model: MODEL_GPT4O,
+        temperature,
+        messages: [
+          { role: 'system', content: 'You are an expert localization and translation assistant.' },
+          ...(system ? [{ role: 'system', content: system }] : []),
+          { role: 'user', content: prompt }
+        ]
+      }, { userTier: this.userTier });
+      return { text: extractResultTagged(content) || content || '', raw: content, engine: 'gpt-4o' };
+    }
+    const raw = await callOpenAIWithRetry({
+      messages: [
+        { role: 'system', content: 'You are an expert localization and translation assistant.' },
+        ...(system ? [{ role: 'system', content: system }] : []),
+        { role: 'user', content: prompt }
+      ],
+      temperature
+    });
+    return { text: extractResultTagged(raw) || raw || '', raw, engine: 'gpt-4o' };
+  }
+
+  // Gemini family
+  if (!gemini || !gemini.generateContent) throw new Error('Gemini client not available');
+  const model = engine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
+  // Pass thinkingBudget=0 for flash-lite if ROUTER_THINKING_DISABLED=true
+  const thinkingOff = (process.env.ROUTER_THINKING_DISABLED || 'false') === 'true';
+  const out = await gemini.generateContent({ text: prompt, system, model, thinkingBudget: thinkingOff ? 0 : undefined });
+  const textOut = String(out?.text || '').trim();
+  return { text: extractResultTagged(textOut) || textOut, raw: out?.raw, engine: engine };
+}
+
+function makeEngineCtx(req){
+  return {
+    req,
+    userTier: (req.user?.tier || 'anonymous'),
+    openaiClient: openai,
+    run: runWithEngine
+  };
+}
+
 app.post('/api/translate-batch',
   allowGuests,
   allowFreeBatchTrial,
@@ -3659,6 +3922,9 @@ app.post('/api/translate-batch',
       rephrase = false,
       injections = ''
     } = req.body || {};
+
+    const engineReq = String(req.body?.engine || process.env.ROUTER_DEFAULT || 'auto');
+    const allowPro = Boolean(req.body?.allowPro) && (String(req.user?.tier||'free').toLowerCase()==='team');
 
     if (!Array.isArray(items) || !items.length || !mode) {
       return res.status(400).json({ items: [], error: 'Missing items or mode.' });
@@ -3754,15 +4020,66 @@ app.post('/api/translate-batch',
     async function worker(){
       while(queue.length){
         const job = queue.shift();
-        const prompt = buildBatchPrompt({ items: job.items, mode, subStyle, targetLanguage, rephrase, injections });
-        const raw = await callOpenAIWithRetry({
-          messages: [
-            { role: 'system', content: 'You are an expert localization and translation assistant.' },
-            ...(renderInjections(injections) ? [{ role: 'system', content: renderInjections(injections) }] : []),
-            { role: 'user', content: prompt }
-          ],
-          temperature
+        // Pre-normalize obfuscated profanity per item using a rough srcLang hint from context
+        const srcLangHint = undefined; // can be enhanced by lightweight detector later
+        const normalizedItems = job.items.map(it => normalizeObfuscatedProfanity(it, srcLangHint));
+        const prompt = buildBatchPrompt({ items: normalizedItems, mode, subStyle, targetLanguage, rephrase, injections });
+
+        // Router decision per chunk
+        const joined = normalizedItems.join('\n');
+        const decision = routerPolicy.decideEngine({
+          text: joined, mode, subStyle, targetLanguage, rephrase, injections, prefer: engineReq, allowPro
         });
+        try { recordMetrics.routerDecision(decision.engine, decision.reason, mode, subStyle, targetLanguage); } catch {}
+
+        const ctx = makeEngineCtx(req);
+        const run = runWithEngine.bind({ ...ctx });
+        let first;
+        try {
+          first = await run(decision.engine, prompt, temperature, {});
+        } catch (e) {
+          // Fallback to GPT-4o on Gemini transient errors/aborts
+          const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
+          const status = e?.status;
+          const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+          if (retryable && decision.engine !== 'gpt-4o') {
+            try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gpt-4o', reason: 'fallback_retryable' }); } catch {}
+            first = await run('gpt-4o', prompt, temperature, {});
+          } else {
+            throw e;
+          }
+        }
+        let raw = first.text;
+
+        const collabMode = String(process.env.ROUTER_COMMITTEE_MODE || 'first_pass_review');
+        if (routerPolicy.shouldCollaborate({ risk: decision.risk, mode }) && isSubtitleLike && collabMode !== 'off') {
+          if (collabMode === 'committee2') {
+            const out = await committee.committeeOfTwo(ctx, {
+              srcText: joined,
+              promptBuilder: () => prompt,
+              sanitizer: (t, s, lang) => sanitizeWithSource(t, s, lang),
+              temperature,
+              primaryEngine: decision.engine,
+              secondaryEngine: decision.engine === 'gpt-4o' ? 'gemini-fl' : 'gpt-4o',
+              arbiterEngine: 'gemini-2p',
+              runWithEngine: run,
+              targetLanguage
+            });
+            raw = out.text;
+          } else {
+            const out = await committee.firstPassReview(ctx, {
+              srcText: joined,
+              promptBuilder: () => prompt,
+              sanitizer: (t, s, lang) => sanitizeWithSource(t, s, lang),
+              temperature,
+              primaryEngine: decision.engine,
+              runWithEngine: run,
+              targetLanguage, mode, subStyle
+            });
+            raw = out.text;
+          }
+        }
+
         let arr = parseJsonArrayStrict(raw, job.items.length);
         for (let i = 0; i < arr.length; i++) {
           let sanitized = sanitizeWithSource(arr[i] || '', job.items[i] || '', targetLanguage);
@@ -3780,7 +4097,7 @@ app.post('/api/translate-batch',
                   temperature: 0
                 });
                 const fixed = extractResultTagged(fixRaw) || sanitized;
-                sanitized = sanitizeWithSource(fixed, job.items[i] || '', targetLanguage);
+                sanitized = sanitizeWithSource(fixed, normalizedItems[i] || '', targetLanguage);
               } catch {}
             }
           }
@@ -3791,6 +4108,32 @@ app.post('/api/translate-batch',
     const workers = Array.from({ length: Math.max(1, CONCURRENCY) }, () => worker());
     await Promise.all(workers);
     const resultsOut = out;
+
+    // Collect routing info for headers (summary of engines used)
+    const enginesUsed = new Set();
+    const modelsUsed = new Set();
+    const reasons = new Set();
+    
+    // For batch, we track engines per chunk - collect from decision logic above
+    // Since we route per chunk, collect a summary of what was used
+    for (const chunk of chunks) {
+      const joined = chunk.join('\n');
+      const decision = routerPolicy.decideEngine({
+        text: joined, mode, subStyle, targetLanguage, rephrase, injections, prefer: engineReq, allowPro
+      });
+      enginesUsed.add(decision.engine);
+      const model = decision.engine === 'gpt-4o' ? MODEL_GPT4O : (decision.engine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
+      modelsUsed.add(model);
+      reasons.add(decision.reason);
+    }
+
+    // Set summary headers
+    try {
+      res.set('X-Engines-Used', Array.from(enginesUsed).join(','));
+      res.set('X-Models-Used', Array.from(modelsUsed).join(','));
+      res.set('X-Router-Reasons', Array.from(reasons).join(','));
+      res.set('X-Chunks-Count', chunks.length.toString());
+    } catch {}
 
     // Defer usage accounting until response finishes successfully
     const inputChars = items.join('').length; const outputChars = resultsOut.join('').length;
@@ -3812,6 +4155,19 @@ app.post('/api/translate-batch',
         }
       } catch (e) { /* non-fatal */ }
     });
+
+    // Optional detailed meta for batch requests
+    if (String(req.headers['x-route-explain'] || '').toLowerCase() === 'true') {
+      const batchMeta = {
+        chunks: chunks.length,
+        engines: Array.from(enginesUsed),
+        models: Array.from(modelsUsed),
+        reasons: Array.from(reasons),
+        allowPro,
+        concurrency: CONCURRENCY
+      };
+      return res.json({ items: resultsOut, meta: batchMeta });
+    }
 
     return res.json({ items: resultsOut });
   } catch (e) {

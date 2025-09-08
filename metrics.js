@@ -68,6 +68,57 @@ const metrics = {
     labelNames: ['type', 'user_tier'] // type: prompt, completion
   }),
 
+  // Gemini API calls
+  geminiCallsTotal: new client.Counter({
+    name: 'localization_gemini_calls_total',
+    help: 'Total number of Gemini API calls',
+    labelNames: ['endpoint', 'success']
+  }),
+
+  // Gemini API duration
+  geminiCallDuration: new client.Histogram({
+    name: 'localization_gemini_call_duration_seconds',
+    help: 'Duration of Gemini API calls in seconds',
+    labelNames: ['endpoint'],
+    buckets: [0.5, 1, 2, 5, 10, 15, 30]
+  }),
+
+  // Gemini tokens used (if available)
+  geminiTokensUsed: new client.Counter({
+    name: 'localization_gemini_tokens_used_total',
+    help: 'Total number of Gemini tokens consumed',
+    labelNames: ['type', 'user_tier'] // type: prompt, completion
+  }),
+
+  // Router decisions
+  routerDecisionsTotal: new client.Counter({
+    name: 'localization_router_decisions_total',
+    help: 'Number of routing decisions',
+    labelNames: ['decision', 'reason', 'mode', 'sub_style', 'target_language']
+  }),
+
+  // Escalations (engine to engine)
+  escalationsTotal: new client.Counter({
+    name: 'localization_router_escalations_total',
+    help: 'Escalations from one engine to another',
+    labelNames: ['from', 'to', 'reason']
+  }),
+
+  // Collaboration steps (review/repair/committee)
+  collabSteps: new client.Counter({
+    name: 'localization_collab_steps_total',
+    help: 'Steps executed in collaboration workflows',
+    labelNames: ['step','primary','secondary','arbiter','outcome']
+  }),
+
+  // Lightweight QE score histogram
+  qeScore: new client.Histogram({
+    name: 'localization_qe_score',
+    help: 'Quality estimation score (0..1)',
+    labelNames: [],
+    buckets: [0.2, 0.4, 0.6, 0.72, 0.8, 0.9, 1.0]
+  }),
+
   // Active users gauge
   activeUsers: new client.Gauge({
     name: 'localization_active_users',
@@ -182,9 +233,28 @@ const recordMetrics = {
     }
   },
 
+  // Record Gemini API call
+  geminiCall: (endpoint, duration, success, tokensUsed = 0, userTier = 'unknown') => {
+    metrics.geminiCallsTotal.inc({ endpoint, success: success.toString() });
+    metrics.geminiCallDuration.observe({ endpoint }, duration / 1000);
+
+    if (tokensUsed > 0) {
+      const promptTokens = Math.floor(tokensUsed * 0.4);
+      const completionTokens = tokensUsed - promptTokens;
+
+      metrics.geminiTokensUsed.inc({ type: 'prompt', user_tier: userTier }, promptTokens);
+      metrics.geminiTokensUsed.inc({ type: 'completion', user_tier: userTier }, completionTokens);
+    }
+  },
+
   // Record rate limit hit
   rateLimitHit: (type, userTier = 'anonymous') => {
     metrics.rateLimitHits.inc({ type, user_tier: userTier });
+  },
+
+  // Router decision helper
+  routerDecision: (decision, reason, mode = '', subStyle = '', targetLanguage = '') => {
+    metrics.routerDecisionsTotal.inc({ decision, reason, mode, sub_style: subStyle || 'general', target_language: targetLanguage || '' });
   },
 
   // Record database operation

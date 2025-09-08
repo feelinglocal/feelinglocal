@@ -19,6 +19,20 @@ const CIRCUIT_CONFIGS = {
       return { error: 'Service temporarily unavailable. Please try again later.', fallback: true };
     }
   },
+  gemini: {
+    timeout: Number(process.env.GEMINI_TIMEOUT || 30000),
+    errorThresholdPercentage: Number(process.env.GEMINI_ERROR_THRESHOLD || 50),
+    resetTimeout: Number(process.env.GEMINI_RESET_TIMEOUT || 60000),
+    volumeThreshold: Number(process.env.GEMINI_VOLUME_THRESHOLD || 10),
+    capacity: Number(process.env.GEMINI_CAPACITY || 100),
+    rollingCountTimeout: Number(process.env.GEMINI_ROLLING_TIMEOUT || 10000),
+    rollingCountBuckets: Number(process.env.GEMINI_ROLLING_BUCKETS || 10),
+    enabled: process.env.GEMINI_CIRCUIT_BREAKER_ENABLED !== 'false',
+    fallbackFunction: (error) => {
+      log.warn('Gemini circuit breaker fallback triggered', { error: error.message });
+      return { error: 'Service temporarily unavailable. Please try again later.', fallback: true };
+    }
+  },
   external: {
     timeout: Number(process.env.EXTERNAL_TIMEOUT || 10000), // 10 seconds
     errorThresholdPercentage: Number(process.env.EXTERNAL_ERROR_THRESHOLD || 60), // 60% error rate
@@ -281,6 +295,13 @@ function wrapOpenAICall(openaiFunction, options = {}) {
 }
 
 /**
+ * Wrap Gemini API calls with circuit breaker
+ */
+function wrapGeminiCall(geminiFunction, options = {}) {
+  return circuitBreakerService.getBreaker('gemini', geminiFunction, options);
+}
+
+/**
  * Wrap external API calls with circuit breaker
  */
 function wrapExternalCall(externalFunction, options = {}) {
@@ -293,6 +314,7 @@ function wrapExternalCall(externalFunction, options = {}) {
 function circuitBreakerMiddleware(req, res, next) {
   req.circuitBreaker = {
     wrapOpenAI: (fn, opts) => wrapOpenAICall(fn, opts),
+    wrapGemini: (fn, opts) => wrapGeminiCall(fn, opts),
     wrapExternal: (fn, opts) => wrapExternalCall(fn, opts),
     getStats: () => circuitBreakerService.getStats(),
     healthCheck: () => circuitBreakerService.healthCheck()
@@ -304,6 +326,8 @@ module.exports = {
   CircuitBreakerService,
   circuitBreakerService,
   wrapOpenAICall,
+  wrapGeminiCall,
   wrapExternalCall,
   circuitBreakerMiddleware
 };
+
