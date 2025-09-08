@@ -23,6 +23,14 @@ const REDIS_CONFIG = process.env.REDIS_URL ? {
 // Create Redis connection
 const connection = new IORedis(REDIS_CONFIG);
 
+// Prevent unhandled error events and provide clearer logs
+connection.on('error', (err) => {
+  log.warn('Redis connection error', { error: err && err.message ? err.message : String(err) });
+});
+connection.on('end', () => {
+  log.info('Redis connection closed');
+});
+
 // Queue configurations
 const QUEUE_CONFIGS = {
   'translation-long': {
@@ -56,6 +64,14 @@ const QUEUE_CONFIGS = {
         type: 'exponential',
         delay: 1500,
       }
+    }
+  },
+  'doc-translation': {
+    defaultJobOptions: {
+      removeOnComplete: 20,
+      removeOnFail: 5,
+      attempts: 2,
+      backoff: { type: 'exponential', delay: 2000 }
     }
   }
 };
@@ -354,3 +370,4 @@ module.exports = {
   workers,
   connection
 };
+

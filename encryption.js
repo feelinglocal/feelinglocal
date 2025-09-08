@@ -56,7 +56,7 @@ class EncryptionManager {
       const iv = crypto.randomBytes(this.ivLength);
       const key = this.deriveKeyFromPassword(password, salt);
       
-      const cipher = crypto.createCipher(this.algorithm, key);
+      const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
       cipher.setAAD(salt); // Additional authenticated data
       
       let encrypted = cipher.update(text, 'utf8', 'base64');
@@ -99,7 +99,7 @@ class EncryptionManager {
       
       const key = this.deriveKeyFromPassword(password, salt);
       
-      const decipher = crypto.createDecipher(this.algorithm, key);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
       decipher.setAAD(salt);
       decipher.setAuthTag(tag);
       
@@ -122,7 +122,7 @@ class EncryptionManager {
       const iv = crypto.randomBytes(this.ivLength);
       const key = this.deriveKeyFromMaster(salt);
       
-      const cipher = crypto.createCipher(this.algorithm, key);
+      const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
       const metadataBuffer = Buffer.from(JSON.stringify(metadata), 'utf8');
       cipher.setAAD(metadataBuffer);
       
@@ -164,7 +164,7 @@ class EncryptionManager {
       
       const key = this.deriveKeyFromMaster(salt);
       
-      const decipher = crypto.createDecipher(this.algorithm, key);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
       const metadataBuffer = Buffer.from(JSON.stringify(encryptedData.metadata || {}), 'utf8');
       decipher.setAAD(metadataBuffer);
       decipher.setAuthTag(tag);
@@ -386,3 +386,5 @@ module.exports = {
   encryptionMiddleware,
   encryptResponseMiddleware
 };
+
+

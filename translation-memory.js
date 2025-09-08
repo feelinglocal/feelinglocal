@@ -53,7 +53,7 @@ class TranslationMemoryManager {
    * Create necessary database tables for TM
    */
   async createTables() {
-    const queries = [
+    const tableQueries = [
       `CREATE TABLE IF NOT EXISTS translation_memory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         source_hash TEXT UNIQUE NOT NULL,
@@ -68,11 +68,7 @@ class TranslationMemoryManager {
         created_by INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        metadata TEXT DEFAULT '{}',
-        INDEX idx_tm_hash (source_hash),
-        INDEX idx_tm_langs (source_lang, target_lang),
-        INDEX idx_tm_mode (mode),
-        INDEX idx_tm_quality (quality_score)
+        metadata TEXT DEFAULT '{}'
       )`,
       
       `CREATE TABLE IF NOT EXISTS tm_segments (
@@ -82,9 +78,7 @@ class TranslationMemoryManager {
         segment_hash TEXT NOT NULL,
         position INTEGER NOT NULL,
         word_count INTEGER NOT NULL,
-        FOREIGN KEY (tm_id) REFERENCES translation_memory (id) ON DELETE CASCADE,
-        INDEX idx_segments_hash (segment_hash),
-        INDEX idx_segments_tm (tm_id)
+        FOREIGN KEY (tm_id) REFERENCES translation_memory (id) ON DELETE CASCADE
       )`,
       
       `CREATE TABLE IF NOT EXISTS tm_context (
@@ -94,14 +88,37 @@ class TranslationMemoryManager {
         following_text TEXT,
         document_id TEXT,
         file_type TEXT,
-        FOREIGN KEY (tm_id) REFERENCES translation_memory (id) ON DELETE CASCADE,
-        INDEX idx_context_tm (tm_id),
-        INDEX idx_context_doc (document_id)
+        FOREIGN KEY (tm_id) REFERENCES translation_memory (id) ON DELETE CASCADE
+      )`,
+
+      // Optional feedback table referenced by updateQualityScore
+      `CREATE TABLE IF NOT EXISTS tm_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tm_id INTEGER NOT NULL,
+        feedback TEXT,
+        score REAL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (tm_id) REFERENCES translation_memory (id) ON DELETE CASCADE
       )`
     ];
 
-    for (const query of queries) {
+    for (const query of tableQueries) {
       await this.db.run(query);
+    }
+
+    const indexQueries = [
+      `CREATE INDEX IF NOT EXISTS idx_tm_hash ON translation_memory (source_hash)`,
+      `CREATE INDEX IF NOT EXISTS idx_tm_langs ON translation_memory (source_lang, target_lang)`,
+      `CREATE INDEX IF NOT EXISTS idx_tm_mode ON translation_memory (mode)`,
+      `CREATE INDEX IF NOT EXISTS idx_tm_quality ON translation_memory (quality_score)`,
+      `CREATE INDEX IF NOT EXISTS idx_segments_hash ON tm_segments (segment_hash)`,
+      `CREATE INDEX IF NOT EXISTS idx_segments_tm ON tm_segments (tm_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_context_tm ON tm_context (tm_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_context_doc ON tm_context (document_id)`
+    ];
+
+    for (const idx of indexQueries) {
+      await this.db.run(idx);
     }
   }
 
@@ -790,3 +807,5 @@ module.exports = {
   translationMemoryMiddleware,
   initTranslationMemory
 };
+
+

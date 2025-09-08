@@ -12,7 +12,7 @@ if (!GEMINI_API_KEY && process.env.NODE_ENV !== 'development') {
   console.warn('⚠️ GEMINI_API_KEY is not set; Gemini calls will fail in production');
 }
 
-async function generateContent({ text, system = null, model = GEMINI_MODEL, apiKey = GEMINI_API_KEY, timeoutMs = Number(process.env.GEMINI_TIMEOUT || 15000), thinkingBudget }) {
+async function generateContent({ text, system = null, model = GEMINI_MODEL, apiKey = GEMINI_API_KEY, timeoutMs = Number.isFinite((arguments[0]||{}).timeoutMs) ? Number((arguments[0]||{}).timeoutMs) : Number(process.env.GEMINI_TIMEOUT || 300000), thinkingBudget }) {
   const url = `${GEMINI_BASE_URL}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const started = Date.now();
   let ok = false;

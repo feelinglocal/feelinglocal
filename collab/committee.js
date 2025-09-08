@@ -30,11 +30,33 @@ function diffHeuristic(src='', out=''){
   return [score, reasons];
 }
 
+function isRetryableError(e){
+  const status = e?.status || e?.code;
+  const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
+  return isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+async function runWithFallback(runWithEngine, engine, prompt, temperature, options = {}){
+  try {
+    return await runWithEngine(engine, prompt, temperature, options);
+  } catch (e) {
+    if (isRetryableError(e) && engine !== 'gpt-4o') {
+      try { metrics.escalationsTotal.inc({ from: engine, to: 'gpt-4o', reason: 'fallback_retryable_committee' }); } catch {}
+      return await runWithEngine('gpt-4o', prompt, Math.max(0.15, (temperature||0.3)-0.05), options);
+    }
+    throw e;
+  }
+}
+
 async function firstPassReview(ctx, {
   srcText, promptBuilder, sanitizer, temperature, primaryEngine, runWithEngine,
   targetLanguage, mode, subStyle
 }){
-  const primary = await runWithEngine(primaryEngine, promptBuilder(), temperature);
+  // Ensure Gemini calls always get a long timeout (avoids aborts)
+  const GEMINI_LONG_TMO = Number(process.env.GEMINI_TIMEOUT || 300000);
+  const optsFor = (eng) => (String(eng || '').startsWith('gemini') ? { timeout: GEMINI_LONG_TMO } : {});
+
+  const primary = await runWithFallback(runWithEngine, primaryEngine, promptBuilder(), temperature, optsFor(primaryEngine));
   const draft = sanitizer(primary.text || '', srcText, targetLanguage);
 
   const [score, reasons] = diffHeuristic(srcText, draft);
@@ -48,7 +70,13 @@ async function firstPassReview(ctx, {
   }
 
   const repairEngine = 'gemini-2p';
-  const repaired = await runWithEngine(repairEngine, promptBuilder(), Math.max(0.15, (temperature||0.3)-0.05));
+  const repaired = await runWithFallback(
+    runWithEngine,
+    repairEngine,
+    promptBuilder(),
+    Math.max(0.15, (temperature||0.3)-0.05),
+    optsFor(repairEngine)
+  );
   const repairedClean = sanitizer(repaired.text || '', srcText, targetLanguage);
   try {
     metrics.escalationsTotal.inc({ from: primaryEngine, to: repairEngine, reason: (reasons[0]||'qe_below_threshold') });
@@ -61,9 +89,12 @@ async function committeeOfTwo(ctx, {
   srcText, promptBuilder, sanitizer, temperature, primaryEngine, secondaryEngine,
   arbiterEngine = 'gemini-2p', runWithEngine, targetLanguage
 }){
+  const GEMINI_LONG_TMO = Number(process.env.GEMINI_TIMEOUT || 300000);
+  const optsFor = (eng) => (String(eng || '').startsWith('gemini') ? { timeout: GEMINI_LONG_TMO } : {});
+
   const [candA, candB] = await Promise.all([
-    runWithEngine(primaryEngine, promptBuilder(), temperature),
-    runWithEngine(secondaryEngine, promptBuilder(), temperature)
+    runWithFallback(runWithEngine, primaryEngine,  promptBuilder(), temperature, optsFor(primaryEngine)),
+    runWithFallback(runWithEngine, secondaryEngine, promptBuilder(), temperature, optsFor(secondaryEngine))
   ]);
 
   const A = sanitizer(candA.text || '', srcText, targetLanguage);
@@ -93,7 +124,13 @@ ${b}
 <result>
 `.trim();
 
-  const arb = await runWithEngine(arbiterEngine, arbiterPrompt(srcText, A, B), Math.max(0.15, (temperature||0.3)-0.05));
+  const arb = await runWithFallback(
+    runWithEngine,
+    arbiterEngine,
+    arbiterPrompt(srcText, A, B),
+    Math.max(0.15, (temperature||0.3)-0.05),
+    optsFor(arbiterEngine)
+  );
   const finalClean = sanitizer(arb.text || '', srcText, targetLanguage);
   try { metrics.collabSteps.inc({ step: 'committee2', primary: primaryEngine, secondary: secondaryEngine, arbiter: arbiterEngine, outcome: 'finalized' }); } catch {}
   return { text: finalClean, meta: { committee: 'committee2', primary: primaryEngine, secondary: secondaryEngine, arbiter: arbiterEngine } };

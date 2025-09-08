@@ -89,9 +89,9 @@ class TranslationCacheManager {
   /**
    * Generate cache key for translation
    */
-  generateCacheKey(text, mode, targetLanguage, subStyle = '', injections = '') {
-    // Create deterministic hash of translation parameters
-    const content = [text, mode, targetLanguage, subStyle, injections].join('::');
+  generateCacheKey(text, mode, targetLanguage, subStyle = '', injections = '', engine = '') {
+    // Create deterministic hash of translation parameters including engine
+    const content = [text, mode, targetLanguage, subStyle, injections, engine].join('::');
     const hash = crypto.createHash('sha256').update(content).digest('hex');
     
     // Truncate if too long
@@ -112,9 +112,9 @@ class TranslationCacheManager {
   /**
    * Get translation from cache
    */
-  async getTranslation(text, mode, targetLanguage, subStyle = '', injections = '') {
+  async getTranslation(text, mode, targetLanguage, subStyle = '', injections = '', engine = '') {
     try {
-      const key = this.generateCacheKey(text, mode, targetLanguage, subStyle, injections);
+      const key = this.generateCacheKey(text, mode, targetLanguage, subStyle, injections, engine);
       
       // Try Redis first
       if (this.isRedisAvailable) {
@@ -171,11 +171,46 @@ class TranslationCacheManager {
   }
 
   /**
+   * Delete translation from cache
+   */
+  async deleteTranslation(text, mode, targetLanguage, subStyle = '', injections = '', engine = '') {
+    try {
+      const key = this.generateCacheKey(text, mode, targetLanguage, subStyle, injections, engine);
+      
+      let deleted = false;
+      
+      // Delete from Redis
+      if (this.isRedisAvailable) {
+        try {
+          const redisDeleted = await this.redisClient.del(key);
+          if (redisDeleted > 0) deleted = true;
+        } catch (redisError) {
+          log.warn('Redis cache delete error', { error: redisError.message });
+        }
+      }
+
+      // Delete from memory cache
+      const memoryDeleted = this.memoryCache.del(key);
+      if (memoryDeleted) deleted = true;
+      
+      log.debug('Translation cache delete', { 
+        key: this.sanitizeKey(key),
+        deleted 
+      });
+      
+      return deleted;
+    } catch (error) {
+      log.error('Cache delete error', { error: error.message });
+      return false;
+    }
+  }
+
+  /**
    * Store translation in cache
    */
-  async setTranslation(text, mode, targetLanguage, result, subStyle = '', injections = '', ttl = null) {
+  async setTranslation(text, mode, targetLanguage, result, subStyle = '', injections = '', ttl = null, engine = '') {
     try {
-      const key = this.generateCacheKey(text, mode, targetLanguage, subStyle, injections);
+      const key = this.generateCacheKey(text, mode, targetLanguage, subStyle, injections, engine);
       const cacheData = {
         text,
         mode,
@@ -192,7 +227,20 @@ class TranslationCacheManager {
       // Store in Redis
       if (this.isRedisAvailable) {
         try {
-          await this.redisClient.setex(key, cacheTTL, JSON.stringify(cacheData));
+          const payload = JSON.stringify(cacheData);
+          if (typeof this.redisClient.setEx === 'function') {
+            await this.redisClient.setEx(key, cacheTTL, payload);
+          } else if (typeof this.redisClient.set === 'function') {
+            try {
+              // node-redis v4 style
+              await this.redisClient.set(key, payload, { EX: cacheTTL });
+            } catch (e) {
+              // ioredis style fallback
+              await this.redisClient.set(key, payload, 'EX', cacheTTL);
+            }
+          } else {
+            throw new Error('Unsupported Redis client: missing set/setEx');
+          }
           log.debug('Translation cached in Redis', { 
             key: this.sanitizeKey(key),
             ttl: cacheTTL 
@@ -279,7 +327,18 @@ class TranslationCacheManager {
       // Store in Redis
       if (this.isRedisAvailable) {
         try {
-          await this.redisClient.setex(key, cacheTTL, JSON.stringify(cacheData));
+          const payload = JSON.stringify(cacheData);
+          if (typeof this.redisClient.setEx === 'function') {
+            await this.redisClient.setEx(key, cacheTTL, payload);
+          } else if (typeof this.redisClient.set === 'function') {
+            try {
+              await this.redisClient.set(key, payload, { EX: cacheTTL });
+            } catch (e) {
+              await this.redisClient.set(key, payload, 'EX', cacheTTL);
+            }
+          } else {
+            throw new Error('Unsupported Redis client: missing set/setEx');
+          }
         } catch (redisError) {
           log.warn('Redis batch cache set error', { error: redisError.message });
         }
@@ -565,10 +624,12 @@ const translationCache = new TranslationCacheManager();
  */
 function cacheMiddleware(req, res, next) {
   req.cache = {
-    get: (text, mode, targetLanguage, subStyle, injections) => 
-      translationCache.getTranslation(text, mode, targetLanguage, subStyle, injections),
-    set: (text, mode, targetLanguage, result, subStyle, injections, ttl) => 
-      translationCache.setTranslation(text, mode, targetLanguage, result, subStyle, injections, ttl),
+    get: (text, mode, targetLanguage, subStyle, injections, engine) => 
+      translationCache.getTranslation(text, mode, targetLanguage, subStyle, injections, engine),
+    set: (text, mode, targetLanguage, result, subStyle, injections, ttl, engine) => 
+      translationCache.setTranslation(text, mode, targetLanguage, result, subStyle, injections, ttl, engine),
+    delete: (text, mode, targetLanguage, subStyle, injections, engine) => 
+      translationCache.deleteTranslation(text, mode, targetLanguage, subStyle, injections, engine),
     getBatch: (items, mode, targetLanguage, subStyle, injections) => 
       translationCache.getBatchTranslation(items, mode, targetLanguage, subStyle, injections),
     setBatch: (items, mode, targetLanguage, results, subStyle, injections, ttl) => 
@@ -586,10 +647,10 @@ function cacheMiddleware(req, res, next) {
  * Cache-aware translation wrapper
  */
 async function cacheAwareTranslation(translationFunction, cacheParams, translationParams) {
-  const { text, mode, targetLanguage, subStyle = '', injections = '' } = cacheParams;
+  const { text, mode, targetLanguage, subStyle = '', injections = '', engine = '' } = cacheParams;
   
   // Check cache first
-  const cached = await translationCache.getTranslation(text, mode, targetLanguage, subStyle, injections);
+  const cached = await translationCache.getTranslation(text, mode, targetLanguage, subStyle, injections, engine);
   if (cached) {
     // Update hit count
     cached.hits = (cached.hits || 0) + 1;
@@ -600,7 +661,7 @@ async function cacheAwareTranslation(translationFunction, cacheParams, translati
   const result = await translationFunction(translationParams);
   
   // Cache the result
-  await translationCache.setTranslation(text, mode, targetLanguage, result, subStyle, injections);
+  await translationCache.setTranslation(text, mode, targetLanguage, result, subStyle, injections, null, engine);
   
   return result;
 }

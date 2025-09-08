@@ -4929,6 +4929,12 @@ ${lines.join('\n')}`);
     const items = (d.cues?.length?d.cues.map(c=>c.text):(d.text||'').split(/\r?\n/)).map(v=>(v||'').trim());
     const hasAny = items.some(v=>v.length);
     if(!hasAny){ d.output=''; d.srtTranslations = new Array(items.length).fill(''); return; }
+    
+    console.log('[SRT Translation] Starting translation for:', {
+      itemCount: items.length,
+      firstThreeInputs: items.slice(0, 3),
+      docName: d.name
+    });
 
     const injections = composeInjections();
               // Add authentication headers
@@ -4960,7 +4966,18 @@ ${lines.join('\n')}`);
           });
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data = await res.json();
+    console.log('[SRT Translation] Response received:', {
+      itemCount: data.items?.length,
+      firstThree: data.items?.slice(0, 3),
+      engines: res.headers.get('X-Engines-Used'),
+      models: res.headers.get('X-Models-Used')
+    });
     d.srtTranslations = Array.isArray(data.items)? data.items : items;
+    console.log('[SRT Translation] Setting UI with translations:', {
+      translationCount: d.srtTranslations.length,
+      firstThree: d.srtTranslations.slice(0, 3),
+      docName: d.name
+    });
     setStatus('Localizing done');
     
     // Refresh usage after successful SRT translation (small delay to ensure backend processing is complete)
@@ -4968,6 +4985,7 @@ ${lines.join('\n')}`);
     
     d.output = d.srtTranslations.join('\n');
     $('#outputText').value = d.output;
+    console.log('[SRT Translation] Updated outputText with:', $('#outputText').value.slice(0, 100));
     autosizeTextarea($('#outputText'));
     if(splitView) renderSrtBoxes(d);
     try{ const entry = makeHistoryEntryFromDoc(d); pushHistory(entry); }catch{}

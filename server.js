@@ -165,12 +165,6 @@ const routerPolicy = safeRequire('./router/model-router', {
   decideEngine: ({ prefer }) => ({ engine: prefer || 'gpt-4o', reason: 'fallback', risk: 0 }),
   shouldCollaborate: () => false
 });
-
-// Emergency fallback: if Gemini is causing issues, force GPT-4o temporarily
-const FORCE_GPT4O = process.env.FORCE_GPT4O === 'true';
-if (FORCE_GPT4O) {
-  console.warn('🚨 FORCE_GPT4O=true - All requests will use GPT-4o only');
-}
 const committee = safeRequire('./collab/committee', {
   firstPassReview: async (_ctx, { srcText }) => ({ text: srcText, meta: { note: 'committee_stub' } }),
   committeeOfTwo: async (_ctx, { srcText }) => ({ text: srcText, meta: { note: 'committee_stub' } })
@@ -180,10 +174,7 @@ const committee = safeRequire('./collab/committee', {
 let gemini;
 try {
   gemini = require('./gemini');
-  console.log('✅ Gemini client loaded');
-} catch (e) {
-  console.warn('⚠️ Gemini client not available:', e.message);
-}
+} catch {}
 
 // HTTP timeout helper (shared)
 const HTTP_TIMEOUT_MS = parseInt(process.env.HTTP_TIMEOUT_MS || '5000', 10);
@@ -590,20 +581,7 @@ app.use(encryptionMiddleware);
 app.use(gdprConsentMiddleware);
 app.use(advancedAuditMiddleware);
 app.use(cdnMiddleware);
-// Temporarily disable caching to debug carry-over issue
-// app.use(cacheMiddleware);
-app.use((req, res, next) => { 
-  req.cache = { 
-    get: () => null, 
-    set: () => {}, 
-    getBatch: () => null, 
-    setBatch: () => {},
-    invalidate: () => {},
-    getStats: () => ({ disabled: true }),
-    healthCheck: () => ({ status: 'disabled' })
-  }; 
-  next(); 
-});
+app.use(cacheMiddleware);
 app.use(translationMemoryMiddleware);
 app.use(encryptResponseMiddleware);
 
@@ -1661,12 +1639,12 @@ function fixCapsAfterTerminals2(text = '') {
   for (let i = 1; i < lines.length; i++) {
     const prev = (lines[i - 1] || '').trim();
     const cur = lines[i] || '';
-    // Previous line ends with terminal punctuation optionally followed by closing quotes/brackets
-    const prevEnds = /[.!?…？！。]["'”')\]）】»>]*\s*$/.test(prev);
+    // SIMPLIFIED REGEX: Detects if the previous line ends with basic terminators and optional quotes/parens.
+    const prevEnds = /[.!?]['"')]\s*$/.test(prev);
     if (!prevEnds) continue;
-    // Capitalize first lowercase letter after optional opening quotes/brackets
+    // SIMPLIFIED REGEX: Capitalizes the first letter of the current line.
     lines[i] = cur.replace(
-      /^(\s*["'“‘(（\[]*)(\p{Ll})/u,
+      /^(\s*["'(]*)(\p{Ll})/u,
       (_, pfx, ch) => pfx + (ch.toLocaleUpperCase ? ch.toLocaleUpperCase() : ch.toUpperCase())
     );
   }
@@ -1876,7 +1854,7 @@ function sanitizeWithSource(txt = '', srcText = '', targetLanguage = '') {
       if (tgtDashCount !== srcDashCount) {
         // Try splitting into sentences first
         const parts = String(out)
-          .split(/(?<=[.!?…]["'"'）\]]*)\s+/)
+          .split(/(?<=[.!?…]["'")'\]]*)\s+/)
           .map(s => s.trim())
           .filter(Boolean);
         if (parts.length === srcDashCount) {
@@ -3383,6 +3361,12 @@ app.post('/api/translate',
     const { text = '', mode = '', targetLanguage = '', subStyle = '', rephrase = false, injections = '', engine = (process.env.ROUTER_DEFAULT || 'auto'), policy = {} } = req.body || {};
     if (!text || !mode) return res.status(400).json({ result: 'Missing text or mode.' });
 
+    // Avoid any intermediary/proxy mixing idempotent and non-idempotent responses
+    try {
+      res.set('Vary', 'Idempotency-Key');
+      res.set('Cache-Control', 'no-store');
+    } catch {}
+
     // Auto-route large inputs via batch to improve reliability
     const MAX_SINGLE_CHARS = parseInt(process.env.MAX_SINGLE_CHARS || '5000', 10);
     if (text.length > MAX_SINGLE_CHARS) {
@@ -3417,11 +3401,11 @@ app.post('/api/translate',
         });
         
         const ctx = makeEngineCtx(req);
-        // Avoid bind to prevent context contamination - use call instead
-        const run = (engine, prompt, temperature, options) => runWithEngine.call({ ...ctx }, engine, prompt, temperature, options);
+        const run = runWithEngine.bind(ctx);
         let first;
         try {
-          first = await run(decision.engine, prompt, temperature, {});
+          const tmo = String(decision.engine).startsWith('gemini') ? Number(process.env.GEMINI_TIMEOUT || 300000) : undefined;
+          first = await run(decision.engine, prompt, temperature, { timeout: tmo });
         } catch (e) {
           const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
           const status = e?.status;
@@ -3435,7 +3419,17 @@ app.post('/api/translate',
         
         // For auto-batch, treat as single response and split back to array
         const chunkResult = sanitizeWithSource(first.text || '', joined, targetLanguage);
-        const arr = chunkResult.split('\n\n').map(s => s.trim());
+        let arr = chunkResult.split('\n\n').map(s => s.trim());
+        if (outputsLookLikeCarryOver(chunk, arr)) {
+          try { res.set('X-Batch-Repair', 'carryover-single'); } catch {}
+          arr = await repairPerItem({
+            run,
+            engine: decision.engine,
+            items: chunk,
+            temperature,
+            mode, subStyle, targetLanguage, rephrase, injections
+          });
+        }
         for (let i = 0; i < arr.length; i++) {
           arr[i] = sanitizeWithSource(arr[i] || '', chunk[i] || '', targetLanguage);
           // Language lock QA: ensure translated output is in target language when applicable
@@ -3482,28 +3476,18 @@ app.post('/api/translate',
 
     // Router decision
     const allowPro = Boolean(req.body?.allowPro) && (String(req.user?.tier||'free').toLowerCase()==='team');
-    const decision = FORCE_GPT4O ? 
-      { engine: 'gpt-4o', reason: 'force_gpt4o', risk: 0 } :
-      routerPolicy.decideEngine({
-        text, mode, subStyle, targetLanguage, rephrase, injections, prefer: engine, allowPro
-      });
+    const decision = routerPolicy.decideEngine({
+      text, mode, subStyle, targetLanguage, rephrase, injections, prefer: engine, allowPro
+    });
     try { recordMetrics.routerDecision(decision.engine, decision.reason, mode, subStyle, targetLanguage); } catch {}
 
     const ctx = makeEngineCtx(req);
-    // Avoid bind to prevent context contamination - use call instead
-    const run = (engine, prompt, temperature, options) => runWithEngine.call({ ...ctx }, engine, prompt, temperature, options);
+    const run = runWithEngine.bind(ctx);
     const temperature = pickTemperature(mode, subStyle, rephrase);
     let first; let engineUsed = decision.engine;
-    
     try {
-      const requestId = `translate_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-      console.log('🔍 About to call engine:', {
-        requestId,
-        engine: decision.engine,
-        promptPreview: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
-        inputText: text.substring(0, 50) + (text.length > 50 ? '...' : '')
-      });
-      first = await run(decision.engine, prompt, temperature, {});
+      const tmo = String(decision.engine).startsWith('gemini') ? Number(process.env.GEMINI_TIMEOUT || 300000) : undefined;
+      first = await run(decision.engine, prompt, temperature, { timeout: tmo });
     } catch (e) {
       const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
       const status = e?.status;
@@ -3516,22 +3500,7 @@ app.post('/api/translate',
         throw e;
       }
     }
-    // Debug: log the raw response before sanitization
-    const rawText = first.text || '';
-    console.log('🔍 Raw engine output:', {
-      requestId,
-      length: rawText.length,
-      preview: rawText.substring(0, 100) + (rawText.length > 100 ? '...' : ''),
-      inputPreview: text.substring(0, 50) + (text.length > 50 ? '...' : '')
-    });
-    
-    let clean = sanitizeWithSource(rawText, text, targetLanguage);
-    
-    console.log('🔍 After sanitization:', {
-      requestId,
-      length: clean.length,
-      preview: clean.substring(0, 100) + (clean.length > 100 ? '...' : '')
-    });
+    let clean = sanitizeWithSource(first.text || '', text, targetLanguage);
 
     // Expose routing info via headers
     const modelUsed = engineUsed === 'gpt-4o' ? MODEL_GPT4O : (engineUsed === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
@@ -3826,6 +3795,42 @@ function parseJsonArrayStrict(raw = '', expectedLen = null) {
   return arr;
 }
 
+/**
+ * Detect the "carry-over" failure: output array length matches input, but
+ * every output string is identical while inputs are not.
+ */
+function outputsLookLikeCarryOver(srcItems = [], outItems = []) {
+  if (!Array.isArray(srcItems) || !Array.isArray(outItems)) return true;
+  if (outItems.length !== srcItems.length) return true;
+  const tOut = outItems.map(s => (s ?? '').trim());
+  const tIn  = srcItems.map(s => (s ?? '').trim());
+  const uniqOut = new Set(tOut.filter(Boolean)).size;
+  const uniqIn  = new Set(tIn.filter(Boolean)).size;
+  
+  // Degenerate when there are multiple inputs but the model gave the same non-empty string everywhere.
+  return (tOut.length > 1 && uniqOut === 1 && uniqIn > 1);
+}
+
+/**
+ * Repair by translating each item independently using the same engine,
+ * falling back to GPT-4o on transient engine errors.
+ */
+async function repairPerItem({ run, engine, items, temperature, mode, subStyle, targetLanguage, rephrase, injections }) {
+  const fixed = [];
+  for (let i = 0; i < items.length; i++) {
+    const single = items[i] || '';
+    const p = buildPrompt({ text: single, mode, subStyle, targetLanguage, rephrase, injections });
+    let r;
+    try {
+      r = await run(engine, p, Math.max(0.15, (temperature || 0.3) - 0.05), {});
+    } catch (e) {
+      r = await run('gpt-4o', p, Math.max(0.15, (temperature || 0.3) - 0.05), {});
+    }
+    fixed.push(sanitizeWithSource(r.text || '', single, targetLanguage));
+  }
+  return fixed;
+}
+
 /** Robust retry wrapper for OpenAI calls with Retry-After + exponential backoff */
 async function callOpenAIWithRetry({ messages, temperature }) {
   const model = 'gpt-4o';
@@ -3886,8 +3891,9 @@ const MODEL_GPT4O     = process.env.OPENAI_MODEL_GPT4O || 'gpt-4o';
  * Run a single engine with a prompt-string.
  * Returns: { text, raw, engine }
  */
-async function runWithEngine(engine, prompt, temperature, { system=null } = {}) {
+async function runWithEngine(engine, prompt, temperature, { system=null, timeout } = {}) {
   engine = String(engine || '').toLowerCase();
+  console.log(`[runWithEngine] Called with engine: ${engine}, prompt: ${prompt.slice(0, 50)}...`);
   if (engine === 'gpt-4o' || engine === 'openai' || engine === 'gpt4o') {
     if (chatComplete) {
       const { content } = await chatComplete(this.req, this.openaiClient, {
@@ -3912,76 +3918,37 @@ async function runWithEngine(engine, prompt, temperature, { system=null } = {}) 
     return { text: extractResultTagged(raw) || raw || '', raw, engine: 'gpt-4o' };
   }
 
-  // Gemini family - fallback to GPT-4o if Gemini unavailable
-  if (!gemini || !gemini.generateContent) {
-    console.warn('Gemini client not available, falling back to GPT-4o');
-    if (chatComplete) {
-      const { content } = await chatComplete(this.req, this.openaiClient, {
-        model: MODEL_GPT4O,
-        temperature,
-        messages: [
-          { role: 'system', content: 'You are an expert localization and translation assistant.' },
-          ...(system ? [{ role: 'system', content: system }] : []),
-          { role: 'user', content: prompt }
-        ]
-      }, { userTier: this.userTier });
-      return { text: extractResultTagged(content) || content || '', raw: content, engine: 'gpt-4o' };
-    }
-    const raw = await callOpenAIWithRetry({
-      messages: [
-        { role: 'system', content: 'You are an expert localization and translation assistant.' },
-        ...(system ? [{ role: 'system', content: system }] : []),
-        { role: 'user', content: prompt }
-      ],
-      temperature
-    });
-    return { text: extractResultTagged(raw) || raw || '', raw, engine: 'gpt-4o' };
-  }
-  
-  // Defensive: clear any per-request cached buffers and force fresh context
-  if (this) {
-    // Clear all possible contamination sources
-    Object.keys(this).forEach(key => {
-      if (key.startsWith('last') || key.startsWith('prev') || key.startsWith('cache')) {
-        delete this[key];
-      }
-    });
-    this.lastRaw = undefined;
-    this.lastBatch = undefined;
-    this.prevResult = undefined;
-    this.cached = undefined;
-    this._result = undefined;
-    this._output = undefined;
-  }
-  
-  // Clear any module-level contamination
-  if (typeof global !== 'undefined') {
-    if (global._translationCache) delete global._translationCache;
-    if (global._lastResult) delete global._lastResult;
-  }
-
+  // Gemini family
+  if (!gemini || !gemini.generateContent) throw new Error('Gemini client not available');
   const model = engine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
   // Pass thinkingBudget=0 for flash-lite if ROUTER_THINKING_DISABLED=true
   const thinkingOff = (process.env.ROUTER_THINKING_DISABLED || 'false') === 'true';
-  const out = await gemini.generateContent({ text: prompt, system, model, thinkingBudget: thinkingOff ? 0 : undefined });
-  const textOut = String(out?.text || '').trim();
-  return { text: extractResultTagged(textOut) || textOut, raw: out?.raw, engine: engine };
+  const geminiTimeout = Number.isFinite(timeout) ? Number(timeout) : Number(process.env.GEMINI_TIMEOUT || 300000);
+  console.log(`[runWithEngine] Calling Gemini with model: ${model}, prompt: ${prompt.slice(0, 50)}..., timeout: ${geminiTimeout}`);
+  try {
+    const out = await gemini.generateContent({ 
+      text: prompt, 
+      system, 
+      model, 
+      thinkingBudget: thinkingOff ? 0 : undefined,
+      timeoutMs: geminiTimeout 
+    });
+    const textOut = String(out?.text || '').trim();
+    console.log(`[runWithEngine] Gemini returned: ${textOut.slice(0, 100)}...`);
+    return { text: extractResultTagged(textOut) || textOut, raw: out?.raw, engine: engine };
+  } catch (e) {
+    console.log(`[runWithEngine] Gemini failed with error: ${e.message}`);
+    throw e;
+  }
 }
 
 function makeEngineCtx(req){
-  // Force complete state isolation per request
-  const ctx = Object.create(null);
-  ctx.req = req;
-  ctx.userTier = (req.user?.tier || 'anonymous');
-  ctx.openaiClient = openai;
-  ctx.run = runWithEngine;
-  ctx.requestId = `ctx_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-  
-  // Clear any global contamination
-  if (global._lastTranslationResult) delete global._lastTranslationResult;
-  if (global._cachedResponse) delete global._cachedResponse;
-  
-  return ctx;
+  return {
+    req,
+    userTier: (req.user?.tier || 'anonymous'),
+    openaiClient: openai,
+    run: runWithEngine
+  };
 }
 
 app.post('/api/translate-batch',
@@ -4033,6 +4000,12 @@ app.post('/api/translate-batch',
     if (!Array.isArray(items) || !items.length || !mode) {
       return res.status(400).json({ items: [], error: 'Missing items or mode.' });
     }
+
+    // Avoid any intermediary/proxy mixing idempotent and non-idempotent responses
+    try {
+      res.set('Vary', 'Idempotency-Key');
+      res.set('Cache-Control', 'no-store');
+    } catch {}
 
     // For subtitling/dubbing/dialogue, we CAN enforce strict 1:1 by micro-batching,
     // but keep it opt-in via env to avoid regressions under load.
@@ -4100,10 +4073,10 @@ app.post('/api/translate-batch',
     const chunks = useMicroBatch
       ? items.map(x => [x])
       : chunkByTokenBudget(items, {
-          maxTokensPerRequest: Number(process.env.BATCH_TOKENS || 4000),
-          overheadTokens: 900,
-          outputFactor: 1.10,
-          maxItemsPerChunk: 120
+          maxTokensPerRequest: Number(process.env.BATCH_TOKENS || 7000),
+          overheadTokens: 1200,
+          outputFactor: 1.15,
+          maxItemsPerChunk: 250
         });
 
     const temperature = pickTemperature(mode, subStyle, rephrase);
@@ -4111,7 +4084,7 @@ app.post('/api/translate-batch',
 
     // Run with limited concurrency to keep UI responsive
     const isTeamTier = (req.user?.tier || '').toLowerCase() === 'team';
-    const baseConc = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 1) : Number(process.env.BATCH_CONCURRENCY || 1);
+    const baseConc = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 2) : Number(process.env.BATCH_CONCURRENCY || 2);
     const CONCURRENCY = isTeamTier ? Math.max(baseConc + 1, Number(process.env.BATCH_CONCURRENCY_TEAM || (baseConc + 1))) : baseConc;
     // Build indexed jobs so we can reconstruct results in original order
     const jobs = [];
@@ -4137,23 +4110,45 @@ app.post('/api/translate-batch',
         try { recordMetrics.routerDecision(decision.engine, decision.reason, mode, subStyle, targetLanguage); } catch {}
 
         const ctx = makeEngineCtx(req);
-        // Avoid bind to prevent context contamination - use call instead
-        const run = (engine, prompt, temperature, options) => runWithEngine.call({ ...ctx }, engine, prompt, temperature, options);
+        const run = runWithEngine.bind(ctx);
+        console.log(`[Batch Worker] Processing job with ${job.items.length} items using engine: ${decision.engine}`);
+        console.log(`[Batch Worker] First 3 input items: ${job.items.slice(0, 3).map(s => s.slice(0, 30)).join(' | ')}`);
+        
         let first;
+        let actualEngine = decision.engine;
         try {
-          first = await run(decision.engine, prompt, temperature, {});
+          // Use longer timeout for batch Gemini operations (5 mins vs default 15s)
+          const batchTimeout = String(decision.engine).startsWith('gemini') ? Number(process.env.GEMINI_TIMEOUT || 300000) : undefined;
+          first = await run(decision.engine, prompt, temperature, { timeout: batchTimeout });
         } catch (e) {
           // Fallback to GPT-4o on Gemini transient errors/aborts
+          console.log(`[Batch Worker] Engine ${decision.engine} failed with error: ${e.message}`);
           const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
           const status = e?.status;
           const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
           if (retryable && decision.engine !== 'gpt-4o') {
+            console.log(`[Batch Worker] Falling back from ${decision.engine} to gpt-4o due to retryable error`);
             try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gpt-4o', reason: 'fallback_retryable' }); } catch {}
+            actualEngine = 'gpt-4o';
+            
+            // Clear cache entries that might interfere with fallback
+            if (req.cache && req.cache.delete) {
+              try {
+                // Clear cache for the original engine AND the fallback engine for this specific prompt
+                const clearedOrig = await req.cache.delete(prompt, mode, targetLanguage, subStyle, injections, decision.engine);
+                const clearedFallback = await req.cache.delete(prompt, mode, targetLanguage, subStyle, injections, 'gpt-4o');
+                console.log(`[Batch Worker] Cache clear attempt for engines ${decision.engine} (found: ${clearedOrig}) and gpt-4o (found: ${clearedFallback})`);
+              } catch (cacheErr) {
+                console.log(`[Batch Worker] Cache clear failed: ${cacheErr.message}`);
+              }
+            }
             first = await run('gpt-4o', prompt, temperature, {});
           } else {
             throw e;
           }
         }
+        
+        console.log(`[Batch Worker] Raw response preview: ${String(first.text || '').slice(0, 100)}...`);
         let raw = first.text;
 
         const collabMode = String(process.env.ROUTER_COMMITTEE_MODE || 'first_pass_review');
@@ -4186,6 +4181,21 @@ app.post('/api/translate-batch',
         }
 
         let arr = parseJsonArrayStrict(raw, job.items.length);
+        
+        // Check for carry-over: identical outputs for different inputs
+        if (outputsLookLikeCarryOver(job.items, arr)) {
+          try { 
+            res.set('X-Batch-Repair', 'carryover'); 
+            console.log(`[Batch Repair] Detected carry-over in job with ${job.items.length} items`);
+          } catch {}
+          arr = await repairPerItem({
+            run,
+            engine: decision.engine,
+            items: job.items,
+            temperature,
+            mode, subStyle, targetLanguage, rephrase, injections
+          });
+        }
         for (let i = 0; i < arr.length; i++) {
           let sanitized = sanitizeWithSource(arr[i] || '', job.items[i] || '', targetLanguage);
           if (rephrase && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
@@ -4239,6 +4249,7 @@ app.post('/api/translate-batch',
       res.set('X-Router-Reasons', Array.from(reasons).join(','));
       res.set('X-Chunks-Count', chunks.length.toString());
     } catch {}
+
 
     // Defer usage accounting until response finishes successfully
     const inputChars = items.join('').length; const outputChars = resultsOut.join('').length;

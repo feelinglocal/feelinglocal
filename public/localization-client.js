@@ -64,7 +64,8 @@ class LocalizationClient {
   // Make HTTP request with retry logic
   async makeRequest(method, endpoint, body, idempotencyKey) {
     const url = `${this.config.baseUrl}${endpoint}`;
-    const headers = this.createHeaders(idempotencyKey);
+    const scopedKey = idempotencyKey ? `${method}:${endpoint}:${idempotencyKey}` : undefined;
+    const headers = this.createHeaders(scopedKey);
 
     let lastError;
 
@@ -175,7 +176,7 @@ class LocalizationClient {
         'POST',
         '/api/translate',
         request,
-        request.idempotencyKey
+        request.idempotencyKey || this.generateIdempotencyKey()
       );
       
       return response;
@@ -193,7 +194,7 @@ class LocalizationClient {
         'POST',
         '/api/translate-batch',
         request,
-        request.idempotencyKey
+        request.idempotencyKey || this.generateIdempotencyKey()
       );
       
       return response;
