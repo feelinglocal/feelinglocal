@@ -110,16 +110,18 @@
             console.log('🔍 Updated user object with backend tier:', u);
             // refresh UI and phrasebook
             window.renderAuthHeader();
+            try{ initMaxToggle(); updateSubmitHints(); }catch{}
             try{ if (typeof renderSavedPhrasebookAll==='function') await renderSavedPhrasebookAll(); }catch{}
           } else {
             console.log('🔍 Profile fetch failed, but user has token - marking as authenticated');
-            // If profile fetch fails but we have a token, still mark as not guest with team tier
+            // If profile fetch fails but we have a token, still mark as not guest with business tier
             const u = JSON.parse(localStorage.getItem('user')||'{}');
             u.isGuest = false;
-            u.tier = u.tier || 'team'; // Default to team tier for authenticated users
+            u.tier = u.tier || 'business'; // Default to business tier for authenticated users
             localStorage.setItem('user', JSON.stringify(u));
             console.log('🔍 Fallback user object with team tier:', u);
             window.renderAuthHeader();
+            try{ initMaxToggle(); updateSubmitHints(); }catch{}
           }
         } else {
           // No token, ensure guest mode is active
