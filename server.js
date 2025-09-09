@@ -597,8 +597,9 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+// Raise body limits to better handle larger batch payloads
+app.use(express.json({ limit: '8mb' }));
+app.use(express.urlencoded({ extended: true, limit: '8mb' }));
 
 // Optional CSRF protection (disabled by default to avoid breaking API clients)
 if (process.env.ENABLE_CSRF === 'true') {
@@ -4129,6 +4130,9 @@ app.post('/api/translate-batch',
     const engineReq = String(req.body?.engine || process.env.ROUTER_DEFAULT || 'auto');
     const tnow3 = String(req.user?.tier||'free').toLowerCase();
     const allowPro = Boolean(req.body?.allowPro) && (tnow3==='business' || tnow3==='pro');
+    // Committee policy: only enable committee2 when Max mode (allowPro) is ON; otherwise OFF
+    const committeeMode = allowPro ? (String(process.env.ROUTER_COMMITTEE_MODE || 'committee2') === 'off' ? 'off' : 'committee2') : 'off';
+    try { res.set('X-Committee', committeeMode); } catch {}
 
     if (!Array.isArray(items) || !items.length || !mode) {
       return res.status(400).json({ items: [], error: 'Missing items or mode.' });
@@ -4305,8 +4309,8 @@ app.post('/api/translate-batch',
           reasons.add(decision.reason || '');
         } catch {}
 
-        const collabMode = String(process.env.ROUTER_COMMITTEE_MODE || 'first_pass_review');
-        if (routerPolicy.shouldCollaborate({ risk: decision.risk, mode }) && isSubtitleLike && collabMode !== 'off') {
+        const collabMode = committeeMode; // only committee2 when Max mode is ON, else 'off'
+        if (collabMode !== 'off' && isSubtitleLike && routerPolicy.shouldCollaborate({ risk: decision.risk, mode })) {
           if (collabMode === 'committee2') {
             const out = await committee.committeeOfTwo(ctx, {
               srcText: joined,
