@@ -5107,6 +5107,11 @@ app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
       res.set('X-Profile-Token-Tier', tokenTier);
       res.set('X-Profile-DB-Tier', dbTier);
       res.set('X-Profile-Effective-Tier', effective);
+      // Prevent intermediaries and browser from caching profile
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      res.set('Vary', 'Authorization');
     } catch {}
     res.json({ id: req.user.id, email: req.user.email || null, tier: effective, name });
   } catch (e) { console.error('profile', e?.message || e); res.status(500).json({ error: 'Failed to get profile' }); }
