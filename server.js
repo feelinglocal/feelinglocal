@@ -1918,6 +1918,21 @@ function normalizeLangTag(s = '') {
   return t.slice(0,2);
 }
 
+// Enhanced mapper that recognizes colloquial aliases (e.g., "bahasa" → id)
+function normalizeLangTag2(s = '') {
+  const t = String(s || '').toLowerCase().trim();
+  if (!t) return 'unknown';
+  if (/(^|\b)(en|english)(\b|$)/.test(t)) return 'en';
+  if (/(^|\b)(fr|fra|french|fran[çc]ais|francais)(\b|$)/.test(t)) return 'fr';
+  if (/(^|\b)(es|spa|spanish|espa[ñn]ol|espanol)(\b|$)/.test(t)) return 'es';
+  if (/(^|\b)(id|ind|indo|indonesian|bahasa indonesia|bahasa)(\b|$)/.test(t)) return 'id';
+  if (/(^|\b)(zh|chi|chinese|汉|漢|中文)(\b|$)/.test(t)) return 'zh';
+  if (/(^|\b)(ja|jpn|japanese|日本語)(\b|$)/.test(t)) return 'ja';
+  if (/(^|\b)(ru|rus|russian|русский|рус)(\b|$)/.test(t)) return 'ru';
+  if (/(^|\b)(ar|ara|arabic|العربية)(\b|$)/.test(t)) return 'ar';
+  return t.slice(0,2);
+}
+
 function detectLanguageSimple(text = '') {
   const s = String(text || '').trim();
   if (!s) return 'unknown';
@@ -1962,7 +1977,7 @@ function enforceCensoredMask(srcText = '', outText = '', targetLanguage = '') {
   if (/\b\p{L}+[\p{L}'-]*\*+[\p{L}'-]+\b/iu.test(String(outText||''))) return outText;
 
   // Attempt to re-apply masking to localized profane tokens
-  const tgtCode = normalizeLangTag(targetLanguage) || detectLanguageSimple(outText);
+  const tgtCode = normalizeLangTag2(targetLanguage) || detectLanguageSimple(outText);
   const badList = PROFANITY[tgtCode] || [];
   let out = outText;
   if (badList.length) {
@@ -3435,7 +3450,7 @@ app.post('/api/translate',
           // Language lock QA: ensure translated output is in target language when applicable
           if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
             const det = detectLanguageSimple(arr[i]);
-            const want = normalizeLangTag(targetLanguage);
+      const want = normalizeLangTag2(targetLanguage);
             if (det !== 'unknown' && want && det !== want) {
               // If mismatch, force minimal correction via a tiny prompt pass
               try {
@@ -3502,6 +3517,23 @@ app.post('/api/translate',
     }
     let clean = sanitizeWithSource(first.text || '', text, targetLanguage);
 
+    // Heuristic repair: if a previous batch-style array leaked into output,
+    // or output is an obvious quoted list while input is tiny, fix by enforcing
+    // the single-text return contract via a small GPT-4o pass.
+    try {
+      const tinyInput = (text || '').length <= 120;
+      const looksArray = /^\s*\[/.test(clean) || /\[\s*".+",\s*"/.test(clean);
+      if (tinyInput && looksArray) {
+        const fixPrompt = `Return ONLY the proper translation of the following text between <result> tags. Do not include brackets, lists, or arrays.\n\nText:\n${text}\n\n<result>`;
+        const fixed = await run('gpt-4o', fixPrompt, 0);
+        const repaired = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
+        if (repaired && repaired.length < clean.length * 0.8) {
+          clean = repaired;
+          try { res.set('X-Repair', 'carryover-single'); } catch {}
+        }
+      }
+    } catch {}
+
     // Expose routing info via headers
     const modelUsed = engineUsed === 'gpt-4o' ? MODEL_GPT4O : (engineUsed === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
     try {
@@ -3512,7 +3544,7 @@ app.post('/api/translate',
     // Language lock QA for single translation
     if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
       const det = detectLanguageSimple(clean);
-      const want = normalizeLangTag(targetLanguage);
+      const want = normalizeLangTag2(targetLanguage);
       if (det !== 'unknown' && want && det !== want) {
         try {
           const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
@@ -4081,6 +4113,10 @@ app.post('/api/translate-batch',
 
     const temperature = pickTemperature(mode, subStyle, rephrase);
     const results = [];
+    // Track actual engines/models used across workers for accurate headers
+    const enginesUsed = new Set();
+    const modelsUsed = new Set();
+    const reasons = new Set();
 
     // Run with limited concurrency to keep UI responsive
     const isTeamTier = (req.user?.tier || '').toLowerCase() === 'team';
@@ -4105,7 +4141,7 @@ app.post('/api/translate-batch',
         // Router decision per chunk
         const joined = normalizedItems.join('\n');
         const decision = routerPolicy.decideEngine({
-          text: joined, mode, subStyle, targetLanguage, rephrase, injections, prefer: engineReq, allowPro
+          text: joined, mode, subStyle, targetLanguage, rephrase, injections, prefer: engineReq, allowPro, isBatch: true
         });
         try { recordMetrics.routerDecision(decision.engine, decision.reason, mode, subStyle, targetLanguage); } catch {}
 
@@ -4150,6 +4186,13 @@ app.post('/api/translate-batch',
         
         console.log(`[Batch Worker] Raw response preview: ${String(first.text || '').slice(0, 100)}...`);
         let raw = first.text;
+        // Record engine/model used for this job
+        try {
+          enginesUsed.add(actualEngine);
+          const modelUsed = actualEngine === 'gpt-4o' ? MODEL_GPT4O : (actualEngine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
+          modelsUsed.add(modelUsed);
+          reasons.add(decision.reason || '');
+        } catch {}
 
         const collabMode = String(process.env.ROUTER_COMMITTEE_MODE || 'first_pass_review');
         if (routerPolicy.shouldCollaborate({ risk: decision.risk, mode }) && isSubtitleLike && collabMode !== 'off') {
@@ -4223,24 +4266,6 @@ app.post('/api/translate-batch',
     const workers = Array.from({ length: Math.max(1, CONCURRENCY) }, () => worker());
     await Promise.all(workers);
     const resultsOut = out;
-
-    // Collect routing info for headers (summary of engines used)
-    const enginesUsed = new Set();
-    const modelsUsed = new Set();
-    const reasons = new Set();
-    
-    // For batch, we track engines per chunk - collect from decision logic above
-    // Since we route per chunk, collect a summary of what was used
-    for (const chunk of chunks) {
-      const joined = chunk.join('\n');
-      const decision = routerPolicy.decideEngine({
-        text: joined, mode, subStyle, targetLanguage, rephrase, injections, prefer: engineReq, allowPro
-      });
-      enginesUsed.add(decision.engine);
-      const model = decision.engine === 'gpt-4o' ? MODEL_GPT4O : (decision.engine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
-      modelsUsed.add(model);
-      reasons.add(decision.reason);
-    }
 
     // Set summary headers
     try {
