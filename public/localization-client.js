@@ -362,7 +362,7 @@ class LocalizationClient {
           maxInputSize: 10000,
           maxRequestsPerDay: 500
         },
-        team: {
+        business: {
           batchAllowed: true,
           zipDownloadAllowed: true,
           maxInputSize: 50000,

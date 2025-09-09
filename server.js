@@ -18,7 +18,7 @@ require('dotenv').config();
 const db = require('./database');
 const { requireAuth, requireApiKey, checkTierPermission, passport, TIERS } = require('./auth');
 const { quotaMiddleware, rateLimiters, validateInputSize, recordUsage } = require('./rate-limit');
-const { enforceMonthlyLimit, allowFreeBatchTrial, enforceDeviceLimit, setUserFlag, getUserFlag } = require('./limits');
+const { enforceMonthlyLimit, allowFreeBatchTrial, enforceDeviceLimit, enforceSubstyleAndMark, prepareMaxModeHeaders, countMaxModeUse, incrementSubstyleUse, setUserFlag, getUserFlag } = require('./limits');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const { RedisStore } = require('connect-redis');
@@ -584,6 +584,19 @@ app.use(cdnMiddleware);
 app.use(cacheMiddleware);
 app.use(translationMemoryMiddleware);
 app.use(encryptResponseMiddleware);
+
+// Secure Localization mode: disable body logging (we do not log bodies) and tag responses
+app.use((req, res, next) => {
+  try {
+    if (process.env.SECURE_LOCALIZATION === 'on') {
+      const p = req.path || '';
+      if (p.startsWith('/api/translate') || p.startsWith('/api/upload') || p.startsWith('/api/phrasebook') || p.startsWith('/api/history')) {
+        res.set('X-Secure-Mode', 'true');
+      }
+    }
+  } catch {}
+  next();
+});
 
 // Apply general rate limiting
 app.use(rateLimiters.general);
@@ -2157,7 +2170,7 @@ app.post('/auth/register', rateLimiters.auth, async (req, res) => {
     }
 
     // Create user
-    const allowedTiers = new Set(['free','pro','team']);
+    const allowedTiers = new Set(['free','pro','business']);
     const userTier = allowedTiers.has(String(tier||'').toLowerCase()) ? String(tier).toLowerCase() : 'free';
     const passwordHash = await hashPassword(password);
     const result = await db.run(`
@@ -2207,8 +2220,8 @@ app.post('/admin/register', async (req, res) => {
     }
 
     // Create user with specified tier
-    const allowedTiers = new Set(['free','pro','team']);
-    const userTier = allowedTiers.has(String(tier||'').toLowerCase()) ? String(tier).toLowerCase() : 'team';
+    const allowedTiers = new Set(['free','pro','business']);
+    const userTier = allowedTiers.has(String(tier||'').toLowerCase()) ? String(tier).toLowerCase() : 'business';
     const passwordHash = await hashPassword(password);
     
     const result = await db.run(`
@@ -2274,7 +2287,7 @@ app.post('/admin/update-tier', async (req, res) => {
       return res.status(400).json({ error: 'Email and tier are required' });
     }
 
-    const allowedTiers = ['free', 'pro', 'team'];
+    const allowedTiers = ['free', 'pro', 'business'];
     if (!allowedTiers.includes(tier.toLowerCase())) {
       return res.status(400).json({ error: `Invalid tier. Must be one of: ${allowedTiers.join(', ')}` });
     }
@@ -2316,12 +2329,12 @@ app.post('/auth/login', rateLimiters.auth, async (req, res) => {
       return res.status(401).json({ error: info.message || 'Invalid credentials' });
     }
 
-    // Auto-upgrade Wina to team tier on login (temporary beta fix)
+    // Auto-upgrade Wina to business tier on login (temporary beta fix)
     if (user.email === 'wina150197@gmail.com' && user.tier === 'free') {
       try {
-        await db.run('UPDATE users SET tier = ? WHERE email = ?', ['team', user.email]);
-        user.tier = 'team';
-        console.log(`✅ Auto-upgraded ${user.email} to team tier`);
+        await db.run('UPDATE users SET tier = ? WHERE email = ?', ['business', user.email]);
+        user.tier = 'business';
+        console.log(`✅ Auto-upgraded ${user.email} to business tier`);
       } catch (error) {
         console.error('Failed to auto-upgrade user tier:', error);
       }
@@ -2887,7 +2900,7 @@ const allowGuests = (req, res, next) => {
       id: 'dev-user-' + Date.now(),
       email: 'dev@localhost',
       name: 'Development User',
-      tier: 'team'
+      tier: 'business'
     };
     return next();
   }
@@ -2937,6 +2950,30 @@ app.post('/api/upload',
     absPath = req.file.path;
     const ext = path.extname(req.file.originalname).toLowerCase();
     const fileSizeMB = req.file.size / (1024 * 1024);
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    try { res.set('X-Tier', tierNow); } catch {}
+
+    // Enforce per-tier size limits
+    const maxMb = tierNow === 'free' ? 5 : 50;
+    if (fileSizeMB > maxMb) {
+      const msg = tierNow === 'free' ? 'Free tier max upload size is 5 MB.' : 'Max upload size is 50 MB for your tier.';
+      try { res.set('X-Feature-Locked', 'upload'); } catch {}
+      return res.status(413).json({ ok:false, error: 'File too large', code: 'file_too_large', message: msg, upgradeMessage: tierNow==='free' ? 'Upgrade to Pro or Business for larger uploads' : undefined, helpUrl: 'https://example.com/pricing' });
+    }
+
+    // Free tier: only 1 upload ever
+    if (tierNow === 'free' && req.user?.id) {
+      try {
+        const { getLimitKV, setLimitKV } = require('./limits');
+        const used = await getLimitKV(req.user.id, 'uploads', 'free_file_upload_used');
+        if (Number(used||0) >= 1) {
+          try { res.set('X-Feature-Locked', 'upload'); } catch {}
+          return res.status(403).json({ ok:false, error:'File upload limit reached for Free tier', code:'file_upload_limit', upgradeMessage:'Upgrade to Pro or Business to upload more files', helpUrl:'https://example.com/pricing' });
+        }
+        // Mark after successful processing in finally
+        req._markFreeUploadUsed = true;
+      } catch {}
+    }
     
     // Log large file processing
     if (fileSizeMB > 5) {
@@ -2997,6 +3034,13 @@ app.post('/api/upload',
     if (absPath) {
       fs.unlink(absPath, () => {}); // best-effort delete
     }
+    // Mark free upload used after success
+    try {
+      if (req._markFreeUploadUsed && res.statusCode < 400 && req.user?.id) {
+        const { setLimitKV } = require('./limits');
+        await setLimitKV(req.user.id, 'uploads', 'free_file_upload_used', 1);
+      }
+    } catch {}
   }
 });
 
@@ -3133,7 +3177,7 @@ app.post('/api/download-zip',
       return requireAuth(req, res, next);
     }
   },
-  checkTierPermission('zip'), // ZIP download requires Pro or Team tier
+  checkTierPermission('zip'), // ZIP download requires Pro or Business tier
   async (req, res) => {
   try {
     const { files = [], zipname = 'localized' } = req.body || {};
@@ -3353,7 +3397,7 @@ app.post('/api/translate',
         id: 'dev-user-' + Date.now(),
         email: 'dev@localhost',
         name: 'Development User',
-        tier: 'team'
+        tier: 'business'
       };
       return next();
     }
@@ -3382,6 +3426,14 @@ app.post('/api/translate',
       res.set('Cache-Control', 'no-store');
     } catch {}
 
+    // Feature headers
+    try { res.set('X-Tier', String(req.user?.tier||'free')); } catch {}
+
+    // Enforce sub-style cap for free (may clear subStyle and mark header)
+    const substyleLock = await enforceSubstyleAndMark(req, res);
+    // Prepare Max-mode remaining headers (counts applied after success)
+    const maxMeta = await prepareMaxModeHeaders(req, res);
+
     // Auto-route large inputs via batch to improve reliability
     const MAX_SINGLE_CHARS = parseInt(process.env.MAX_SINGLE_CHARS || '5000', 10);
     if (text.length > MAX_SINGLE_CHARS) {
@@ -3403,7 +3455,8 @@ app.post('/api/translate',
 
       const temperature = pickTemperature(mode, subStyle, rephrase);
       const results = [];
-      const allowPro = Boolean(req.body?.allowPro) && (String(req.user?.tier||'free').toLowerCase()==='team');
+      const tnow = String(req.user?.tier||'free').toLowerCase();
+      const allowPro = Boolean(req.body?.allowPro) && (tnow==='business' || tnow==='pro');
       
       for (const chunk of chunks) {
         // For auto-batch in single translate, process each chunk as a single unit
@@ -3480,6 +3533,9 @@ app.post('/api/translate',
             try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: text.length, outputChars: clean.length }); } catch {}
             recordMetrics.translation('batch-auto', mode, targetLanguage, req.user?.tier || 'anonymous', true, usedCharsTotal);
             log.translation('batch-auto', text.length, clean.length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+            // Feature counters on success
+            try { if (maxMeta?.shouldCount) await countMaxModeUse(req, res); } catch {}
+            try { if ((req.user?.tier||'free').toLowerCase()==='free' && !substyleLock.locked && (req.body?.subStyle||'').trim()) await incrementSubstyleUse(req.user.id); } catch {}
           }
         } catch {}
       });
@@ -3490,7 +3546,8 @@ app.post('/api/translate',
     const prompt = buildPrompt({ text, mode, subStyle, targetLanguage, rephrase, injections });
 
     // Router decision
-    const allowPro = Boolean(req.body?.allowPro) && (String(req.user?.tier||'free').toLowerCase()==='team');
+    const tnow2 = String(req.user?.tier||'free').toLowerCase();
+    const allowPro = Boolean(req.body?.allowPro) && (tnow2==='business' || tnow2==='pro');
     const decision = routerPolicy.decideEngine({
       text, mode, subStyle, targetLanguage, rephrase, injections, prefer: engine, allowPro
     });
@@ -3576,6 +3633,9 @@ app.post('/api/translate',
           try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: text.length, outputChars: clean.length }); } catch {}
           recordMetrics.translation('single', mode, targetLanguage, req.user?.tier || 'anonymous', true, usedCharsTotal);
           log.translation('single', text.length, clean.length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+          // Feature counters on success
+          try { if (maxMeta?.shouldCount) await countMaxModeUse(req, res); } catch {}
+          try { if ((req.user?.tier||'free').toLowerCase()==='free' && !substyleLock.locked && (req.body?.subStyle||'').trim()) await incrementSubstyleUse(req.user.id); } catch {}
         }
       } catch (e) { /* non-fatal */ }
     });
@@ -4000,7 +4060,7 @@ app.post('/api/translate-batch',
   },
   rateLimiters.translation,
   quotaMiddleware,
-  // Batch requires Pro or Team tier; for Free without trial, fallback to single (non-subtitle) instead of 403
+  // Batch requires Pro or Business tier; for Free without trial, fallback to single (non-subtitle) instead of 403
   (req, res, next) => {
     const tier = (req.user?.tier || 'free').toLowerCase();
     if (tier === 'free') {
@@ -4027,7 +4087,8 @@ app.post('/api/translate-batch',
     } = req.body || {};
 
     const engineReq = String(req.body?.engine || process.env.ROUTER_DEFAULT || 'auto');
-    const allowPro = Boolean(req.body?.allowPro) && (String(req.user?.tier||'free').toLowerCase()==='team');
+    const tnow3 = String(req.user?.tier||'free').toLowerCase();
+    const allowPro = Boolean(req.body?.allowPro) && (tnow3==='business' || tnow3==='pro');
 
     if (!Array.isArray(items) || !items.length || !mode) {
       return res.status(400).json({ items: [], error: 'Missing items or mode.' });
@@ -4039,6 +4100,13 @@ app.post('/api/translate-batch',
       res.set('Cache-Control', 'no-store');
     } catch {}
 
+    // Feature headers
+    try { res.set('X-Tier', String(req.user?.tier||'free')); } catch {}
+    // Enforce sub-style cap for free (may clear subStyle and mark header)
+    const substyleLock = await enforceSubstyleAndMark(req, res);
+    // Prepare Max-mode remaining headers (counts applied after success)
+    const maxMeta = await prepareMaxModeHeaders(req, res);
+
     // For subtitling/dubbing/dialogue, we CAN enforce strict 1:1 by micro-batching,
     // but keep it opt-in via env to avoid regressions under load.
     const isSubtitleLike = String(mode).toLowerCase() === 'dubbing' || String(subStyle).toLowerCase() === 'subtitling' || String(subStyle).toLowerCase() === 'dialogue';
@@ -4047,9 +4115,9 @@ app.post('/api/translate-batch',
     if (req.batchFallbackToSingle) {
       if (isSubtitleLike) {
         return res.status(403).json({
-          error: 'Batch subtitling requires Pro or Team tier',
+          error: 'Batch subtitling requires Pro or Business tier',
           code: 'batch_not_allowed',
-          upgradeMessage: 'Upgrade to Pro or Team to continue translating subtitles/files'
+          upgradeMessage: 'Upgrade to Pro or Business to continue translating subtitles/files'
         });
       }
 
@@ -4094,6 +4162,9 @@ app.post('/api/translate-batch',
             try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: combined.length, outputChars: cleanSingle.length }); } catch {}
             recordMetrics.translation('single', mode, targetLanguage, req.user?.tier || 'anonymous', true, totalCharsSingle);
             log.translation('single', combined.length, cleanSingle.length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+            // Feature counters on success
+            try { if (maxMeta?.shouldCount) await countMaxModeUse(req, res); } catch {}
+            try { if ((req.user?.tier||'free').toLowerCase()==='free' && !substyleLock.locked && (req.body?.subStyle||'').trim()) await incrementSubstyleUse(req.user.id); } catch {}
           }
         } catch {}
       });
@@ -4119,9 +4190,9 @@ app.post('/api/translate-batch',
     const reasons = new Set();
 
     // Run with limited concurrency to keep UI responsive
-    const isTeamTier = (req.user?.tier || '').toLowerCase() === 'team';
+    const isBusinessTier = (req.user?.tier || '').toLowerCase() === 'business';
     const baseConc = useMicroBatch ? Number(process.env.SUBTITLE_CONCURRENCY || 2) : Number(process.env.BATCH_CONCURRENCY || 2);
-    const CONCURRENCY = isTeamTier ? Math.max(baseConc + 1, Number(process.env.BATCH_CONCURRENCY_TEAM || (baseConc + 1))) : baseConc;
+    const CONCURRENCY = isBusinessTier ? Math.max(baseConc + 1, Number(process.env.BATCH_CONCURRENCY_BUSINESS || process.env.BATCH_CONCURRENCY_TEAM || (baseConc + 1))) : baseConc;
     // Build indexed jobs so we can reconstruct results in original order
     const jobs = [];
     {
@@ -4293,6 +4364,9 @@ app.post('/api/translate-batch',
               await setUserFlag(req.user.id, 'free_batch_trial_used', '1');
             }
           } catch {}
+          // Feature counters on success
+          try { if ((String(req.user?.tier||'free').toLowerCase()==='free') && !substyleLock.locked && (req.body?.subStyle||'').trim()) await incrementSubstyleUse(req.user.id); } catch {}
+          try { if (maxMeta?.shouldCount) await countMaxModeUse(req, res); } catch {}
         }
       } catch (e) { /* non-fatal */ }
     });
@@ -4386,9 +4460,18 @@ function pbRead(uid){
 function pbWrite(uid, data){ try { fs.writeFileSync(pbPath(uid), JSON.stringify(data||{items:[]}), 'utf8'); } catch(e){ console.error('pb save', e); } }
 function getUID(req){ return req.headers['x-uid'] || req.query.uid || 'anon'; }
 
+// Ephemeral in-memory store for Free tier (not persisted)
+const _freePhrasebook = new Map(); // key: userId -> { items: [...] }
+
 app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    if (tierNow === 'free') {
+      const data = _freePhrasebook.get(userId) || { items: [] };
+      try { res.set('X-Tier', tierNow); res.set('X-Feature-Locked', 'phrasebook'); } catch {}
+      return res.json({ items: data.items || [] });
+    }
     
     // Handle legacy integer user IDs by converting to UUID format
     let userIdForDb = userId;
@@ -4429,6 +4512,21 @@ app.get('/api/phrasebook', requireAuth, ensureProfile, async (req,res)=>{
 app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    if (tierNow === 'free') {
+      const it = req.body?.item || {};
+      if(!it) return res.status(400).json({ ok:false, error:'Bad item.' });
+      const cur = _freePhrasebook.get(userId) || { items: [] };
+      const items = Array.isArray(cur.items) ? cur.items : [];
+      if (items.length >= 10) {
+        try { res.set('X-Tier', tierNow); res.set('X-Feature-Locked', 'phrasebook'); } catch {}
+        return res.status(403).json({ ok:false, error:'Free tier can only store up to 10 terms (not persisted).', code:'phrasebook_limit', upgradeMessage:'Sign in to Pro to persist unlimited terms', helpUrl:'https://example.com/pricing' });
+      }
+      const withId = it.id ? it : { ...it, id: 'pb_'+Date.now().toString(36)+Math.random().toString(36).slice(2) };
+      _freePhrasebook.set(userId, { items: [withId, ...items] });
+      try { res.set('X-Tier', tierNow); } catch {}
+      return res.json({ ok:true, id: String(withId.id||''), createdAt: Date.now() });
+    }
     
     // Handle legacy integer user IDs by converting to UUID format
     let userIdForDb = userId;
@@ -4479,6 +4577,16 @@ app.post('/api/phrasebook/add', requireAuth, ensureProfile, express.json(), asyn
 app.post('/api/phrasebook/delete', requireAuth, ensureProfile, express.json(), async (req,res)=>{
   try{
     const userId = req.user?.id || getUID(req);
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    if (tierNow === 'free') {
+      const id = req.body?.id;
+      if(!id) return res.status(400).json({ ok:false, error:'Missing id.' });
+      const cur = _freePhrasebook.get(userId) || { items: [] };
+      const items = (cur.items||[]).filter(x=>String(x.id)!==String(id));
+      _freePhrasebook.set(userId, { items });
+      try { res.set('X-Tier', tierNow); } catch {}
+      return res.json({ ok:true });
+    }
     
     // Handle legacy integer user IDs by converting to UUID format
     let userIdForDb = userId;
@@ -4548,6 +4656,11 @@ app.get('/api/brand-kits', requireAuth, ensureProfile, async (req, res) => {
 
 app.post('/api/brand-kits', requireAuth, ensureProfile, express.json(), async (req, res) => {
   try {
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    if (tierNow !== 'business') {
+      try { res.set('X-Tier', tierNow); res.set('X-Feature-Locked', 'brand-kit'); } catch {}
+      return res.status(403).json({ ok:false, error:'Brand Kit editor is available on Business tier', code:'feature_locked', upgradeMessage:'Upgrade to Business to manage Brand Kits', helpUrl:'https://example.com/pricing' });
+    }
     const userId = req.user?.id;
     
     // Handle legacy integer user IDs by converting to UUID format
@@ -4577,6 +4690,11 @@ app.post('/api/brand-kits', requireAuth, ensureProfile, express.json(), async (r
 
 app.put('/api/brand-kits/:id', requireAuth, ensureProfile, express.json(), async (req, res) => {
   try {
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    if (tierNow !== 'business') {
+      try { res.set('X-Tier', tierNow); res.set('X-Feature-Locked', 'brand-kit'); } catch {}
+      return res.status(403).json({ ok:false, error:'Brand Kit editor is available on Business tier', code:'feature_locked', upgradeMessage:'Upgrade to Business to manage Brand Kits', helpUrl:'https://example.com/pricing' });
+    }
     const userId = req.user?.id; const id = req.params.id;
     
     // Handle legacy integer user IDs by converting to UUID format
@@ -4608,6 +4726,11 @@ app.put('/api/brand-kits/:id', requireAuth, ensureProfile, express.json(), async
 
 app.delete('/api/brand-kits/:id', requireAuth, ensureProfile, async (req, res) => {
   try {
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    if (tierNow !== 'business') {
+      try { res.set('X-Tier', tierNow); res.set('X-Feature-Locked', 'brand-kit'); } catch {}
+      return res.status(403).json({ ok:false, error:'Brand Kit editor is available on Business tier', code:'feature_locked', upgradeMessage:'Upgrade to Business to manage Brand Kits', helpUrl:'https://example.com/pricing' });
+    }
     const userId = req.user?.id; const id = req.params.id;
     
     // Handle legacy integer user IDs by converting to UUID format
@@ -4666,6 +4789,82 @@ app.get('/api/usage/monthly', requireAuth, ensureProfile, async (req, res) => {
     );
     res.json({ items: rows });
   } catch (e) { console.error('usage monthly', e); res.status(500).json({ items: [] }); }
+});
+
+/** ------------------------- API: History ------------------------- */
+app.get('/api/history', requireAuth, ensureProfile, async (req, res) => {
+  try {
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    try { if (process.env.SECURE_LOCALIZATION === 'on') res.set('X-Secure-Mode','true'); res.set('X-Tier', tierNow); } catch {}
+    if (tierNow === 'free') {
+      res.set('X-Feature-Locked','history');
+      return res.status(403).json({ error:'History is available on Pro and Business', code:'feature_locked', upgradeMessage:'Upgrade to Pro to unlock history', helpUrl:'https://example.com/pricing' });
+    }
+    if (tierNow === 'pro') {
+      const items = Array.isArray(req.session?.historyEntries) ? req.session.historyEntries : [];
+      return res.json({ items });
+    }
+    // Business: persisted for 7 days
+    const userId = String(req.user?.id);
+    // Retention cleanup: delete older than 7 days
+    try { await db.run(`DELETE FROM history_entries WHERE user_id = ? AND created_at < DATETIME('now','-7 days')`, [userId]); } catch {}
+    const rows = await db.all(`SELECT id, payload, strftime('%s', created_at) as ts FROM history_entries WHERE user_id = ? AND created_at >= DATETIME('now','-7 days') ORDER BY created_at DESC`, [userId]);
+    const out = [];
+    for (const r of rows) {
+      try {
+        let payload = JSON.parse(r.payload || '{}');
+        // If encrypted marker exists, attempt decryption
+        if (payload && payload.encrypted) {
+          try { const dec = encryptionManager.decryptFile(payload); payload = JSON.parse(dec); } catch {}
+        }
+        out.push({ id: r.id, payload, createdAt: Number(r.ts)*1000 });
+      } catch {}
+    }
+    return res.json({ items: out });
+  } catch (e) { console.error('history get', e); res.status(500).json({ items: [] }); }
+});
+
+app.post('/api/history', requireAuth, ensureProfile, express.json(), async (req, res) => {
+  try {
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    try { if (process.env.SECURE_LOCALIZATION === 'on') res.set('X-Secure-Mode','true'); res.set('X-Tier', tierNow); } catch {}
+    const entry = req.body?.entry || {};
+    if (tierNow === 'free') {
+      res.set('X-Feature-Locked','history');
+      return res.status(403).json({ ok:false, error:'History is available on Pro and Business', code:'feature_locked', upgradeMessage:'Upgrade to Pro to unlock history', helpUrl:'https://example.com/pricing' });
+    }
+    if (tierNow === 'pro') {
+      if (!req.session) return res.status(503).json({ ok:false, error:'Session unavailable' });
+      const arr = Array.isArray(req.session.historyEntries) ? req.session.historyEntries : [];
+      const id = entry.id || ('h_'+Date.now().toString(36)+Math.random().toString(36).slice(2));
+      arr.unshift({ id, payload: entry.payload || {}, createdAt: Date.now() });
+      req.session.historyEntries = arr.slice(0, 200);
+      return res.json({ ok:true, id });
+    }
+    // Business
+    const userId = String(req.user?.id);
+    const id = entry.id || ('h_'+Date.now().toString(36)+Math.random().toString(36).slice(2));
+    let payloadStr = JSON.stringify(entry.payload || {});
+    if (process.env.SECURE_LOCALIZATION === 'on') {
+      try { const enc = encryptionManager.encryptFile(payloadStr, { scope:'history' }); payloadStr = JSON.stringify(enc); } catch {}
+    }
+    await db.run(`INSERT OR REPLACE INTO history_entries (user_id, id, payload) VALUES (?, ?, ?)`, [userId, id, payloadStr]);
+    return res.json({ ok:true, id });
+  } catch (e) { console.error('history post', e); res.status(500).json({ ok:false }); }
+});
+
+app.delete('/api/history/:id', requireAuth, ensureProfile, async (req, res) => {
+  try {
+    const tierNow = String(req.user?.tier||'free').toLowerCase();
+    try { if (process.env.SECURE_LOCALIZATION === 'on') res.set('X-Secure-Mode','true'); res.set('X-Tier', tierNow); } catch {}
+    if (tierNow !== 'business') {
+      return res.status(403).json({ ok:false, error:'Delete is available on Business tier', code:'feature_locked', upgradeMessage:'Upgrade to Business to manage history', helpUrl:'https://example.com/pricing' });
+    }
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ ok:false, error:'Missing id' });
+    await db.run(`DELETE FROM history_entries WHERE user_id = ? AND id = ?`, [String(req.user?.id), id]);
+    return res.json({ ok:true });
+  } catch (e) { console.error('history delete', e); res.status(500).json({ ok:false }); }
 });
 
 /** ------------------------- API: Current Usage ------------------------- */
@@ -4794,7 +4993,7 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
 
     if (!prisma) return res.status(503).json({ error: 'DB unavailable' });
     const { userId, email, tier } = req.body || {};
-    const allowed = ['free','pro','team'];
+    const allowed = ['free','pro','business'];
     if (!tier || !allowed.includes(String(tier).toLowerCase())) {
       return res.status(400).json({ error: `Invalid tier. One of ${allowed.join(', ')}` });
     }
@@ -4868,7 +5067,7 @@ app.get('/admin/profile/tier', (req, res) => {
   <select id="tier">
     <option value="free">free</option>
     <option value="pro">pro</option>
-    <option value="team">team</option>
+    <option value="business">business</option>
   </select>
   <label>Admin Key (required in production)</label>
   <input id="adminKey" placeholder="ADMIN_KEY" style="min-width:320px" />
@@ -4902,7 +5101,7 @@ app.post('/api/admin/profile/tier', express.json(), async (req, res) => {
 
     if (!prisma) return res.status(503).json({ error: 'DB unavailable' });
     const { userId, email, tier } = req.body || {};
-    const allowed = ['free','pro','team'];
+    const allowed = ['free','pro','business'];
     if (!tier || !allowed.includes(String(tier).toLowerCase())) {
       return res.status(400).json({ error: `Invalid tier. One of ${allowed.join(', ')}` });
     }

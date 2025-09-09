@@ -399,6 +399,30 @@ model usage_monthly {
   @@schema("public")
 }
 
+/// History entries stored for Business tier
+model history_entries {
+  user_id   String    @db.Uuid
+  id        String    @id @db.Uuid
+  payload   Json
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  users     users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, created_at(sort: Desc)])
+  @@schema("public")
+}
+
+/// Generic per-user monthly limits key-value store (fallback when Redis absent)
+model user_limits {
+  user_id  String @db.Uuid
+  scope    String
+  month_key String
+  k        String
+  v        Int    @default(0)
+
+  @@id([user_id, scope, month_key, k])
+  @@schema("public")
+}
+
 enum aal_level {
   aal1
   aal2

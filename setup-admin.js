@@ -29,13 +29,13 @@ async function setupAdmin() {
     const result = await db.run(`
       INSERT INTO users (email, password_hash, name, tier, is_active, created_at)
       VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-    `, [adminEmail, passwordHash, adminName, 'team']);
+    `, [adminEmail, passwordHash, adminName, 'business']);
     
     console.log('🎉 Admin user created successfully!');
     console.log('');
     console.log('📧 Email:', adminEmail);
     console.log('🔑 Password:', adminPassword);
-    console.log('👑 Tier: team (highest tier)');
+    console.log('👑 Tier: business (highest tier)');
     console.log('');
     console.log('🚀 You can now log in at: http://localhost:3000');
     console.log('');
@@ -63,3 +63,5 @@ if (require.main === module) {
 }
 
 module.exports = { setupAdmin };
+
+

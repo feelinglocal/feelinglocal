@@ -46,8 +46,8 @@ const TIERS = {
     zipDownloadAllowed: true,
     phrasebookAllowed: true
   },
-  team: {
-    name: 'Team',
+  business: {
+    name: 'Business',
     maxRequestsPerDay: 5000,
     maxInputSize: 50000,
     maxMonthlyChars: 500000,
@@ -260,7 +260,7 @@ const requireAuth = async (req, res, next) => {
 
     // Always derive tier from profiles table (source of truth)
     const dbTier = await fetchProfileTier(supaUser.id);
-    const effectiveTier = dbTier && ['free','pro','team'].includes(dbTier.toLowerCase()) ? dbTier.toLowerCase() : 'free';
+    const effectiveTier = dbTier && ['free','pro','business'].includes(dbTier.toLowerCase()) ? dbTier.toLowerCase() : 'free';
 
     // Expose MFA signals
     const aal = supaUser?.aal || (supaUser?.amr?.includes('mfa') ? 'aal2' : (supaUser?.amr?.includes('pwd') ? 'aal1' : undefined));
@@ -333,7 +333,7 @@ const checkTierPermission = (feature) => {
       case 'batch':
         if (!tierConfig.batchAllowed) {
           return res.status(403).json({ 
-            error: 'Batch processing requires Pro or Team tier',
+            error: 'Batch processing requires Pro or Business tier',
             currentTier: userTier,
             requiredTier: 'pro'
           });
@@ -342,7 +342,7 @@ const checkTierPermission = (feature) => {
       case 'zip':
         if (!tierConfig.zipDownloadAllowed) {
           return res.status(403).json({ 
-            error: 'ZIP download requires Pro or Team tier',
+            error: 'ZIP download requires Pro or Business tier',
             currentTier: userTier,
             requiredTier: 'pro'
           });
@@ -368,4 +368,3 @@ module.exports = {
   checkTierPermission,
   passport
 };
-

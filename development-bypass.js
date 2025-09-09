@@ -22,7 +22,7 @@ function developmentBypass(req, res, next) {
       id: 'dev-user-1',
       email: 'dev@localhost',
       name: 'Development User', 
-      tier: 'team', // Highest tier for development
+      tier: 'business', // Highest tier for development
       isDevelopmentUser: true
     };
     
@@ -45,7 +45,7 @@ function setupDevelopmentRoutes(app) {
   
   // Quick login endpoint for development
   app.post('/dev/quick-login', (req, res) => {
-    const { tier = 'team' } = req.body;
+  const { tier = 'business' } = req.body;
     
     const devUser = {
       id: 'dev-user-' + Date.now(),
@@ -81,3 +81,5 @@ module.exports = {
   developmentBypass,
   setupDevelopmentRoutes
 };
+
+

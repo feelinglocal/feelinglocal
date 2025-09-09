@@ -324,9 +324,10 @@ class SSOManager {
 
     // Map SAML groups to application tiers
     const tierMapping = {
-      'Localization-Admin': 'team',
+      'Localization-Admin': 'business',
       'Localization-Pro': 'pro',
-      'Localization-Team': 'team',
+      'Localization-Team': 'business',
+      'Localization-Business': 'business',
       'Localization-Free': 'free'
     };
 
@@ -643,3 +644,5 @@ module.exports = {
   isSSO,
   requireSSO
 };
+
+

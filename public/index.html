@@ -104,7 +104,7 @@
             const p = await res.json();
             console.log('🔍 Profile data received:', p);
             const u = JSON.parse(localStorage.getItem('user')||'{}');
-            u.tier = p.tier || 'team'; // Use backend tier or default to team
+            u.tier = p.tier || 'business'; // Use backend tier or default to business
             u.isGuest = false; // Ensure authenticated users are not marked as guests
             localStorage.setItem('user', JSON.stringify(u));
             console.log('🔍 Updated user object with backend tier:', u);
@@ -167,7 +167,7 @@
           localStorage.removeItem('guestId'); // Clear guest mode
           if (user) {
             user.isGuest = false; // Explicitly mark as not guest
-            user.tier = 'team'; // Default to team tier for authenticated users
+            user.tier = 'business'; // Default to business tier for authenticated users
             localStorage.setItem('user', JSON.stringify(user));
             console.log('🔍 Initial session recovery - set user with team tier:', user);
           }
@@ -177,7 +177,7 @@
             if (res.ok) {
               const p = await res.json();
               const u = JSON.parse(localStorage.getItem('user')||'{}');
-              u.tier = p.tier || 'team'; // Use backend tier or default to team
+              u.tier = p.tier || 'business'; // Use backend tier or default to business
               u.isGuest = false; // Ensure not marked as guest
               localStorage.setItem('user', JSON.stringify(u));
               console.log('🔍 Session recovery - updated user with backend tier:', u);
@@ -1053,7 +1053,7 @@
 
           <div class="section" id="maxSection">
             <div id="maxRow" class="brand-toggle-section">
-              <button id="maxToggle" class="brand-toggle" type="button" aria-pressed="false" title="Enable Gemini 2.5 Pro (Team only)"></button>
+              <button id="maxToggle" class="brand-toggle" type="button" aria-pressed="false" title="Enable Gemini 2.5 Pro (Business only)"></button>
               <span class="brand-toggle-label">Max Localization</span>
             </div>
           </div>
@@ -2980,7 +2980,7 @@ window.STYLE_MICROCOPY = {
       
       if ((isGuest || tier === 'free') && files.length > 1) {
         console.log('❌ Multiple file upload blocked for tier:', tier);
-        showToast('Multiple file uploads require Pro or Team tier. Sign in to upgrade!');
+        showToast('Multiple file uploads require Pro or Business tier. Sign in to upgrade!');
         return;
       }
       
@@ -3636,14 +3636,14 @@ window.STYLE_MICROCOPY = {
     function updateSubmitHints(){
       const hints = document.getElementById('submitHints'); if(!hints) return;
       const user = JSON.parse(localStorage.getItem('user')||'{}');
-      const isTeam = String(user?.tier||'free').toLowerCase()==='team';
+      const tierNow = String(user?.tier||'free').toLowerCase();
       const brandOn = readJSON('brandEnabled:v1', false)===true;
       // Check actual glossary toggle state from UI if available, fallback to storage
       const glSwitch = document.querySelector('#glSwitch');
       const glOn = glSwitch ? glSwitch.classList.contains('on') : (readJSON('glossaryEnabled:v1', true)!==false);
       const maxBtn = document.getElementById('maxToggle');
       const maxStored = readJSON('maxEnabled:v1', false)===true;
-      const maxOn = isTeam && ((!!maxBtn && maxBtn.classList.contains('active')) || maxStored);
+      const maxOn = (tierNow==='business' || tierNow==='pro') && ((!!maxBtn && maxBtn.classList.contains('active')) || maxStored);
       const parts = [];
       if(maxOn) parts.push('Max on');
       if(brandOn) parts.push('Brand Kit on');
@@ -3661,17 +3661,18 @@ window.STYLE_MICROCOPY = {
       const btn = document.getElementById('maxToggle');
       if(!section||!row||!btn) return;
       const userNow = JSON.parse(localStorage.getItem('user')||'{}');
-      const teamNow = String(userNow?.tier||'free').toLowerCase()==='team';
-      section.style.display = teamNow ? 'block' : 'none';
+      const tierNow = String(userNow?.tier||'free').toLowerCase();
+      section.style.display = (tierNow==='business' || tierNow==='pro') ? 'block' : 'none';
       // Restore previous state from storage
       const wasOn = readJSON('maxEnabled:v1', false)===true;
-      btn.classList.toggle('active', teamNow && wasOn);
-      btn.setAttribute('aria-pressed', (teamNow && wasOn)?'true':'false');
+      const canUse = (tierNow==='business' || tierNow==='pro');
+      btn.classList.toggle('active', canUse && wasOn);
+      btn.setAttribute('aria-pressed', (canUse && wasOn)?'true':'false');
       // Overwrite previous handlers to avoid duplicates
       btn.onclick = function(){
         const u = JSON.parse(localStorage.getItem('user')||'{}');
-        const isTeam = String(u?.tier||'free').toLowerCase()==='team';
-        if(!isTeam){ showToast('Max Localization is Team-only'); return; }
+        const tnow = String(u?.tier||'free').toLowerCase();
+        if(!(tnow==='business' || tnow==='pro')){ showToast('Max Localization is available on Pro and Business'); return; }
         btn.classList.toggle('active');
         btn.setAttribute('aria-pressed', btn.classList.contains('active')?'true':'false');
         // Persist state
@@ -4891,8 +4892,8 @@ ${lines.join('\n')}`);
     
     setStatus('Localizing');
     const user = JSON.parse(localStorage.getItem('user')||'{}');
-    const isTeam = String(user?.tier||'free').toLowerCase()==='team';
-    const allowPro = isTeam && !!$('#maxToggle')?.classList.contains('active');
+    const tierNow = String(user?.tier||'free').toLowerCase();
+    const allowPro = (tierNow==='business' || tierNow==='pro') && !!$('#maxToggle')?.classList.contains('active');
     
     const res=await fetch('/api/translate',{
       method:'POST',
@@ -4948,8 +4949,8 @@ ${lines.join('\n')}`);
             headers['X-Guest-ID'] = guestId;
           }
           const user = JSON.parse(localStorage.getItem('user')||'{}');
-          const isTeam = String(user?.tier||'free').toLowerCase()==='team';
-          const allowPro = isTeam && !!$('#maxToggle')?.classList.contains('active');
+          const tierNow = String(user?.tier||'free').toLowerCase();
+          const allowPro = (tierNow==='business' || tierNow==='pro') && !!$('#maxToggle')?.classList.contains('active');
           
           const res = await fetch('/api/translate-batch',{
             method:'POST',
@@ -5980,7 +5981,7 @@ ${lines.join('\n')}`);
         }
         
         const priceEl = document.getElementById('planPrice'); 
-        if (priceEl) priceEl.textContent = plan==='Team' ? '$45' : (plan==='Pro' ? '$13' : '$0');
+        if (priceEl) priceEl.textContent = plan==='Business' ? '$45' : (plan==='Pro' ? '$13' : '$0');
         
         // Update upgrade button based on tier
         const upgradeBtn = document.getElementById('planUpgradeBtn');
@@ -5993,7 +5994,7 @@ ${lines.join('\n')}`);
             });
           }
           
-          if (plan === 'Team') {
+          if (plan === 'Business') {
             upgradeBtn.textContent = 'Downgrade';
             upgradeBtn.style.background = '#dc2626'; // Red for downgrade
           } else if (plan === 'Pro') {
@@ -6738,7 +6739,7 @@ ${lines.join('\n')}`);
     const TIER_LIMITS = {
       free: { maxInputSize: 1000, name: 'Free' },
       pro: { maxInputSize: 10000, name: 'Pro' },
-      team: { maxInputSize: 50000, name: 'Team' },
+      business: { maxInputSize: 50000, name: 'Business' },
       guest: { maxInputSize: 1000, name: 'Guest' }
     };
 

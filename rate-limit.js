@@ -65,7 +65,7 @@ const quotaMiddleware = async (req, res, next) => {
           limit: quota.limit,
           remaining: 0
         },
-        upgradeMessage: 'Upgrade to Pro or Team for higher limits'
+        upgradeMessage: 'Upgrade to Pro or Business for higher limits'
       });
     }
 
@@ -109,7 +109,7 @@ const createRateLimiter = (windowMs, maxRequests, message, prefix = 'rl:general'
   return rateLimit(common);
 };
 
-// Tier-aware wrappers (Team gets higher RPM)
+// Tier-aware wrappers (Business gets higher RPM)
 function withTierOverride(limiterFactory, teamMax) {
   return rateLimit({
     windowMs: limiterFactory.windowMs,
@@ -161,23 +161,23 @@ const rateLimiters = {
   )
 };
 
-// Per-tier bump for Team: wrap the middleware to use a separate limiter at 100 rpm when tier === team
-function teamBoost(limiter, teamLimiter) {
+// Per-tier bump for Business: wrap the middleware to use a separate limiter at 100 rpm when tier === business
+function businessBoost(limiter, businessLimiter) {
   return (req, res, next) => {
-    const isTeam = (req.user?.tier || '').toLowerCase() === 'team';
-    if (isTeam) return teamLimiter(req, res, next);
+    const isBusiness = (req.user?.tier || '').toLowerCase() === 'business';
+    if (isBusiness) return businessLimiter(req, res, next);
     return limiter(req, res, next);
   };
 }
 
-const teamGeneral = createRateLimiter(60 * 1000, 100, 'Too many requests (team)', 'rl:general:team');
-const teamTranslation = createRateLimiter(60 * 1000, 100, 'Translation rate limit exceeded (team)', 'rl:translation:team');
-const teamUpload = createRateLimiter(60 * 1000, 100, 'Upload rate limit exceeded (team)', 'rl:upload:team');
+const teamGeneral = createRateLimiter(60 * 1000, 100, 'Too many requests (business)', 'rl:general:business');
+const teamTranslation = createRateLimiter(60 * 1000, 100, 'Translation rate limit exceeded (business)', 'rl:translation:business');
+const teamUpload = createRateLimiter(60 * 1000, 100, 'Upload rate limit exceeded (business)', 'rl:upload:business');
 
 // Replace default exported limiters with tier-aware wrappers
-rateLimiters.general = teamBoost(rateLimiters.general, teamGeneral);
-rateLimiters.translation = teamBoost(rateLimiters.translation, teamTranslation);
-rateLimiters.upload = teamBoost(rateLimiters.upload, teamUpload);
+rateLimiters.general = businessBoost(rateLimiters.general, teamGeneral);
+rateLimiters.translation = businessBoost(rateLimiters.translation, teamTranslation);
+rateLimiters.upload = businessBoost(rateLimiters.upload, teamUpload);
 
 // Input size validation middleware
 const validateInputSize = (req, res, next) => {
@@ -195,7 +195,7 @@ const validateInputSize = (req, res, next) => {
       maxSize: tierConfig.maxInputSize,
       tier: effectiveTier,
       isGuest,
-      upgradeMessage: isGuest ? 'Sign in to get higher limits!' : (effectiveTier === 'free' ? 'Upgrade to Pro for larger inputs' : 'Consider Team tier for enterprise limits')
+      upgradeMessage: isGuest ? 'Sign in to get higher limits!' : (effectiveTier === 'free' ? 'Upgrade to Pro for larger inputs' : 'Consider Business tier for enterprise limits')
     });
   }
   
@@ -210,7 +210,7 @@ const validateInputSize = (req, res, next) => {
         maxSize: tierConfig.maxInputSize,
         tier: effectiveTier,
         isGuest,
-        upgradeMessage: isGuest ? 'Sign in to get higher limits!' : (effectiveTier === 'free' ? 'Upgrade to Pro for larger inputs' : 'Consider Team tier for enterprise limits')
+      upgradeMessage: isGuest ? 'Sign in to get higher limits!' : (effectiveTier === 'free' ? 'Upgrade to Pro for larger inputs' : 'Consider Business tier for enterprise limits')
       });
     }
   }

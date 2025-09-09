@@ -47,7 +47,7 @@ async function createTables() {
         CREATE TABLE IF NOT EXISTS orgs (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
-          tier TEXT DEFAULT 'team',
+          tier TEXT DEFAULT 'business',
           created_by INTEGER,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -185,6 +185,40 @@ async function createTables() {
           last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (user_id, device_id),
           FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      `);
+
+      // Monthly user device registry (for per-month device limits)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS user_devices (
+          user_id TEXT NOT NULL,
+          month_key TEXT NOT NULL,
+          device_id TEXT NOT NULL,
+          first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, month_key, device_id)
+        )
+      `);
+
+      // Generic user limits KV store (monthly)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS user_limits (
+          user_id TEXT NOT NULL,
+          scope TEXT NOT NULL,
+          month_key TEXT NOT NULL,
+          k TEXT NOT NULL,
+          v INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (user_id, scope, month_key, k)
+        )
+      `);
+
+      // History entries (persisted for business tier)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS history_entries (
+          user_id TEXT NOT NULL,
+          id TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, id)
         )
       `);
 
