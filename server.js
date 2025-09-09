@@ -226,7 +226,7 @@ function monthStartISO(date = new Date()) {
 }
 
 async function updateMonthlyUsage({ userId, requests = 1, inputChars = 0, outputChars = 0 }) {
-  if (!prisma || !userId) return; // quietly skip if not available
+  if (!userId) return;
   try {
     const month = monthStartISO();
     const inputTokens = Math.ceil((inputChars || 0) / CHARS_PER_TOKEN);
@@ -240,17 +240,57 @@ async function updateMonthlyUsage({ userId, requests = 1, inputChars = 0, output
       console.log(`Converting legacy user ID ${userId} to UUID format: ${userIdForDb}`);
     }
 
-    // Use raw SQL to avoid depending on generated model/compound unique naming
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO public.usage_monthly (user_id, month, requests, input_tokens, output_tokens)
-       VALUES ($1::uuid, $2::date, $3::int, $4::int, $5::int)
-       ON CONFLICT (user_id, month)
-       DO UPDATE SET
-         requests = usage_monthly.requests + EXCLUDED.requests,
-         input_tokens = usage_monthly.input_tokens + EXCLUDED.input_tokens,
-         output_tokens = usage_monthly.output_tokens + EXCLUDED.output_tokens`,
-      userIdForDb, month, requests, inputTokens, outputTokens
-    );
+    if (prisma) {
+      // Use raw SQL to avoid depending on generated model/compound unique naming
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.usage_monthly (user_id, month, requests, input_tokens, output_tokens)
+         VALUES ($1::uuid, $2::date, $3::int, $4::int, $5::int)
+         ON CONFLICT (user_id, month)
+         DO UPDATE SET
+           requests = usage_monthly.requests + EXCLUDED.requests,
+           input_tokens = usage_monthly.input_tokens + EXCLUDED.input_tokens,
+           output_tokens = usage_monthly.output_tokens + EXCLUDED.output_tokens`,
+        userIdForDb, month, requests, inputTokens, outputTokens
+      );
+    } else if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      // Fallback to Supabase REST upsert (read then insert/update)
+      const base = process.env.SUPABASE_URL;
+      const srk = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      // 1) Read existing
+      const q = new URL(`${base}/rest/v1/usage_monthly`);
+      q.searchParams.set('user_id', `eq.${userIdForDb}`);
+      q.searchParams.set('month', `eq.${month}`);
+      q.searchParams.set('select', 'requests,input_tokens,output_tokens');
+      const r0 = await fetchWithTimeout(q.toString(), { headers: { 'Authorization': `Bearer ${srk}`, 'apikey': srk } });
+      let exists = false; let cur = { requests: 0, input_tokens: 0, output_tokens: 0 };
+      if (r0.ok) {
+        const rows = await r0.json();
+        if (Array.isArray(rows) && rows.length) { exists = true; cur = rows[0]; }
+      }
+      const next = {
+        requests: Number(cur.requests||0) + Number(requests||0),
+        input_tokens: Number(cur.input_tokens||0) + Number(inputTokens||0),
+        output_tokens: Number(cur.output_tokens||0) + Number(outputTokens||0)
+      };
+      if (exists) {
+        const p = new URL(`${base}/rest/v1/usage_monthly`);
+        p.searchParams.set('user_id', `eq.${userIdForDb}`);
+        p.searchParams.set('month', `eq.${month}`);
+        await fetchWithTimeout(p.toString(), {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${srk}`, 'apikey': srk, 'Content-Type':'application/json' },
+          body: JSON.stringify(next)
+        });
+      } else {
+        await fetchWithTimeout(`${base}/rest/v1/usage_monthly`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${srk}`, 'apikey': srk, 'Content-Type':'application/json', 'Prefer':'return=minimal' },
+          body: JSON.stringify({ user_id: userIdForDb, month, ...next })
+        });
+      }
+    } else {
+      // No Prisma and no Supabase SRK: skip silently
+    }
     console.log('Usage tracked successfully:', { userId: userIdForDb, month, requests, inputTokens, outputTokens });
   } catch (e) {
     console.warn('usage_monthly upsert failed (non-fatal):', e?.message || e);
@@ -4899,19 +4939,25 @@ app.get('/api/usage/current',
     
     // Check if Prisma/Postgres is available and configured
     const hasPgUrl = typeof process.env.DATABASE_URL === 'string' && /^(postgres|postgresql):\/\//.test(process.env.DATABASE_URL || '');
-    if (!prisma || !hasPgUrl) {
-      if (!hasPgUrl) {
-        console.warn('usage/current: DATABASE_URL missing or invalid; returning zero usage');
-      }
-      return res.json({
-        used: 0,
-        limit: tierConfig.maxMonthlyChars || tierConfig.maxInputSize,
-        tier: tier,
-        isGuest: false,
-        percentage: 0,
-        requests: 0
-      });
+  if (!prisma || !hasPgUrl) {
+    // Fallback: compute usage from local SQLite usage_counters so UI can still update
+    try {
+      const row = await db.get(
+        `SELECT COALESCE(SUM(characters_processed),0) AS chars, COALESCE(SUM(count),0) AS requests
+         FROM usage_counters
+         WHERE user_id = ?
+           AND strftime('%Y-%m', date) = strftime('%Y-%m','now')`,
+        [userId]
+      );
+      const usedChars = Number(row?.chars || 0);
+      const monthlyCap = tierConfig.maxMonthlyChars || tierConfig.maxInputSize;
+      const pct = Math.min((usedChars / monthlyCap) * 100, 100);
+      return res.json({ used: usedChars, limit: monthlyCap, tier, isGuest: false, percentage: pct, requests: Number(row?.requests || 0) });
+    } catch (e) {
+      console.warn('usage/current local fallback failed:', e?.message||e);
+      return res.json({ used: 0, limit: tierConfig.maxMonthlyChars || tierConfig.maxInputSize, tier, isGuest: false, percentage: 0, requests: 0 });
     }
+  }
     
     // Resolve tier if not present on req.user (fallback to DB)
     let normalizedTier = String(tier || '').toLowerCase();
@@ -5032,7 +5078,11 @@ app.post('/admin/profile/tier', express.json(), async (req, res) => {
 /** ------------------------- API: Profile ------------------------- */
 app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
   try {
-    if (!prisma) return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: 'free', name: null });
+    // Fallback to the authenticated user's tier if Prisma isn't available
+    if (!prisma) {
+      try { res.set('X-Profile-Token-Tier', String(req.user?.tier||'free')); } catch {}
+      return res.json({ id: req.user?.id || null, email: req.user?.email || null, tier: (req.user?.tier || 'free'), name: null });
+    }
     // Normalize legacy numeric IDs to UUID like usage endpoint
     let userIdForDb = req.user?.id;
     if (typeof userIdForDb === 'number') {
@@ -5044,9 +5094,21 @@ app.get('/api/profile', requireAuth, ensureProfile, async (req, res) => {
       }
     }
     const rows = await prisma.$queryRawUnsafe('select tier, name from public.profiles where id = $1::uuid limit 1', userIdForDb);
-    const tier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier) : 'free';
+    const dbTier = Array.isArray(rows) && rows[0]?.tier ? String(rows[0].tier).toLowerCase() : 'free';
     const name = Array.isArray(rows) && rows[0]?.name ? String(rows[0].name) : null;
-    res.json({ id: req.user.id, email: req.user.email || null, tier, name });
+    const tokenTier = String(req.user?.tier || 'free').toLowerCase();
+    const rank = (t)=> (t==='business'?2:(t==='pro'?1:0));
+    const effective = rank(tokenTier) > rank(dbTier) ? tokenTier : dbTier;
+    // If token implies higher tier, sync DB upward
+    if (rank(tokenTier) > rank(dbTier)) {
+      try { await prisma.profiles.upsert({ where: { id: userIdForDb }, update: { tier: tokenTier }, create: { id: userIdForDb, tier: tokenTier, name: name||null } }); } catch(e) { console.warn('profile self-heal upsert failed', e?.message||e); }
+    }
+    try {
+      res.set('X-Profile-Token-Tier', tokenTier);
+      res.set('X-Profile-DB-Tier', dbTier);
+      res.set('X-Profile-Effective-Tier', effective);
+    } catch {}
+    res.json({ id: req.user.id, email: req.user.email || null, tier: effective, name });
   } catch (e) { console.error('profile', e?.message || e); res.status(500).json({ error: 'Failed to get profile' }); }
 });
 // Lightweight helper UI for setting tier (GET in browser)
