@@ -40,10 +40,10 @@ async function runWithFallback(runWithEngine, engine, prompt, temperature, optio
   try {
     return await runWithEngine(engine, prompt, temperature, options);
   } catch (e) {
-    if (isRetryableError(e) && engine !== 'gpt-4o') {
-      try { metrics.escalationsTotal.inc({ from: engine, to: 'gpt-4o', reason: 'fallback_retryable_committee' }); } catch {}
-      return await runWithEngine('gpt-4o', prompt, Math.max(0.15, (temperature||0.3)-0.05), options);
-    }
+  if (isRetryableError(e) && engine !== 'gemini-fl') {
+      try { metrics.escalationsTotal.inc({ from: engine, to: 'gemini-fl', reason: 'fallback_retryable_committee' }); } catch {}
+      return await runWithEngine('gemini-fl', prompt, Math.max(0.15, (temperature||0.3)-0.05), options);
+  }
     throw e;
   }
 }
@@ -137,5 +137,4 @@ ${b}
 }
 
 module.exports = { firstPassReview, committeeOfTwo };
-
 

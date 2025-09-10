@@ -1,14 +1,9 @@
 // job-processors.js - Job processors for different types of translation work
-const { OpenAI } = require('openai');
+const gemini = require('./gemini');
 const log = require('./logger');
 const { recordMetrics } = require('./metrics');
-const { wrapOpenAICall } = require('./circuit-breaker');
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: Number(process.env.OPENAI_TIMEOUT || 30000)
-});
+// Using Gemini Flash; no OpenAI
 
 /**
  * Long translation job processor - for large documents/files
@@ -28,14 +23,7 @@ async function processLongTranslationJob(job) {
 
     await job.updateProgress(10);
 
-    // Wrap OpenAI call with circuit breaker
-    const protectedOpenAICall = wrapOpenAICall(async (messages, options) => {
-      return await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages,
-        ...options
-      });
-    });
+    // Use Gemini Flash
 
     // Split large text into chunks if needed
     const maxChunkSize = Number(process.env.LONG_JOB_CHUNK_SIZE || 15000);
@@ -50,14 +38,8 @@ async function processLongTranslationJob(job) {
       try {
         const prompt = buildPrompt({ text: chunk, mode, subStyle, targetLanguage, rephrase, injections });
         
-        const completion = await protectedOpenAICall.fire([
-          { role: 'system', content: 'You are an expert localization and translation assistant.' },
-          { role: 'user', content: prompt }
-        ], {
-          temperature: pickTemperature(mode, subStyle, rephrase)
-        });
-
-        const raw = (completion.choices?.[0]?.message?.content || '').trim();
+        const out = await gemini.generateContent({ text: prompt, system: 'You are an expert localization and translation assistant.', model: process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash' });
+        const raw = String(out?.text || '').trim();
         const result = extractResultTagged(raw) || '(no output)';
         const sanitized = sanitizeWithSource(result, chunk, targetLanguage);
         
@@ -273,14 +255,7 @@ async function processBatchTranslationJob(job) {
 
     await job.updateProgress(10);
 
-    // Wrap OpenAI call with circuit breaker
-    const protectedOpenAICall = wrapOpenAICall(async (messages, options) => {
-      return await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages,
-        ...options
-      });
-    });
+    // Use Gemini Flash for batch jobs
 
     // Use existing batch processing logic but with job progress updates
     const chunks = chunkByTokenBudget(items, {
@@ -306,12 +281,8 @@ async function processBatchTranslationJob(job) {
           injections
         });
 
-        const raw = await protectedOpenAICall.fire([
-          { role: 'system', content: 'You are an expert localization and translation assistant.' },
-          { role: 'user', content: prompt }
-        ], {
-          temperature: pickTemperature(mode, subStyle, rephrase)
-        });
+        const out = await gemini.generateContent({ text: prompt, system: 'You are an expert localization and translation assistant.', model: process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash', timeoutMs: Number(process.env.GEMINI_TIMEOUT || 300000) });
+        const raw = String(out?.text || '').trim();
 
         let arr = parseJsonArrayStrict(raw, chunk.length);
 
@@ -517,3 +488,4 @@ module.exports = {
   processFileTranslationJob,
   processBatchTranslationJob
 };
+

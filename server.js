@@ -163,7 +163,7 @@ const { initTranslationMemory, translationMemory, translationMemoryMiddleware } 
 // Router & collaboration (safe)
 const { chatComplete } = safeRequire('./providers/openai', { chatComplete: null });
 const routerPolicy = safeRequire('./router/model-router', {
-  decideEngine: ({ prefer }) => ({ engine: prefer || 'gpt-4o', reason: 'fallback', risk: 0 }),
+  decideEngine: ({ prefer }) => ({ engine: prefer || 'gemini-fl', reason: 'fallback', risk: 0 }),
   shouldCollaborate: () => false
 });
 const committee = safeRequire('./collab/committee', {
@@ -2031,6 +2031,35 @@ function detectLanguageSimple(text = '') {
   return best[0];
 }
 
+// Robust removal of fingerprint tokens like "FP:abc_123" anywhere near the end
+function stripFpTokens(s = ''){
+  let out = String(s || '');
+  // Remove repeated FP:xxxx tokens with optional trailing punctuation/spaces
+  out = out.replace(/\s*FP:[A-Za-z0-9_\-]+[)\].,:;!?…\u2026\s]*$/g, '');
+  // Also remove stray FP:xxxx that may appear mid-string due to model formatting
+  out = out.replace(/\s*FP:[A-Za-z0-9_\-]+/g, '');
+  return out.trim();
+}
+
+// Heuristic for very short or ambiguous English snippets in subtitles
+function isLikelyEnglishShort(text = '') {
+  const s = String(text || '').trim().toLowerCase();
+  if (!s) return false;
+  // Quick exits: obvious French markers
+  if (/\b(ne|pas|toi|vous|je|tu|il|elle|nous|vous|ils|elles|ou|où|d'|l'|c'est|ça|allez|vite)\b/.test(s)) return false;
+  // English marker words often seen in short cues
+  if (/(don't|won't|can't|what|fine|alright|get lost|behave|someone|come here|stop|search|everywhere|check|i'll|that's right|tell me|alright,|ok|okay|please|dad|mom|lie down|spread your legs|come over|save|help)/.test(s)) return true;
+  // ASCII only with apostrophes and no diacritics tends to be English in our failures
+  const asciiOnly = /^[\x00-\x7F]*$/.test(s);
+  const hasLetters = /[a-z]/.test(s);
+  const hasFrenchDiacritics = /[éèêëàâîïôûùçœ]/.test(s);
+  if (asciiOnly && hasLetters && !hasFrenchDiacritics) {
+    // Prefer English when we see typical contractions/patterns
+    if (/(n't|'re|'ve|'ll|'d|sir|madam)/.test(s)) return true;
+  }
+  return false;
+}
+
 function maskWordSimple(word) {
   if (!word) return word;
   // If the token already includes a mask, keep it as-is
@@ -2523,7 +2552,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ 
     ok: true, 
     uptime: process.uptime(), 
-    model: 'gpt-4o',
+    model: MODEL_GEMINI_FL,
     timestamp: new Date().toISOString(),
     version: require('./package.json').version 
   });
@@ -3540,14 +3569,14 @@ app.post('/api/translate',
           const tmo = String(decision.engine).startsWith('gemini') ? Number(process.env.GEMINI_TIMEOUT || 300000) : undefined;
           first = await run(decision.engine, prompt, temperature, { timeout: tmo });
         } catch (e) {
-          const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
-          const status = e?.status;
-          const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-          if (retryable && decision.engine !== 'gpt-4o') {
-            first = await run('gpt-4o', prompt, temperature, {});
-          } else {
-            throw e;
-          }
+      const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
+      const status = e?.status;
+      const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+      if (retryable && decision.engine !== 'gemini-fl') {
+        first = await run('gemini-fl', prompt, temperature, {});
+      } else {
+        throw e;
+      }
         }
         
         // For auto-batch, treat as single response and split back to array
@@ -3630,10 +3659,10 @@ app.post('/api/translate',
       const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
       const status = e?.status;
       const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-      if (retryable && decision.engine !== 'gpt-4o') {
-        try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gpt-4o', reason: 'fallback_retryable' }); } catch {}
-        first = await run('gpt-4o', prompt, temperature, {});
-        engineUsed = 'gpt-4o';
+      if (retryable && decision.engine !== 'gemini-fl') {
+        try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gemini-fl', reason: 'fallback_retryable' }); } catch {}
+        first = await run('gemini-fl', prompt, temperature, {});
+        engineUsed = 'gemini-fl';
       } else {
         throw e;
       }
@@ -3648,7 +3677,7 @@ app.post('/api/translate',
       const looksArray = /^\s*\[/.test(clean) || /\[\s*".+",\s*"/.test(clean);
         if (tinyInput && looksArray) {
           const fixPrompt = `Return ONLY the proper translation of the following text between <result> tags. Do not include brackets, lists, or arrays.\n\nText:\n${text}\n\n<result>`;
-          const fixed = await run('gpt-4o', fixPrompt, 0);
+          const fixed = await run('gemini-fl', fixPrompt, 0);
           const repaired = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
           if (repaired && repaired.length < clean.length * 0.8) {
             clean = repaired;
@@ -3658,7 +3687,7 @@ app.post('/api/translate',
       } catch {}
 
     // Expose routing info via headers
-    const modelUsed = engineUsed === 'gpt-4o' ? MODEL_GPT4O : (engineUsed === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
+  const modelUsed = engineUsed === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
     try {
       res.set('X-Engine', engineUsed);
       res.set('X-Model', modelUsed);
@@ -3671,10 +3700,10 @@ app.post('/api/translate',
       if (det !== 'unknown' && want && det !== want) {
         try {
           const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
-          const fixed = await run('gpt-4o', fixPrompt, 0);
+          const fixed = await run('gemini-fl', fixPrompt, 0);
           clean = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
           try { res.set('X-Language-Lock', 'repaired'); } catch {}
-          try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gpt-4o', reason: 'language_lock' }); } catch {}
+          try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gemini-fl', reason: 'language_lock' }); } catch {}
         } catch {}
       }
     }
@@ -3685,7 +3714,7 @@ app.post('/api/translate',
       if (srcLang !== 'unknown' && outLang !== 'unknown' && srcLang !== outLang) {
         try {
           const fixPrompt = `Rephrase the following text in the EXACT SAME LANGUAGE as the input (do not translate). Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
-          const fixed = await run('gpt-4o', fixPrompt, 0);
+          const fixed = await run('gemini-fl', fixPrompt, 0);
           clean = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
           try { res.set('X-Language-Lock', 'repaired'); } catch {}
         } catch {}
@@ -3984,7 +4013,7 @@ async function repairPerItem({ run, engine, items, temperature, mode, subStyle, 
     try {
       r = await run(engine, p, Math.max(0.15, (temperature || 0.3) - 0.05), { system: system || null });
     } catch (e) {
-      r = await run('gpt-4o', p, Math.max(0.15, (temperature || 0.3) - 0.05), { system: system || null });
+      r = await run('gemini-fl', p, Math.max(0.15, (temperature || 0.3) - 0.05), { system: system || null });
     }
     fixed.push(sanitizeWithSource(r.text || '', single, targetLanguage));
   }
@@ -4044,8 +4073,8 @@ async function callOpenAIWithRetry({ messages, temperature }) {
 
 // --- Engine aliases from env or defaults
 const MODEL_GEMINI_2P = process.env.GEMINI_2P_MODEL || 'gemini-2.5-pro';
-const MODEL_GEMINI_FL = process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-2.5-flash-lite';
-const MODEL_GPT4O     = process.env.OPENAI_MODEL_GPT4O || 'gpt-4o';
+const MODEL_GEMINI_FL = process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash';
+const MODEL_GPT4O     = process.env.OPENAI_MODEL_GPT4O || 'gpt-4o'; // deprecated (mapped to Gemini)
 
 /**
  * Run a single engine with a prompt-string.
@@ -4054,28 +4083,9 @@ const MODEL_GPT4O     = process.env.OPENAI_MODEL_GPT4O || 'gpt-4o';
 async function runWithEngine(engine, prompt, temperature, { system=null, timeout } = {}) {
   engine = String(engine || '').toLowerCase();
   console.log(`[runWithEngine] Called with engine: ${engine}, prompt: ${prompt.slice(0, 50)}...`);
+  // Temporarily disable GPT-4o: map any OpenAI engine to Gemini Flash
   if (engine === 'gpt-4o' || engine === 'openai' || engine === 'gpt4o') {
-    if (chatComplete) {
-      const { content } = await chatComplete(this.req, this.openaiClient, {
-        model: MODEL_GPT4O,
-        temperature,
-        messages: [
-          { role: 'system', content: 'You are an expert localization and translation assistant.' },
-          ...(system ? [{ role: 'system', content: system }] : []),
-          { role: 'user', content: prompt }
-        ]
-      }, { userTier: this.userTier });
-      return { text: extractResultTagged(content) || content || '', raw: content, engine: 'gpt-4o' };
-    }
-    const raw = await callOpenAIWithRetry({
-      messages: [
-        { role: 'system', content: 'You are an expert localization and translation assistant.' },
-        ...(system ? [{ role: 'system', content: system }] : []),
-        { role: 'user', content: prompt }
-      ],
-      temperature
-    });
-    return { text: extractResultTagged(raw) || raw || '', raw, engine: 'gpt-4o' };
+    engine = 'gemini-fl';
   }
 
   // Gemini family
@@ -4178,6 +4188,18 @@ app.post('/api/translate-batch',
     const substyleLock = await enforceSubstyleAndMark(req, res);
     // Prepare Max-mode remaining headers (counts applied after success)
     const maxMeta = await prepareMaxModeHeaders(req, res);
+
+    // Optional cache read-through when Max is OFF (GPT-4o)
+    const BATCH_CACHE_ENABLED = (process.env.BATCH_CACHE_ENABLED === 'true');
+    try {
+      const engineForCache = allowPro ? 'gemini-2.5-pro' : 'gemini-fl';
+      if (BATCH_CACHE_ENABLED && !allowPro && translationCache && translationCache.getBatchTranslation) {
+        const cached = await translationCache.getBatchTranslation(items, mode, targetLanguage, subStyle || '', injections || '', engineForCache);
+        if (cached && Array.isArray(cached.results) && cached.results.length === items.length) {
+          return res.json({ items: cached.results, fromCache: true });
+        }
+      }
+    } catch {}
 
     // For subtitling/dubbing/dialogue, we CAN enforce strict 1:1 by micro-batching,
     // but keep it opt-in via env to avoid regressions under load.
@@ -4306,10 +4328,10 @@ app.post('/api/translate-batch',
           const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
           const status = e?.status;
           const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-          if (retryable && decision.engine !== 'gpt-4o') {
-            console.log(`[Batch Worker] Falling back from ${decision.engine} to gpt-4o due to retryable error`);
-            try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gpt-4o', reason: 'fallback_retryable' }); } catch {}
-            actualEngine = 'gpt-4o';
+          if (retryable && decision.engine !== 'gemini-fl') {
+            console.log(`[Batch Worker] Falling back from ${decision.engine} to gemini-fl due to retryable error`);
+            try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gemini-fl', reason: 'fallback_retryable' }); } catch {}
+            actualEngine = 'gemini-fl';
             
             // Clear cache entries that might interfere with fallback
             if (req.cache && req.cache.delete) {
@@ -4322,7 +4344,7 @@ app.post('/api/translate-batch',
                 console.log(`[Batch Worker] Cache clear failed: ${cacheErr.message}`);
               }
             }
-            first = await run('gpt-4o', prompt, temperature, {});
+            first = await run('gemini-fl', prompt, temperature, {});
           } else {
             throw e;
           }
@@ -4330,10 +4352,12 @@ app.post('/api/translate-batch',
         
         console.log(`[Batch Worker] Raw response preview: ${String(first.text || '').slice(0, 100)}...`);
         let raw = first.text;
+        // Ensure we record the actual engine used by runWithEngine
+        if (first && first.engine) { actualEngine = first.engine; }
         // Record engine/model used for this job
         try {
           enginesUsed.add(actualEngine);
-          const modelUsed = actualEngine === 'gpt-4o' ? MODEL_GPT4O : (actualEngine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
+          const modelUsed = actualEngine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
           modelsUsed.add(modelUsed);
           reasons.add(decision.reason || '');
         } catch {}
@@ -4347,7 +4371,7 @@ app.post('/api/translate-batch',
               sanitizer: (t, s, lang) => sanitizeWithSource(t, s, lang),
               temperature,
               primaryEngine: decision.engine,
-              secondaryEngine: decision.engine === 'gpt-4o' ? 'gemini-fl' : 'gpt-4o',
+              secondaryEngine: decision.engine === 'gemini-2p' ? 'gemini-fl' : 'gemini-2p',
               arbiterEngine: 'gemini-2p',
               runWithEngine: run,
               targetLanguage
@@ -4384,7 +4408,8 @@ app.post('/api/translate-batch',
           });
         }
         for (let i = 0; i < arr.length; i++) {
-          let sanitized = sanitizeWithSource(arr[i] || '', job.items[i] || '', targetLanguage);
+          const withNoFp = stripFpTokens(arr[i] || '');
+          let sanitized = sanitizeWithSource(withNoFp, job.items[i] || '', targetLanguage);
           // Rephrase: enforce same-language as input
           if (rephrase && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
             const srcLang = detectLanguageSimple(job.items[i] || '');
@@ -4392,34 +4417,23 @@ app.post('/api/translate-batch',
             if (srcLang !== 'unknown' && outLang !== 'unknown' && srcLang !== outLang) {
               try {
                 const fixPrompt = `Rephrase the following text in the EXACT SAME LANGUAGE as the input (do not translate). Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${sanitized}\n\n<result>`;
-                const fixRaw = await callOpenAIWithRetry({
-                  messages: [
-                    { role: 'system', content: 'You rephrase without changing the language.' },
-                    { role: 'user', content: fixPrompt }
-                  ],
-                  temperature: 0
-                });
-                const fixed = extractResultTagged(fixRaw) || sanitized;
+                const fixedRun = await run('gemini-fl', fixPrompt, 0);
+                const fixed = (extractResultTagged ? extractResultTagged(fixedRun.text || '') : (fixedRun.text || '')) || sanitized;
                 sanitized = sanitizeWithSource(fixed, normalizedItems[i] || '', targetLanguage);
                 try { res.set('X-Language-Lock', 'repaired'); } catch {}
               } catch {}
             }
           }
-          // Translation: enforce target language strictly
+          // Translation: enforce target language strictly (including short unknown-but-English lines)
           if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
             const want = normalizeLangTag2(targetLanguage);
             const outLang = detectLanguageSimple(sanitized);
-            if (want && outLang !== 'unknown' && outLang !== want) {
+            const looksEng = isLikelyEnglishShort(sanitized);
+            if (want && ((outLang !== 'unknown' && outLang !== want) || (outLang === 'unknown' && looksEng && want !== 'en'))) {
               try {
                 const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${sanitized}\n\n<result>`;
-                const fixRaw = await callOpenAIWithRetry({
-                  messages: [
-                    { role: 'system', content: 'You convert text to the requested language without altering meaning.' },
-                    { role: 'user', content: fixPrompt }
-                  ],
-                  temperature: 0
-                });
-                const fixed = extractResultTagged(fixRaw) || sanitized;
+                const fixedRun = await run('gemini-fl', fixPrompt, 0);
+                const fixed = (extractResultTagged ? extractResultTagged(fixedRun.text || '') : (fixedRun.text || '')) || sanitized;
                 sanitized = sanitizeWithSource(fixed, normalizedItems[i] || '', targetLanguage);
                 try { res.set('X-Language-Lock', 'repaired'); } catch {}
               } catch {}
@@ -4433,40 +4447,41 @@ app.post('/api/translate-batch',
     await Promise.all(workers);
     let resultsOut = out;
 
-    // Anti-carryover: if this user's new input hash differs from last time
-    // but the output hash matches the last output exactly, force per-item repair.
+    // Ensure no fingerprint tokens leak in final output
+    try { resultsOut = (resultsOut || []).map(x => stripFpTokens(x||'')); } catch {}
+
+    // Fingerprint visibility + basic hashing
     try {
-      const scope = userScopeKey(req);
-      const want = normalizeLangTag2(targetLanguage || '');
       const inHash = miniHash(items.join('\n')) + ':' + String(items.length);
       const outHash = miniHash(resultsOut.join('\n')) + ':' + String(resultsOut.length);
-      const prev = recentBatchByUser.get(scope);
-      const targetChanged = prev && prev.target && prev.target !== (want || '');
-      if (prev && prev.outHash === outHash && (prev.inHash !== inHash || targetChanged)) {
-        console.warn(`[Anti-Carryover] Repeat output detected for user scope ${scope}. Forcing per-item repair.`);
-        try { res.set('X-Batch-Repair', 'carryover-repeat'); } catch {}
-        // Re-translate each item independently to break any stale replay, with a nonce system nudge
-        const temperature = pickTemperature(mode, subStyle, rephrase);
-        const ctx = makeEngineCtx(req);
-        const run = runWithEngine.bind(ctx);
-        const nonce = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
-        const systemNudge = `You are translating subtitles. IMPORTANT: This request has nonce ${nonce}. Do NOT reuse any previous outputs; translate the provided item ONLY. Never mention the nonce.`;
-        const repaired = await repairPerItem({
-          run,
-          engine: (Array.from(enginesUsed)[0] || 'gpt-4o'),
-          items,
-          temperature,
-          mode, subStyle, targetLanguage, rephrase, injections,
-          system: systemNudge
-        });
-        resultsOut = repaired;
+      res.set('X-Batch-Input-Hash', inHash);
+      res.set('X-Batch-Output-Hash', outHash);
+    } catch {}
+
+    // Final strict sweep: ensure every item is in target language (handles short English leftovers)
+    try {
+      if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
+        const want = normalizeLangTag2(targetLanguage);
+        if (want) {
+          const fixed = [];
+          for (let i = 0; i < resultsOut.length; i++) {
+            let outLine = resultsOut[i] || '';
+            const outLang = detectLanguageSimple(outLine);
+            const looksEng = isLikelyEnglishShort(outLine);
+            if ((outLang !== 'unknown' && outLang !== want) || (outLang === 'unknown' && looksEng && want !== 'en')) {
+              try {
+                const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${outLine}\n\n<result>`;
+                const fixedRun2 = await run('gemini-fl', fixPrompt, 0);
+                const fixedLine = (extractResultTagged ? extractResultTagged(fixedRun2.text || '') : (fixedRun2.text || '')) || outLine;
+                outLine = sanitizeWithSource(fixedLine, items[i] || '', targetLanguage);
+                try { res.set('X-Language-Lock', 'repaired'); } catch {}
+              } catch {}
+            }
+            fixed.push(outLine);
+          }
+          resultsOut = fixed;
+        }
       }
-      // Debug headers for visibility
-      try {
-        res.set('X-Batch-Input-Hash', inHash);
-        res.set('X-Batch-Output-Hash', miniHash(resultsOut.join('\n')) + ':' + String(resultsOut.length));
-      } catch {}
-      recentBatchByUser.set(scope, { inHash, outHash: miniHash(resultsOut.join('\n')) + ':' + String(resultsOut.length), target: (want || ''), ts: Date.now() });
     } catch {}
 
     // Set summary headers
@@ -4478,25 +4493,11 @@ app.post('/api/translate-batch',
     } catch {}
 
 
-    // Anti-carryover for single: detect if last output equals exactly previous but input changed
+    // Write-through cache when shapes match (TTL ~5 min)
     try {
-      const scope = userScopeKey(req);
-      const inHash = miniHash(text) + ':1';
-      const outHash = miniHash(clean) + ':1';
-      const prev = recentSingleByUser.get(scope);
-      if (prev && prev.outHash === outHash && prev.inHash !== inHash) {
-        console.warn(`[Anti-Carryover] Repeat output detected for single request (scope ${scope}). Forcing fresh pass.`);
-        try { res.set('X-Repair', 'carryover-repeat'); } catch {}
-        // Force a fresh pass with gpt-4o to break any stale replay
-        const ctx = makeEngineCtx(req);
-        const run = runWithEngine.bind(ctx);
-        const fixPrompt = rephrase
-          ? `Rephrase the following text in the EXACT SAME LANGUAGE as the input. Return only between <result> tags.\n\nText:\n${text}\n\n<result>`
-          : `Translate the following text into strictly ${targetLanguage}. Return only between <result> tags.\n\nText:\n${text}\n\n<result>`;
-        const fixed = await run('gpt-4o', fixPrompt, 0);
-        clean = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
+      if (BATCH_CACHE_ENABLED && !allowPro && translationCache && translationCache.setBatchTranslation && Array.isArray(resultsOut) && resultsOut.length === items.length) {
+        await translationCache.setBatchTranslation(items, mode, targetLanguage, resultsOut, subStyle || '', injections || '', 300, 'gemini-fl');
       }
-      recentSingleByUser.set(scope, { inHash, outHash: miniHash(clean) + ':1', ts: Date.now() });
     } catch {}
 
     // Defer usage accounting until response finishes successfully
@@ -5665,3 +5666,4 @@ async function gracefulShutdown(signal) {
     process.exit(1);
   }
 }
+

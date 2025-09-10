@@ -49,9 +49,9 @@ function decideEngine({ text, mode, subStyle, targetLanguage, rephrase, injectio
   const m = String(mode || '').toLowerCase();
   const s = String(subStyle || '').toLowerCase();
   if (isBatch) {
-    // Batch policy: GPT-4o by default; Gemini Pro when Max is ON
+    // Batch policy: Gemini Flash by default; Gemini Pro when Max is ON
     if (allowPro) return { engine: 'gemini-2p', reason: 'batch+pro', risk: rs };
-    return { engine: 'gpt-4o', reason: 'batch_default', risk: rs };
+    return { engine: 'gemini-fl', reason: 'batch_default', risk: rs };
   }
   if (rephrase) return { engine: 'gemini-fl', reason: 'rephrase_speed', risk: rs };
 
@@ -63,16 +63,16 @@ function decideEngine({ text, mode, subStyle, targetLanguage, rephrase, injectio
     return { engine: 'gemini-fl', reason: reason.concat('pro_disabled').join('+'), risk: rs };
   }
 
-  // Long/complex text → GPT-4o for robustness
+  // Long/complex text → still use Gemini Flash (GPT disabled)
   if (rs >= 0.55) {
     reason.push('long_or_complex');
-    return { engine: 'gpt-4o', reason: reason.join('+'), risk: rs };
+    return { engine: 'gemini-fl', reason: reason.join('+'), risk: rs };
   }
 
-  // Some creative English tasks benefit from GPT-4o
+  // Creative English tasks → Gemini Flash (GPT disabled)
   if (CREATIVE.has(m) && String(targetLanguage || '').toLowerCase().startsWith('en')) {
     reason.push('creative_en');
-    return { engine: 'gpt-4o', reason: reason.join('+'), risk: rs };
+    return { engine: 'gemini-fl', reason: reason.join('+'), risk: rs };
   }
 
   // Default fast path

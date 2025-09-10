@@ -103,10 +103,19 @@ class TranslationCacheManager {
   /**
    * Generate cache key for batch translation
    */
-  generateBatchCacheKey(items, mode, targetLanguage, subStyle = '', injections = '') {
-    const content = [items.join('||'), mode, targetLanguage, subStyle, injections].join('::');
-    const hash = crypto.createHash('sha256').update(content).digest('hex');
-    return `batch:${hash}`;
+  generateBatchCacheKey(items, mode, targetLanguage, subStyle = '', injections = '', engine = '') {
+    try {
+      const m = String(mode || '').toLowerCase().trim();
+      const t = String(targetLanguage || '').toLowerCase().trim();
+      const s = String(subStyle || '').toLowerCase().trim();
+      const e = String(engine || '').toLowerCase().trim();
+      const body = JSON.stringify({ items, injections });
+      const hash = crypto.createHash('sha1').update(body).digest('hex');
+      return `batch:${m}:${t}:${s}:${e}:${hash}`;
+    } catch (err) {
+      const fallback = crypto.createHash('sha1').update(String(items || '')).digest('hex');
+      return `batch:err:${fallback}`;
+    }
   }
 
   /**
@@ -271,9 +280,9 @@ class TranslationCacheManager {
   /**
    * Get batch translation from cache
    */
-  async getBatchTranslation(items, mode, targetLanguage, subStyle = '', injections = '') {
+  async getBatchTranslation(items, mode, targetLanguage, subStyle = '', injections = '', engine = '') {
     try {
-      const key = this.generateBatchCacheKey(items, mode, targetLanguage, subStyle, injections);
+      const key = this.generateBatchCacheKey(items, mode, targetLanguage, subStyle, injections, engine);
       
       // Try Redis first
       if (this.isRedisAvailable) {
@@ -309,15 +318,16 @@ class TranslationCacheManager {
   /**
    * Store batch translation in cache
    */
-  async setBatchTranslation(items, mode, targetLanguage, results, subStyle = '', injections = '', ttl = null) {
+  async setBatchTranslation(items, mode, targetLanguage, results, subStyle = '', injections = '', ttl = null, engine = '') {
     try {
-      const key = this.generateBatchCacheKey(items, mode, targetLanguage, subStyle, injections);
+      const key = this.generateBatchCacheKey(items, mode, targetLanguage, subStyle, injections, engine);
       const cacheData = {
         items,
         mode,
         targetLanguage,
         subStyle,
         injections,
+        engine,
         results,
         timestamp: Date.now()
       };
@@ -630,10 +640,10 @@ function cacheMiddleware(req, res, next) {
       translationCache.setTranslation(text, mode, targetLanguage, result, subStyle, injections, ttl, engine),
     delete: (text, mode, targetLanguage, subStyle, injections, engine) => 
       translationCache.deleteTranslation(text, mode, targetLanguage, subStyle, injections, engine),
-    getBatch: (items, mode, targetLanguage, subStyle, injections) => 
-      translationCache.getBatchTranslation(items, mode, targetLanguage, subStyle, injections),
-    setBatch: (items, mode, targetLanguage, results, subStyle, injections, ttl) => 
-      translationCache.setBatchTranslation(items, mode, targetLanguage, results, subStyle, injections, ttl),
+    getBatch: (items, mode, targetLanguage, subStyle, injections, engine) => 
+      translationCache.getBatchTranslation(items, mode, targetLanguage, subStyle, injections, engine),
+    setBatch: (items, mode, targetLanguage, results, subStyle, injections, ttl, engine) => 
+      translationCache.setBatchTranslation(items, mode, targetLanguage, results, subStyle, injections, ttl, engine),
     findSimilar: (text, mode, targetLanguage, limit) => 
       translationCache.findSimilarTranslations(text, mode, targetLanguage, limit),
     invalidate: (pattern) => translationCache.invalidateCache(pattern),
@@ -690,5 +700,3 @@ module.exports = {
   cacheAwareTranslation,
   initTranslationCache
 };
-
-
