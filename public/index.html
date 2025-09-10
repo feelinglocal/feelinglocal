@@ -4954,9 +4954,13 @@ ${lines.join('\n')}`);
           const tierNow = String(user?.tier||'free').toLowerCase();
           const allowPro = (tierNow==='business' || tierNow==='pro') && !!$('#maxToggle')?.classList.contains('active');
           
+          // Fresh idempotency key per request (scoped); also attach a stable device id
+          const idem = `idem_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          let deviceId = localStorage.getItem('device_id_v1');
+          if(!deviceId){ deviceId = `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`; localStorage.setItem('device_id_v1', deviceId); }
           const res = await fetch('/api/translate-batch',{
             method:'POST',
-            headers: { ...headers, 'Cache-Control':'no-store' },
+            headers: { ...headers, 'Cache-Control':'no-store', 'Idempotency-Key': `POST:/api/translate-batch:${idem}`, 'X-Device-ID': deviceId },
             body:JSON.stringify({
               items,
               mode:selectedMode,

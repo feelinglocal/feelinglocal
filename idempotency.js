@@ -2,7 +2,8 @@
 const crypto = require('crypto');
 
 const TTL_MS = parseInt(process.env.IDEMPOTENCY_TTL_MS || '600000', 10); // 10 minutes
-const HEADER_PATTERN = new RegExp(process.env.IDEMPOTENCY_HEADER_PATTERN || '^idem_[a-z0-9_-]{6,}$', 'i');
+// Accept raw keys like "idem_xxx" or scoped keys like "POST:/api/translate:idem_xxx"
+const HEADER_PATTERN = new RegExp(process.env.IDEMPOTENCY_HEADER_PATTERN || '(^|.*:)idem_[a-z0-9_-]{6,}$', 'i');
 
 function stableStringify(obj) {
   if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
@@ -68,7 +69,7 @@ function idempotencyMiddleware(req, res, next) {
   // Attempt replay
   const hit = store.get(scopedKey);
   if (hit && hit.expiresAt > Date.now()) {
-    res.setHeader('Vary', 'Idempotency-Key');
+    res.setHeader('Vary', 'Authorization, X-Guest-ID, Idempotency-Key, X-Device-ID');
     res.setHeader('X-Idempotent-Replay', 'true');
     try { res.setHeader('X-Idempotency-Scope', sha256(scopedKey).slice(0, 12)); } catch {}
     res.status(hit.status);
@@ -88,7 +89,7 @@ function idempotencyMiddleware(req, res, next) {
           expiresAt: Date.now() + TTL_MS
         });
       }
-      res.setHeader('Vary', 'Idempotency-Key');
+      res.setHeader('Vary', 'Authorization, X-Guest-ID, Idempotency-Key, X-Device-ID');
       try { res.setHeader('X-Idempotency-Scope', sha256(scopedKey).slice(0, 12)); } catch {}
     } catch { /* non-fatal */ }
     return originalJson(payload);

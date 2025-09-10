@@ -92,7 +92,8 @@ export class LocalizationClient {
   private createHeaders(idempotencyKey?: string): HeadersInit {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      'X-Request-Id': this.generateRequestId()
+      'X-Request-Id': this.generateRequestId(),
+      'Cache-Control': 'no-store'
     };
 
     if (this.config.apiKey) {
@@ -104,6 +105,19 @@ export class LocalizationClient {
     if (idempotencyKey) {
       headers['Idempotency-Key'] = idempotencyKey;
     }
+
+    // Attach a stable device ID for concurrency/Vary isolation
+    try {
+      const k = 'device_id_v1';
+      // @ts-ignore - localStorage exists in browser
+      let did = (typeof localStorage !== 'undefined') ? localStorage.getItem(k) : '';
+      if (!did) {
+        did = `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        // @ts-ignore
+        if (typeof localStorage !== 'undefined') localStorage.setItem(k, did);
+      }
+      (headers as any)['X-Device-ID'] = did;
+    } catch {}
 
     return headers;
   }
@@ -126,9 +140,12 @@ export class LocalizationClient {
     idempotencyKey?: string
   ): Promise<T> {
     const url = `${this.config.baseUrl}${endpoint}`;
-    const headers = this.createHeaders(idempotencyKey);
+    const scopedKey = idempotencyKey ? `${method}:${endpoint}:${idempotencyKey}` : undefined;
+    const headers = this.createHeaders(scopedKey);
 
-    let lastError: ApiError;
+    // Initialize to satisfy TS definite assignment and provide a fallback
+    let lastError: ApiError = new Error('Request failed') as ApiError;
+    (lastError as any).status = 0;
 
     for (let attempt = 0; attempt <= this.config.retryAttempts; attempt++) {
       try {
@@ -237,7 +254,7 @@ export class LocalizationClient {
         'POST',
         '/api/translate',
         request,
-        request.idempotencyKey
+        request.idempotencyKey || this.generateIdempotencyKey()
       );
       
       return response;
@@ -255,7 +272,7 @@ export class LocalizationClient {
         'POST',
         '/api/translate-batch',
         request,
-        request.idempotencyKey
+        request.idempotencyKey || this.generateIdempotencyKey()
       );
       
       return response;

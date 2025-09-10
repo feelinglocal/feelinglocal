@@ -9,6 +9,7 @@ const IORedis = require('ioredis');
 const SrtParser = require('srt-parser-2').default;
 const mammoth = require('mammoth');
 const PDFDocument = require('pdfkit');
+const crypto = require('crypto');
 const pdfParse = require('pdf-parse');
 const mime = require('mime-types');
 const { OpenAI } = require('openai');
@@ -45,7 +46,7 @@ const { PhrasebookService } = require('./phrasebook');
 const { BackupService, FileRetentionService } = require('./backup');
 
 // Import M4 modules
-const { IdempotencyService, idempotencyMiddleware } = require('./idempotency');
+  const { IdempotencyService, idempotencyMiddleware } = require('./idempotency');
 
 // Import M5 modules - Scale & reliability (with fallbacks)
 const { initQueueSystem, createWorker, addJob, getJobStatus, getQueueMetrics, shutdownQueueSystem, healthCheck: queueHealthCheck } = safeRequire('./queue', {
@@ -586,8 +587,8 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
-  allowedHeaders: ['Origin','X-Requested-With','Content-Type','Accept','Authorization','X-API-Key','X-Request-Id'],
-  exposedHeaders: ['X-Request-Id','X-RateLimit-Limit','X-RateLimit-Remaining','X-RateLimit-Used']
+  allowedHeaders: ['Origin','X-Requested-With','Content-Type','Accept','Authorization','X-API-Key','X-Request-Id','Idempotency-Key','X-Device-ID','X-Guest-ID'],
+  exposedHeaders: ['X-Request-Id','X-RateLimit-Limit','X-RateLimit-Remaining','X-RateLimit-Used','X-Engines-Used','X-Models-Used','X-Router-Reasons','X-Batch-Repair','X-Repair','X-Language-Lock','X-Batch-Input-Hash','X-Batch-Output-Hash']
 };
 app.use(cors(corsOptions));
 // Global preflight handler: CORS headers are added by cors() above
@@ -1680,6 +1681,23 @@ function pickTemperature(mode = '', subStyle = '', rephrase = false) {
   return Number(clamp(t, 0.1, 0.7).toFixed(2));
 }
 
+// Lightweight hash helpers for anti-carryover checks
+function miniHash(s = '') {
+  try { return crypto.createHash('sha1').update(String(s)).digest('hex').slice(0, 16); } catch { return String(s).length.toString(16); }
+}
+function userScopeKey(req){
+  const did = req.headers['x-device-id'] ? `d:${req.headers['x-device-id']}` : '';
+  const gid = req.headers['x-guest-id'] ? `g:${req.headers['x-guest-id']}` : '';
+  let uid = req.user?.id ? `u:${req.user.id}` : '';
+  // Normalize dev bypass IDs so they don't change per request
+  if (/^u:dev-user-/.test(uid)) uid = 'u:dev';
+  return did || gid || uid || `ip:${req.ip || 'unknown'}`;
+}
+
+// Recent output fingerprints to detect accidental cross-request replays
+const recentBatchByUser = new Map(); // key -> { inHash, outHash, ts }
+const recentSingleByUser = new Map();
+
 /** Extract between <result> tags */
 function extractResultTagged(raw = '') {
   const m = String(raw).match(/<result>([\s\S]*?)<\/result>/i);
@@ -2166,14 +2184,19 @@ OBFUSCATION NORMALIZATION RULES (ALL LANGUAGES):
 - Remove only masking characters; preserve punctuation/casing. Do NOT keep masking in the translation unless asked.
 `;
 
+  const subtitleLangHarden = (needsSubtitleRules && targetLanguage)
+    ? `CRITICAL: Produce the output only in ${targetLanguage}. Never respond in any other language.`
+    : '';
+
   const commonTail = `
 ${STYLE_GUARD}
 ${needsSubtitleRules ? SUBTITLE_OVERRIDES : ''}
 
 ${injBlock ? '[FOLLOW BRAND VOICE EXACTLY — Tone, Audience, MUST DO, DO NOT, and Examples apply.]\n' + injBlock + '\n' : ''}
 
-${renderedLockRules}
-${CENSORSHIP_RULES}
+ ${renderedLockRules}
+ ${subtitleLangHarden}
+ ${CENSORSHIP_RULES}
 ${OBFUSCATION_NORMALIZATION_SINGLE}
 
 ${renderedQA}
@@ -3463,8 +3486,9 @@ app.post('/api/translate',
 
     // Avoid any intermediary/proxy mixing idempotent and non-idempotent responses
     try {
-      res.set('Vary', 'Idempotency-Key');
-      res.set('Cache-Control', 'no-store');
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Vary', 'Authorization, X-Guest-ID, Idempotency-Key, X-Device-ID');
     } catch {}
 
     // Feature headers
@@ -3558,6 +3582,7 @@ app.post('/api/translate',
                 });
                 const fixed = (extractResultTagged ? extractResultTagged(fixRaw) : fixRaw) || arr[i];
                 arr[i] = sanitizeWithSource(fixed, chunk[i] || '', targetLanguage);
+                try { res.set('X-Language-Lock', 'repaired'); } catch {}
               } catch {}
             }
           }
@@ -3621,16 +3646,16 @@ app.post('/api/translate',
     try {
       const tinyInput = (text || '').length <= 120;
       const looksArray = /^\s*\[/.test(clean) || /\[\s*".+",\s*"/.test(clean);
-      if (tinyInput && looksArray) {
-        const fixPrompt = `Return ONLY the proper translation of the following text between <result> tags. Do not include brackets, lists, or arrays.\n\nText:\n${text}\n\n<result>`;
-        const fixed = await run('gpt-4o', fixPrompt, 0);
-        const repaired = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
-        if (repaired && repaired.length < clean.length * 0.8) {
-          clean = repaired;
-          try { res.set('X-Repair', 'carryover-single'); } catch {}
+        if (tinyInput && looksArray) {
+          const fixPrompt = `Return ONLY the proper translation of the following text between <result> tags. Do not include brackets, lists, or arrays.\n\nText:\n${text}\n\n<result>`;
+          const fixed = await run('gpt-4o', fixPrompt, 0);
+          const repaired = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
+          if (repaired && repaired.length < clean.length * 0.8) {
+            clean = repaired;
+            try { res.set('X-Repair', 'carryover-single'); } catch {}
+          }
         }
-      }
-    } catch {}
+      } catch {}
 
     // Expose routing info via headers
     const modelUsed = engineUsed === 'gpt-4o' ? MODEL_GPT4O : (engineUsed === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
@@ -3648,6 +3673,7 @@ app.post('/api/translate',
           const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
           const fixed = await run('gpt-4o', fixPrompt, 0);
           clean = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
+          try { res.set('X-Language-Lock', 'repaired'); } catch {}
           try { metrics.escalationsTotal.inc({ from: decision.engine, to: 'gpt-4o', reason: 'language_lock' }); } catch {}
         } catch {}
       }
@@ -3661,6 +3687,7 @@ app.post('/api/translate',
           const fixPrompt = `Rephrase the following text in the EXACT SAME LANGUAGE as the input (do not translate). Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${clean}\n\n<result>`;
           const fixed = await run('gpt-4o', fixPrompt, 0);
           clean = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
+          try { res.set('X-Language-Lock', 'repaired'); } catch {}
         } catch {}
       }
     }
@@ -3948,16 +3975,16 @@ function outputsLookLikeCarryOver(srcItems = [], outItems = []) {
  * Repair by translating each item independently using the same engine,
  * falling back to GPT-4o on transient engine errors.
  */
-async function repairPerItem({ run, engine, items, temperature, mode, subStyle, targetLanguage, rephrase, injections }) {
+async function repairPerItem({ run, engine, items, temperature, mode, subStyle, targetLanguage, rephrase, injections, system }) {
   const fixed = [];
   for (let i = 0; i < items.length; i++) {
     const single = items[i] || '';
     const p = buildPrompt({ text: single, mode, subStyle, targetLanguage, rephrase, injections });
     let r;
     try {
-      r = await run(engine, p, Math.max(0.15, (temperature || 0.3) - 0.05), {});
+      r = await run(engine, p, Math.max(0.15, (temperature || 0.3) - 0.05), { system: system || null });
     } catch (e) {
-      r = await run('gpt-4o', p, Math.max(0.15, (temperature || 0.3) - 0.05), {});
+      r = await run('gpt-4o', p, Math.max(0.15, (temperature || 0.3) - 0.05), { system: system || null });
     }
     fixed.push(sanitizeWithSource(r.text || '', single, targetLanguage));
   }
@@ -4140,8 +4167,9 @@ app.post('/api/translate-batch',
 
     // Avoid any intermediary/proxy mixing idempotent and non-idempotent responses
     try {
-      res.set('Vary', 'Idempotency-Key');
-      res.set('Cache-Control', 'no-store');
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Vary', 'Authorization, X-Guest-ID, Idempotency-Key, X-Device-ID');
     } catch {}
 
     // Feature headers
@@ -4193,6 +4221,7 @@ app.post('/api/translate-batch',
             });
             const fixed = extractResultTagged(fixRaw) || cleanSingle;
             cleanSingle = sanitizeWithSource(fixed, combined, targetLanguage);
+            try { res.set('X-Language-Lock', 'repaired'); } catch {}
           } catch {}
         }
       }
@@ -4356,6 +4385,7 @@ app.post('/api/translate-batch',
         }
         for (let i = 0; i < arr.length; i++) {
           let sanitized = sanitizeWithSource(arr[i] || '', job.items[i] || '', targetLanguage);
+          // Rephrase: enforce same-language as input
           if (rephrase && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
             const srcLang = detectLanguageSimple(job.items[i] || '');
             const outLang = detectLanguageSimple(sanitized);
@@ -4371,6 +4401,27 @@ app.post('/api/translate-batch',
                 });
                 const fixed = extractResultTagged(fixRaw) || sanitized;
                 sanitized = sanitizeWithSource(fixed, normalizedItems[i] || '', targetLanguage);
+                try { res.set('X-Language-Lock', 'repaired'); } catch {}
+              } catch {}
+            }
+          }
+          // Translation: enforce target language strictly
+          if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
+            const want = normalizeLangTag2(targetLanguage);
+            const outLang = detectLanguageSimple(sanitized);
+            if (want && outLang !== 'unknown' && outLang !== want) {
+              try {
+                const fixPrompt = `Convert the following text into strictly ${targetLanguage} without adding or removing information. Keep punctuation and structure. Return only the corrected text between <result> tags.\n\nText:\n${sanitized}\n\n<result>`;
+                const fixRaw = await callOpenAIWithRetry({
+                  messages: [
+                    { role: 'system', content: 'You convert text to the requested language without altering meaning.' },
+                    { role: 'user', content: fixPrompt }
+                  ],
+                  temperature: 0
+                });
+                const fixed = extractResultTagged(fixRaw) || sanitized;
+                sanitized = sanitizeWithSource(fixed, normalizedItems[i] || '', targetLanguage);
+                try { res.set('X-Language-Lock', 'repaired'); } catch {}
               } catch {}
             }
           }
@@ -4380,7 +4431,43 @@ app.post('/api/translate-batch',
     }
     const workers = Array.from({ length: Math.max(1, CONCURRENCY) }, () => worker());
     await Promise.all(workers);
-    const resultsOut = out;
+    let resultsOut = out;
+
+    // Anti-carryover: if this user's new input hash differs from last time
+    // but the output hash matches the last output exactly, force per-item repair.
+    try {
+      const scope = userScopeKey(req);
+      const want = normalizeLangTag2(targetLanguage || '');
+      const inHash = miniHash(items.join('\n')) + ':' + String(items.length);
+      const outHash = miniHash(resultsOut.join('\n')) + ':' + String(resultsOut.length);
+      const prev = recentBatchByUser.get(scope);
+      const targetChanged = prev && prev.target && prev.target !== (want || '');
+      if (prev && prev.outHash === outHash && (prev.inHash !== inHash || targetChanged)) {
+        console.warn(`[Anti-Carryover] Repeat output detected for user scope ${scope}. Forcing per-item repair.`);
+        try { res.set('X-Batch-Repair', 'carryover-repeat'); } catch {}
+        // Re-translate each item independently to break any stale replay, with a nonce system nudge
+        const temperature = pickTemperature(mode, subStyle, rephrase);
+        const ctx = makeEngineCtx(req);
+        const run = runWithEngine.bind(ctx);
+        const nonce = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+        const systemNudge = `You are translating subtitles. IMPORTANT: This request has nonce ${nonce}. Do NOT reuse any previous outputs; translate the provided item ONLY. Never mention the nonce.`;
+        const repaired = await repairPerItem({
+          run,
+          engine: (Array.from(enginesUsed)[0] || 'gpt-4o'),
+          items,
+          temperature,
+          mode, subStyle, targetLanguage, rephrase, injections,
+          system: systemNudge
+        });
+        resultsOut = repaired;
+      }
+      // Debug headers for visibility
+      try {
+        res.set('X-Batch-Input-Hash', inHash);
+        res.set('X-Batch-Output-Hash', miniHash(resultsOut.join('\n')) + ':' + String(resultsOut.length));
+      } catch {}
+      recentBatchByUser.set(scope, { inHash, outHash: miniHash(resultsOut.join('\n')) + ':' + String(resultsOut.length), target: (want || ''), ts: Date.now() });
+    } catch {}
 
     // Set summary headers
     try {
@@ -4390,6 +4477,27 @@ app.post('/api/translate-batch',
       res.set('X-Chunks-Count', chunks.length.toString());
     } catch {}
 
+
+    // Anti-carryover for single: detect if last output equals exactly previous but input changed
+    try {
+      const scope = userScopeKey(req);
+      const inHash = miniHash(text) + ':1';
+      const outHash = miniHash(clean) + ':1';
+      const prev = recentSingleByUser.get(scope);
+      if (prev && prev.outHash === outHash && prev.inHash !== inHash) {
+        console.warn(`[Anti-Carryover] Repeat output detected for single request (scope ${scope}). Forcing fresh pass.`);
+        try { res.set('X-Repair', 'carryover-repeat'); } catch {}
+        // Force a fresh pass with gpt-4o to break any stale replay
+        const ctx = makeEngineCtx(req);
+        const run = runWithEngine.bind(ctx);
+        const fixPrompt = rephrase
+          ? `Rephrase the following text in the EXACT SAME LANGUAGE as the input. Return only between <result> tags.\n\nText:\n${text}\n\n<result>`
+          : `Translate the following text into strictly ${targetLanguage}. Return only between <result> tags.\n\nText:\n${text}\n\n<result>`;
+        const fixed = await run('gpt-4o', fixPrompt, 0);
+        clean = sanitizeWithSource(fixed.text || clean, text, targetLanguage);
+      }
+      recentSingleByUser.set(scope, { inHash, outHash: miniHash(clean) + ':1', ts: Date.now() });
+    } catch {}
 
     // Defer usage accounting until response finishes successfully
     const inputChars = items.join('').length; const outputChars = resultsOut.join('').length;
