@@ -3642,7 +3642,7 @@ window.STYLE_MICROCOPY = {
       const brandOn = readJSON('brandEnabled:v1', false)===true;
       // Check actual glossary toggle state from UI if available, fallback to storage
       const glSwitch = document.querySelector('#glSwitch');
-      const glOn = glSwitch ? glSwitch.classList.contains('on') : (readJSON('glossaryEnabled:v1', true)!==false);
+      const glOn = glSwitch ? glSwitch.classList.contains('on') : (readJSON('glossaryEnabled:v1', false)===true);
       const maxBtn = document.getElementById('maxToggle');
       const maxStored = readJSON('maxEnabled:v1', false)===true;
       const maxOn = (tierNow==='business' || tierNow==='pro') && ((!!maxBtn && maxBtn.classList.contains('active')) || maxStored);
@@ -4535,7 +4535,7 @@ window.STYLE_MICROCOPY = {
                   <!-- ON/OFF toggle -->
                   <div class="gl-toggle" title="Enable/disable glossary rules">
                     <div class="gl-switch" id="glSwitch"></div>
-                    <span class="gl-label" id="glSwitchLabel">Glossary On</span>
+                    <span class="gl-label" id="glSwitchLabel">Glossary Off</span>
                   </div>
 
                   <div style="font-size:13px; color:#6b7280; font-weight:400;">Lock terms for consistent terminology.</div>
@@ -4666,7 +4666,7 @@ window.STYLE_MICROCOPY = {
       writeJSON(GLOSSARY_ENABLED_KEY, !!on);
       if (window.updateSubmitHints) window.updateSubmitHints();
     }
-    setGlUI(readJSON(GLOSSARY_ENABLED_KEY, true)!==false);
+    setGlUI(readJSON(GLOSSARY_ENABLED_KEY, false)===true);
     glSwitch.addEventListener('click',()=> setGlUI(!(glSwitch.classList.contains('on'))));
 
     // Glossary wire-up
@@ -4783,7 +4783,7 @@ window.STYLE_MICROCOPY = {
     }
 
     // reflect enabled state visually on first build
-    const enabled = readJSON(GLOSSARY_ENABLED_KEY, true)!==false;
+    const enabled = readJSON(GLOSSARY_ENABLED_KEY, false)===true;
     document.getElementById('glTableHost')?.classList.toggle('is-disabled', !enabled);
   }
 
@@ -4836,7 +4836,7 @@ window.STYLE_MICROCOPY = {
   function composeInjections(){
     const brand = readJSON(BRAND_KEY, defBrand);
     const glossary = readJSON(GLOSSARY_KEY, defGlossary);
-    const glossaryEnabled = readJSON(GLOSSARY_ENABLED_KEY, true)!==false;
+    const glossaryEnabled = readJSON(GLOSSARY_ENABLED_KEY, false)===true;
     const brandEnabled = readJSON('brandEnabled:v1', false) === true;
 
     const parts=[];
