@@ -2165,7 +2165,7 @@ window.STYLE_MICROCOPY = {
     const getContentH=el=>el?Math.ceil(el.scrollHeight):0;
 
     /* ---------- Targets & Styles ---------- */
-    const TARGET_KEYS=['Bahasa','Chinese','English','French','Spanish'];
+    const TARGET_KEYS=['Arabic','Bahasa','Chinese','Danish','Dutch','English','French','German','Hindi','Italian','Japanese','Malay','Russian','Spanish','Swedish','Thai','Turkish'];
     const STYLE_DEF={
       formal:{subs:['general','academic','scientific']},
       casual:{subs:['general','chat','gaming','street-talk','comedy','social-media']},
@@ -2211,11 +2211,26 @@ window.STYLE_MICROCOPY = {
     const t=key=>{const lang=localStorage.getItem('uiLang')||DEFAULT_LANG;return (LOCALES[lang]&&LOCALES[lang][key])||LOCALES[DEFAULT_LANG][key]||key};
 
     const LANG_LABELS={
-      en:{Bahasa:'Bahasa',Chinese:'Chinese',English:'English',French:'French',Spanish:'Spanish'},
-      id:{Bahasa:'Bahasa Indonesia',Chinese:'Tionghoa',English:'Inggris',French:'Prancis',Spanish:'Spanyol'},
-      zh:{Bahasa:'印尼语',Chinese:'中文',English:'英语',French:'法语',Spanish:'西班牙语'},
-      fr:{Bahasa:'Indonésien',Chinese:'Chinois',English:'Anglais',French:'Français',Spanish:'Espagnol'},
-      es:{Bahasa:'Indonesio',Chinese:'Chino',English:'Inglés',French:'Francés',Spanish:'Español'}
+      en:{
+        Bahasa:'Bahasa',Chinese:'Chinese',English:'English',French:'French',Spanish:'Spanish',
+        Arabic:'Arabic',Danish:'Danish',Dutch:'Dutch',German:'German',Hindi:'Hindi',Italian:'Italian',Japanese:'Japanese',Malay:'Malay',Russian:'Russian',Swedish:'Swedish',Thai:'Thai',Turkish:'Turkish'
+      },
+      id:{
+        Bahasa:'Bahasa Indonesia',Chinese:'Tionghoa',English:'Inggris',French:'Prancis',Spanish:'Spanyol',
+        Arabic:'Arab',Danish:'Denmark',Dutch:'Belanda',German:'Jerman',Hindi:'Hindi',Italian:'Italia',Japanese:'Jepang',Malay:'Melayu',Russian:'Rusia',Swedish:'Swedia',Thai:'Thai',Turkish:'Turki'
+      },
+      zh:{
+        Bahasa:'印尼语',Chinese:'中文',English:'英语',French:'法语',Spanish:'西班牙语',
+        Arabic:'阿拉伯语',Danish:'丹麦语',Dutch:'荷兰语',German:'德语',Hindi:'印地语',Italian:'意大利语',Japanese:'日语',Malay:'马来语',Russian:'俄语',Swedish:'瑞典语',Thai:'泰语',Turkish:'土耳其语'
+      },
+      fr:{
+        Bahasa:'Indonésien',Chinese:'Chinois',English:'Anglais',French:'Français',Spanish:'Espagnol',
+        Arabic:'Arabe',Danish:'Danois',Dutch:'Néerlandais',German:'Allemand',Hindi:'Hindi',Italian:'Italien',Japanese:'Japonais',Malay:'Malais',Russian:'Russe',Swedish:'Suédois',Thai:'Thaï',Turkish:'Turc'
+      },
+      es:{
+        Bahasa:'Indonesio',Chinese:'Chino',English:'Inglés',French:'Francés',Spanish:'Español',
+        Arabic:'Árabe',Danish:'Danés',Dutch:'Neerlandés',German:'Alemán',Hindi:'Hindi',Italian:'Italiano',Japanese:'Japonés',Malay:'Malayo',Russian:'Ruso',Swedish:'Sueco',Thai:'Tailandés',Turkish:'Turco'
+      }
     };
     const langLabel=k=>{const lang=localStorage.getItem('uiLang')||DEFAULT_LANG;return (LANG_LABELS[lang]?.[k])||(LANG_LABELS[DEFAULT_LANG]?.[k])||k};
 

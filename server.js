@@ -1167,68 +1167,62 @@ Hard rules:
   },
 
   creative: {
-    general: `"Translate and localize the following text into {TARGET_LANG}, preserving emotional impact and creative expression. Act as a {TARGET_LANG} creative-literary translator. Deliver engaging, imaginative, culturally resonant copy.
-Guidelines:
-Creative writing or artistic content.
-Rich yet natural diction; varied sentence structures.
-Follow official grammar and spelling; allow tasteful artistic license.
-Adapt onomatopoeia to sound natural and expressive in {TARGET_LANG}.
-Keep tone, imagery, and narrative flow intact; respect cultural nuance.
-Avoid stiff or overly literal phrasing."\n\nText:\n{TEXT}`,
-    'literary-adaptation': `"Translate and localize the following text into {TARGET_LANG}, preserving meaning, emotion, imagery, and literary style so it reads naturally to {TARGET_LANG} readers. Act as a {TARGET_LANG} literary translator for narrative prose.
+    general: `Translate and localize the following text into {TARGET_LANG}, preserving emotional impact and creative style. Act as a {TARGET_LANG} creative-literary translator. Deliver engaging, imaginative, culturally resonant copy.
+
+Guidelines
+Rich yet natural diction; varied syntax.
+Follow official grammar/spelling; allow tasteful artistic license.
+Adapt onomatopoeia to natural, expressive {TARGET_LANG} forms.
+Maintain tone, imagery, and narrative flow; honor cultural nuance.
+Avoid stiff or literal calques.
+
+Idioms/Proverbs
+Use the accepted {TARGET_LANG} proverb if it exists.
+If none, choose a close analogue or a concise paraphrase with the same intent, tone, and rhythm.
+Avoid literal calques."\n\nText:\n{TEXT}`,
+    'literary-adaptation': `Translate and localize the following text into {TARGET_LANG}, preserving meaning, emotion, imagery, and literary style so it reads naturally to {TARGET_LANG} readers. Act as a {TARGET_LANG} literary translator for narrative prose.
 Guidelines
 Text type: novel / short story / literary passage.
 Use rich but unforced diction; preserve metaphor, symbolism, rhythm, and voice.
 Keep tone, narrative flow, and structure intact.
 Adapt idioms, cultural references, and wordplay for natural resonance in {TARGET_LANG}.
-Avoid calques or literal phrasing that weakens the literary feel."\n\nText:\n{TEXT}`,
+Avoid calques or literal phrasing that weakens the literary feel.
+Idioms/Proverbs
+Use the accepted target-language proverb if it exists.
+If none, use a culturally close analogue, or a concise paraphrase that keeps intent, tone, and register.
+Avoid literal calques. Keep brevity and rhythm."\n\nText:\n{TEXT}`,
     'slogan-tagline-writing': `"Translate and localize the following text into {TARGET_LANG} as a slogan/tagline that is catchy, memorable, and impactful. Act as a {TARGET_LANG} creative copywriter for branding. Deliver punchy, brand-aligned copy.
-Guidelines:
+Guidelines
 Keep it short and culturally natural.
 Use wordplay/rhyme/rhythm when helpful.
 Follow official grammar/spelling; intentional breaks allowed for memorability.
 Preserve the core brand message and emotional pull.
-Aim for the briefest version that retains impact."\n\nText:\n{TEXT}`,
-    'poetic-tone': `"Translate and localize the following text into {TARGET_LANG} for narrative prose, capturing flow, pacing, emotional beats, and distinct character voices. Act as a {TARGET_LANG} narrative-prose translator. Deliver immersive, natural copy suitable for novels, short stories, or narrative passages.
+Aim for the briefest version that retains impact. 
+Idioms/Proverbs
+Use the accepted target-language proverb if it exists.
+If none, use a culturally close analogue, or a concise paraphrase that keeps intent, tone, and register.
+Avoid literal calques.
+Keep brevity and rhythm."\n\nText:\n{TEXT}`,
+    'poetic-tone': `Translate and localize the following text into {TARGET_LANG} in a poetic register, keeping lyrical flow, imagery, and emotional resonance. Act as a {TARGET_LANG} poetry and lyrics translator. Deliver beautiful, rhythmic lines faithful to the original.
+Guidelines
+Preserve metaphor, symbolism, and musicality.
+Adapt rhyme and meter naturally to {TARGET_LANG}; adjust syntax if needed for flow.
+Keep voice and mood; avoid flat literal phrasing.
+Follow official grammar and spelling unless a slight deviation improves poetic effect.
+Idioms/Proverbs
+Use the accepted target-language proverb if it exists.
+If none, use a culturally close analogue, or a concise paraphrase that keeps intent, tone, and register.
+Avoid literal calques. Keep brevity and rhythm."\n\nText:\n{TEXT}`,
+    storytelling: `Translate and localize the following text into {TARGET_LANG} as narrative prose, preserving flow, pacing, emotional beats, and distinct character voices. Act as a {TARGET_LANG} narrative-prose translator. Deliver immersive, natural copy for novels/short stories.
 Guidelines
 Use descriptive yet accessible language.
-Preserve the narrative arc and tone shifts; keep character voices intact.
-Adapt names, idioms, and cultural references naturally.
+Preserve the narrative arc, tone shifts, and character voices.
+Localize names, idioms, and cultural references naturally.
 Avoid flat or literal phrasing; maintain immersion.
-Make it read as if originally written in {TARGET_LANG}; follow official grammar and spelling."\n\nText:\n{TEXT}`,
-    storytelling: `"Translate and localize the following text into {TARGET_LANG}, ensuring it captures the narrative flow, emotional beats, and character voices.
-
-Act as a professional bilingual storyteller with expertise in {TARGET_LANG} narrative adaptation. Produce output that is engaging, immersive, and natural-sounding.
-
-Context Details:
-
-Text Type: Story, Marketing Narrative, Brand Story
-
-Style: Creative
-
-Substyle: Storytelling
-
-Purpose: Draw the reader in with a compelling, culturally resonant story.
-
-Tone: Warm, descriptive, and engaging.
-
-Language Style:
-
-Use descriptive yet accessible language.
-
-Maintain character voices and tone shifts.
-
-Follow the official grammar and spelling rules of {TARGET_LANG}.
-
-Localization Goal: Make the story feel as if it was originally told in {TARGET_LANG}.
-
-Instructions:
-
-Preserve the story arc, pacing, and emotional moments.
-
-Adapt references, names, and idioms for {TARGET_LANG} culture.
-
-Avoid flat, literal translations."\n\nText:\n{TEXT}`,
+Make it read as if originally written in {TARGET_LANG}; follow official grammar/spelling.
+Idioms/Proverbs
+Use the established {TARGET_LANG} proverb if it exists; otherwise a close analogue or concise paraphrase with the same intent, tone, and rhythm.
+Avoid literal calques."\n\nText:\n{TEXT}`,
   },
 
   technical: {
@@ -1329,35 +1323,52 @@ Terminology (authoritative)
 Prefer Dorland's for human medical terms; use SNOMED CT (clinical concepts), ICD-10/11 (diagnoses), LOINC + UCUM/SI (labs/units), INN + ATC (drug names/classes), MedDRA/CTCAE (safety).
 Keep codes/units unchanged; prefer INN over brands.
 If official {TARGET_LANG} labels exist (e.g., national formulary/regulator), use them verbatim.
-Do not paraphrase standardized terms; a provided glossary overrides all"\n\nText:\n{TEXT}`,
-    'patient-friendly-explanation': `"Translate and localize the following text into {TARGET_LANG}, making it clear, simple, and reassuring for patients. Act as a {TARGET_LANG} medical translator. Deliver accurate, culturally sensitive patient-facing copy.
+Do not paraphrase standardized terms; a provided glossary overrides all.\n\nText:\n{TEXT}`,
+    'patient-friendly-explanation': `Translate and localize the following text into {TARGET_LANG} for a patient-friendly medical context. Act as a {TARGET_LANG} medical translator. Deliver clear, accurate, reassuring copy.
 Guidelines
-Preserve meaning exactly (no additions or omissions).
-Use everyday language; briefly explain medical terms when needed.
-Keep tone calm, empathetic, and supportive.
-Write short, clear sentences for readability.
-Follow official {TARGET_LANG} grammar and spelling; avoid literal phrasing that sounds overly technical."\n\nText:\n{TEXT}`,
-    'research-abstracts': `"Translate and localize the following text into {TARGET_LANG}, preserving scientific accuracy and an academic tone. Act as a {TARGET_LANG} medical-research translator. Deliver precise, formal, journal-ready output.
+Preserve meaning exactly (no additions/omissions).
+Use everyday language; on first mention, give a brief gloss for medical terms (lay term first, clinical term in parentheses).
+Keep tone calm, empathetic, and supportive; write short, clear sentences.
+Follow official {TARGET_LANG} grammar/spelling; avoid literal, over-technical phrasing.
+Terminology
+Use Dorland’s (human medicine); SNOMED CT (clinical concepts); ICD-10/11 (diagnoses); LOINC + UCUM/SI (labs/units); INN + ATC (drug names/classes); MedDRA/CTCAE (safety).
+Keep codes/units unchanged; prefer INN over brands.
+Use official {TARGET_LANG} regulator/formulary labels verbatim when available.
+Do not paraphrase standardized terms; client glossary overrides."\n\nText:\n{TEXT}`,
+    'research-abstracts': `Translate and localize the following text into {TARGET_LANG} for a medical research abstract. Act as a {TARGET_LANG} medical-research translator. Deliver precise, formal, journal-ready copy.
 Guidelines
-Keep all data, terminology, headings, and structure (no additions or omissions).
-Use standardized medical/scientific terms; follow {TARGET_LANG} academic conventions and official grammar/spelling.
-Maintain a formal, technical, objective, and concise style.
-Do not oversimplify; keep professional rigor.
-Avoid literal phrasing that distorts meaning."\n\nText:\n{TEXT}`,
-    'clinical-documentation': `"Translate and localize the following text into {TARGET_LANG} for clinical documentation, with full medical accuracy and compliance with {TARGET_LANG} healthcare standards. Act as a {TARGET_LANG} clinical records translator. Deliver formal, exact, objective, file-ready text.
+Preserve all data, headings, and structure; no additions/omissions.
+Use standardized medical/scientific terms; follow {TARGET_LANG} academic conventions and grammar/spelling.
+Style: formal, technical, objective, concise; keep professional rigor; avoid literal calques that distort meaning.
+Terminology
+Prefer Dorland’s; use SNOMED CT (clinical concepts), ICD-10/11 (diagnoses), LOINC + UCUM/SI (labs/units), INN + ATC (drugs), MedDRA/CTCAE (safety).
+Keep codes/units unchanged; prefer INN over brands.
+Use official {TARGET_LANG} regulator/formulary labels verbatim.
+Client glossary (if provided) overrides all."\n\nText:\n{TEXT}`,
+    'clinical-documentation': `Translate and localize the following text into {TARGET_LANG} for clinical documentation. Act as a {TARGET_LANG} clinical-records translator. Deliver formal, exact, objective, file-ready copy.
 Guidelines
-Text types: clinical notes, patient records, medical reports
-Preserve structure, headings, and numbering; no additions or omissions
-Use standardized medical terminology; follow official grammar/spelling and clinical norms
-Keep a factual tone; avoid interpretation or explanations
-Avoid unnecessary rewording; prioritize precision"\n\nText:\n{TEXT}`,
-    'health-campaigns': `"Translate and localize the following text into {TARGET_LANG}, for public health campaigns (clear, motivating, culturally relevant). Act as a {TARGET_LANG} public health communicator. Deliver concise, empathetic, persuasive copy.
+Scope: clinical notes, patient records, medical reports.
+Preserve structure, headings, numbering; no additions/omissions.
+Use standardized medical terminology; follow official {TARGET_LANG} grammar/spelling and clinical register.
+Keep a factual tone; do not interpret, summarize, or embellish.
+Avoid unnecessary rewording; prioritize precision.
+Terminology
+Prefer Dorland’s; use SNOMED CT (clinical concepts), ICD-10/11 (diagnoses), LOINC + UCUM/SI (labs/units), INN + ATC (drugs), MedDRA/CTCAE (safety).
+Keep codes/units unchanged; prefer INN over brands.
+Use official {TARGET_LANG} regulator/formulary labels verbatim.
+Do not paraphrase standardized terms; client glossary overrides."\n\nText:\n{TEXT}`,
+    'health-campaigns': `Translate and localize the following text into {TARGET_LANG} for public health campaigns. Act as a {TARGET_LANG} public health communicator. Deliver concise, empathetic, persuasive copy.
 Guidelines
-Text type: awareness material
-Preserve core facts and intent; no additions or omissions
-Use friendly, accessible wording; briefly clarify essential terms
-Adapt examples and idioms to {TARGET_LANG} context
-Avoid literal or stiff phrasing; keep tone positive and engaging"\n\nText:\n{TEXT}`,
+Scope: awareness material.
+Preserve core facts and intent; no additions/omissions.
+Use friendly, accessible wording; briefly clarify essential terms.
+Adapt examples/idioms to {TARGET_LANG} context.
+Avoid literal or stiff phrasing; keep tone positive and engaging.
+Terminology
+Prefer Dorland’s; use SNOMED CT (clinical concepts), ICD-10/11 (diagnoses), LOINC + UCUM/SI (labs/units), INN + ATC (drugs), MedDRA/CTCAE (safety).
+Keep codes/units unchanged; prefer INN over brands.
+Use official {TARGET_LANG} regulator/formulary labels verbatim.
+Client glossary, if provided, overrides all."\n\nText:\n{TEXT}`,
   },
 
   journalistic: {
@@ -2002,6 +2013,53 @@ function normalizeLangTag2(s = '') {
   if (/(^|\b)(ja|jpn|japanese|日本語)(\b|$)/.test(t)) return 'ja';
   if (/(^|\b)(ru|rus|russian|русский|рус)(\b|$)/.test(t)) return 'ru';
   if (/(^|\b)(ar|ara|arabic|العربية)(\b|$)/.test(t)) return 'ar';
+  return t.slice(0,2);
+}
+
+// Override with extended language normalizers (broader set)
+function normalizeLangTag(s = '') {
+  const t = String(s || '').toLowerCase().trim();
+  if (!t) return 'unknown';
+  if (/(^|\b)(en|english)(\b|$)/.test(t)) return 'en';
+  if (/(^|\b)(fr|fra|french|fran[çc]ais|francais)(\b|$)/.test(t)) return 'fr';
+  if (/(^|\b)(es|spa|spanish|espa[ñn]ol|espanol)(\b|$)/.test(t)) return 'es';
+  if (/(^|\b)(id|ind|indonesian|bahasa indonesia)(\b|$)/.test(t)) return 'id';
+  if (/(^|\b)(zh|chi|chinese|中文)(\b|$)/.test(t)) return 'zh';
+  if (/(^|\b)(ja|jpn|japanese|日本語)(\b|$)/.test(t)) return 'ja';
+  if (/(^|\b)(ru|rus|russian|русский)(\b|$)/.test(t)) return 'ru';
+  if (/(^|\b)(ar|ara|arabic)(\b|$)/.test(t)) return 'ar';
+  if (/(^|\b)(de|ger|deu|german|deutsch)(\b|$)/.test(t)) return 'de';
+  if (/(^|\b)(it|ita|italian|italiano)(\b|$)/.test(t)) return 'it';
+  if (/(^|\b)(nl|dut|nld|dutch|nederlands)(\b|$)/.test(t)) return 'nl';
+  if (/(^|\b)(sv|swe|swedish|svenska)(\b|$)/.test(t)) return 'sv';
+  if (/(^|\b)(tr|tur|turkish|turkce)(\b|$)/.test(t)) return 'tr';
+  if (/(^|\b)(hi|hin|hindi)(\b|$)/.test(t)) return 'hi';
+  if (/(^|\b)(da|dan|danish|dansk)(\b|$)/.test(t)) return 'da';
+  if (/(^|\b)(ms|msa|malay|melayu)(\b|$)/.test(t)) return 'ms';
+  if (/(^|\b)(th|tha|thai)(\b|$)/.test(t)) return 'th';
+  return t.slice(0,2);
+}
+
+function normalizeLangTag2(s = '') {
+  const t = String(s || '').toLowerCase().trim();
+  if (!t) return 'unknown';
+  if (/(^|\b)(en|english)(\b|$)/.test(t)) return 'en';
+  if (/(^|\b)(fr|fra|french|fran[çc]ais|francais)(\b|$)/.test(t)) return 'fr';
+  if (/(^|\b)(es|spa|spanish|espa[ñn]ol|espanol)(\b|$)/.test(t)) return 'es';
+  if (/(^|\b)(id|ind|indo|indonesian|bahasa indonesia|bahasa)(\b|$)/.test(t)) return 'id';
+  if (/(^|\b)(zh|chi|chinese|中文)(\b|$)/.test(t)) return 'zh';
+  if (/(^|\b)(ja|jpn|japanese|日本語)(\b|$)/.test(t)) return 'ja';
+  if (/(^|\b)(ru|rus|russian|русский)(\b|$)/.test(t)) return 'ru';
+  if (/(^|\b)(ar|ara|arabic)(\b|$)/.test(t)) return 'ar';
+  if (/(^|\b)(de|ger|deu|german|deutsch)(\b|$)/.test(t)) return 'de';
+  if (/(^|\b)(it|ita|italian|italiano)(\b|$)/.test(t)) return 'it';
+  if (/(^|\b)(nl|dut|nld|dutch|nederlands)(\b|$)/.test(t)) return 'nl';
+  if (/(^|\b)(sv|swe|swedish|svenska)(\b|$)/.test(t)) return 'sv';
+  if (/(^|\b)(tr|tur|turkish|turkce)(\b|$)/.test(t)) return 'tr';
+  if (/(^|\b)(hi|hin|hindi)(\b|$)/.test(t)) return 'hi';
+  if (/(^|\b)(da|dan|danish|dansk)(\b|$)/.test(t)) return 'da';
+  if (/(^|\b)(ms|msa|malay|melayu|bahasa melayu|bahasa malaysia)(\b|$)/.test(t)) return 'ms';
+  if (/(^|\b)(th|tha|thai)(\b|$)/.test(t)) return 'th';
   return t.slice(0,2);
 }
 
