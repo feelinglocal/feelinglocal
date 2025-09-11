@@ -598,6 +598,9 @@
     }
     textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-weak)}
     .rich{min-height:200px;max-height:42vh;overflow:auto;border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:#fff;box-shadow:var(--shadow-soft);line-height:1.55;outline:none;white-space:pre-wrap;font-size:var(--fs);resize:vertical}
+    /* Always keep placeholder text left-aligned regardless of RTL content */
+    textarea::placeholder{ text-align:left; direction:ltr; }
+    textarea.rtl::placeholder{ text-align:left; direction:ltr; }
     .is-hidden{display:none!important}
     .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;min-height:38px}
     .substyle{border:1px solid var(--border);border-radius:12px;background:#fff;box-shadow:var(--shadow-soft);padding:12px}
@@ -634,6 +637,12 @@
     .lineno{min-width:26px;height:22px;line-height:22px;text-align:center;border:1px solid var(--border);border-radius:999px;font-size:12px;color:#666;background:#f6f8ff;margin-top:2px;user-select:none}
     .segcontent{flex:1;min-width:0;overflow-wrap:break-word;width:100%;height:auto;display:flex;flex-direction:column}
     .segtext{white-space:pre-wrap;word-wrap:break-word;line-height:1.55;font-family:inherit;font-size:var(--fs);min-width:0;overflow-wrap:anywhere;width:100%;height:auto;display:block;flex:1;overflow:visible;max-height:none}
+    /* RTL helpers (content-only alignment; spacing and sizing unchanged) */
+    .rtl{ direction:rtl; text-align:right; }
+    textarea.rtl{ direction:rtl; text-align:right; }
+    .segtext.rtl{ direction:rtl; text-align:right; }
+    .segtext-textarea.rtl{ direction:rtl; text-align:right; }
+    #segTgtBox textarea[data-srt].rtl{ direction:rtl; text-align:right; }
     /* Target segment textareas: clean styling */
     .segtext-textarea{
       width:100%;min-height:40px;border:1px solid transparent;
@@ -2164,6 +2173,30 @@ window.STYLE_MICROCOPY = {
     const slug=t=>String(t).toLowerCase().replace(/[^\w]+/g,'-').replace(/(^-|-$)/g,'');
     const getContentH=el=>el?Math.ceil(el.scrollHeight):0;
 
+    // RTL detection based on script ranges, not language codes.
+    // Covers: Arabic (0600-06FF, 0750-077F, 08A0-08FF), Hebrew (0590-05FF),
+    // Thaana (0780-07BF). This catches: ar, fa, ur, ps, sd, ug, ku-Sorani, yi, dv, iw.
+    const RTL_RANGES=[/[\u0590-\u05FF]/,/[\u0600-\u06FF]/,/[\u0750-\u077F]/,/[\u08A0-\u08FF]/,/[\u0780-\u07BF]/];
+    function isRTLString(s=''){const str=String(s||''); return RTL_RANGES.some(re=>re.test(str));}
+    function applyContentDirection(){
+      try{
+        const d=currentDoc?.()||{};
+        const srcText = (d.text ?? $('#inputText')?.value) || '';
+        const outText = (d.output ?? $('#outputText')?.value ?? $('#outputRich')?.textContent) || '';
+        const srcRTL = isRTLString(srcText);
+        const tgtRTL = (String(targetLanguage||'')==='Arabic') || isRTLString(outText);
+
+        const inEl=$('#inputText'); if(inEl){ inEl.classList.toggle('rtl', srcRTL); }
+        const outTa=$('#outputText'); if(outTa){ outTa.classList.toggle('rtl', tgtRTL); }
+        const outRich=$('#outputRich'); if(outRich){ outRich.classList.toggle('rtl', tgtRTL); }
+        // Split view boxes
+        $$('#segSrcBox .segtext').forEach(el=>el.classList.toggle('rtl', srcRTL));
+        $$('#segTgtBox .segtext').forEach(el=>el.classList.toggle('rtl', tgtRTL));
+        $$('#segTgtBox .segtext-textarea').forEach(el=>el.classList.toggle('rtl', tgtRTL));
+        $$('#segTgtBox textarea[data-srt]').forEach(el=>el.classList.toggle('rtl', tgtRTL));
+      }catch{}
+    }
+
     /* ---------- Targets & Styles ---------- */
     const TARGET_KEYS=['Arabic','Bahasa','Chinese','Danish','Dutch','English','French','German','Hindi','Italian','Japanese','Malay','Russian','Spanish','Swedish','Thai','Turkish'];
     const STYLE_DEF={
@@ -2665,6 +2698,7 @@ window.STYLE_MICROCOPY = {
       if(mode){renderSubstyles(mode); if(sub) setSubStyle(sub); }
       renderLangGrid();
       updateSplitButton();
+      applyContentDirection();
     }
     function setUiLang(lang){localStorage.setItem('uiLang',lang); document.documentElement.dir=['ar','he','fa','ur'].includes(lang)?'rtl':'ltr'; applyI18n()}
 
@@ -2700,25 +2734,26 @@ window.STYLE_MICROCOPY = {
         const d=currentDoc(); if(!d) return;
         d.lastAlignedTgt=[]; d.text=$('#inputText').value;
         autosizeTextarea($('#inputText'));
-        if(splitView && !d.isSrt) renderSegmentBoxes(d); adjustWrapHeight()
+        if(splitView && !d.isSrt) renderSegmentBoxes(d); adjustWrapHeight(); applyContentDirection()
       });
       $('#outputText')?.addEventListener('input',()=>{
         const d=currentDoc(); if(!d) return;
         d.lastAlignedTgt=[]; d.output=$('#outputText').value;
         autosizeTextarea($('#outputText'));
-        if(splitView) renderSegmentBoxes(d); adjustWrapHeight()
+        if(splitView) renderSegmentBoxes(d); adjustWrapHeight(); applyContentDirection()
       });
       $('#outputRich')?.addEventListener('input',()=>{
         const d=currentDoc(); if(!d) return;
         d.lastAlignedTgt=[]; syncRichToHidden();
         d.output=$('#outputText').value;
-        if(splitView && !d.isSrt) renderSegmentBoxes(d); updateSplitButton()
+        if(splitView && !d.isSrt) renderSegmentBoxes(d); updateSplitButton(); applyContentDirection()
       });
 
       $('#subStyleContainer')?.classList.add('is-hidden'); setChevron(false); renderSubstyles("");
       initDropzone();
       autosizeTextarea($('#inputText'));
       autosizeTextarea($('#outputText'));
+      applyContentDirection();
       // First tab
       addTextTab();
 
@@ -3462,6 +3497,7 @@ window.STYLE_MICROCOPY = {
       }
       wireSegmentEditors();
       equalizeRowHeights(); syncScroll(src,tgt); adjustWrapHeight();
+      applyContentDirection();
       // Restore scroll positions to avoid anchoring shifts on re-render
       src.scrollTop=savedSrc; tgt.scrollTop=savedTgt;
     }
@@ -3577,6 +3613,7 @@ window.STYLE_MICROCOPY = {
       $('#outputText').value = d.output || (d.srtTranslations||[]).join('\n');
       autosizeTextarea($('#outputText'));
       equalizeRowHeights(); syncScroll(src,tgt); adjustWrapHeight();
+      applyContentDirection();
       // Final pass: ensure every textarea height matches its scrollHeight
       requestAnimationFrame(()=>{
         $$('textarea[data-srt]').forEach(ta=>{
@@ -3636,6 +3673,8 @@ window.STYLE_MICROCOPY = {
       updateSplitButton();
       adjustWrapHeight();
       renderTabs();
+      // Ensure content alignment is evaluated for the newly loaded document
+      try{ applyContentDirection(); }catch{}
     }
 
     function syncRichToHidden(){
@@ -3646,8 +3685,8 @@ window.STYLE_MICROCOPY = {
     }
 
     /* ---------- Actions (translate / download) ---------- */
-    function selectTarget(lang){if(targetLanguage===lang){targetLanguage=''; $$('.lang-btn').forEach(b=>{if(b.dataset.lang===lang)b.classList.remove('active')})}else{targetLanguage=lang; rephrase=false; $('#btnRephrase')?.classList.remove('active'); $$('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang))} adjustWrapHeight()}
-    function toggleRephrase(){rephrase=!rephrase; $('#btnRephrase')?.classList.toggle('active',rephrase); if(rephrase){targetLanguage=''; $$('.lang-btn').forEach(b=>b.classList.remove('active'))} adjustWrapHeight()}
+    function selectTarget(lang){if(targetLanguage===lang){targetLanguage=''; $$('.lang-btn').forEach(b=>{if(b.dataset.lang===lang)b.classList.remove('active')})}else{targetLanguage=lang; rephrase=false; $('#btnRephrase')?.classList.remove('active'); $$('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang))} adjustWrapHeight(); applyContentDirection()}
+    function toggleRephrase(){rephrase=!rephrase; $('#btnRephrase')?.classList.toggle('active',rephrase); if(rephrase){targetLanguage=''; $$('.lang-btn').forEach(b=>b.classList.remove('active'))} adjustWrapHeight(); applyContentDirection()}
 
     // --- Max Localization toggle (Team-only) + hints ---
     function updateSubmitHints(){
@@ -4937,6 +4976,7 @@ ${lines.join('\n')}`);
     }else{
       $('#outputText').value=d.output; autosizeTextarea($('#outputText'));
     }
+    applyContentDirection();
     // Persist recall payload for this run (session-only)
     try{ const entry = makeHistoryEntryFromDoc(d); pushHistory(entry); }catch{}
     if(splitView) renderSegmentBoxes(d);
@@ -5009,6 +5049,7 @@ ${lines.join('\n')}`);
     $('#outputText').value = d.output;
     console.log('[SRT Translation] Updated outputText with:', $('#outputText').value.slice(0, 100));
     autosizeTextarea($('#outputText'));
+    applyContentDirection();
     if(splitView) renderSrtBoxes(d);
     try{ const entry = makeHistoryEntryFromDoc(d); pushHistory(entry); }catch{}
     updateSplitButton();
