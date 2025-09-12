@@ -893,17 +893,16 @@ Follow street speech patterns, not formal grammar; avoid polished or academic ph
 Keep references culturally relevant to {TARGET_LANG} urban contexts.
 Match the source tone and attitude; use slang naturally, not forced.
 Avoid literal translation if it weakens cultural authenticity."\n\nText:\n{TEXT}`,
-    comedy: `"Translate and localize the following text into {TARGET_LANG}, making it funny, engaging, and culturally relevant. Act as a {TARGET_LANG} comedy translator with a strong sense of humor. Output should fit stand-up, memes, humorous marketing, or entertainment scripts.
-Context
-Style: Casual | Substyle: Comedy
-Purpose: Make the audience laugh while keeping the message clear
-Tone: Lighthearted, witty, playful
-Guidelines
-Use {TARGET_LANG} humor styles (wordplay, exaggeration, situational jokes).
-Adapt punchlines to the culture; replace untranslatable humor with local equivalents.
-Keep timing, phrasing, and comedic flow intact.
-Avoid offensive jokes unless explicitly required.
-Never do literal translations that ruin the joke."\n\nText:\n{TEXT}`,
+    comedy: `"Translate and localize the following text into {TARGET_LANG} as comedy. Act as a {TARGET_LANG} comedy writer. Deliver funny, culturally natural lines for stand-up, captions, or scripts.
+Rules
+Prioritize laugh effect over literal wording; preserve intent.
+Use native humor styles (wordplay, exaggeration, situational).
+Punchlines/wordplay: if a pun does not transfer, replace with a short local gag that keeps the beat.
+Idioms/proverbs: use the accepted {TARGET_LANG} saying; if none, a close analogue or concise paraphrase. No calques.
+Keep lines short and punchy; maintain setup → beat → punch timing.
+Respect register: {clean | PG-13 | edgy}; avoid offense unless the brief requires it.
+Keep names/brands/placeholders/hashtags/emojis as in source unless adaptation improves the joke.
+Follow official {TARGET_LANG} grammar/spelling."\n\nText:\n{TEXT}`,
   },
 
   marketing: {
