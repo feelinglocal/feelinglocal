@@ -4031,6 +4031,7 @@ window.STYLE_MICROCOPY = {
       :root{
         --save-bubble-blur: 2px;
         --save-bubble-alpha: 0.40;
+        --save-bubble-label-nudge: 1px; /* vertical fine-tune for label */
         /* NEW — tune modal sheet glass here (Brand/Advanced/History) */
         --sheet-glass-blur: var(--save-bubble-blur);   /* e.g. 4px */
         --sheet-glass-alpha: var(--save-bubble-alpha); /* e.g. .10 */
@@ -4048,19 +4049,25 @@ window.STYLE_MICROCOPY = {
         border: 1px solid rgba(0,0,0,.08);
         box-shadow: 0 10px 40px rgba(0,0,0,.12);
 }
-      /* Save bubble — glassy, never covers selection */
+      /* Save bubble – glassy, never covers selection */
       .save-bubble{
         position:fixed;z-index:9999;transform:translate(-50%,-6px) scale(.98);opacity:0;
         background:rgba(255,255,255,var(--save-bubble-alpha));
         -webkit-backdrop-filter:blur(var(--save-bubble-blur));backdrop-filter:blur(var(--save-bubble-blur));
         border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;box-shadow:0 8px 28px rgba(0,0,0,.12);
-        display:flex;align-items:center;gap:8px;font-size:13px;pointer-events:none;transition:opacity .16s var(--ease),transform .16s var(--ease)
+        display:flex;align-items:center;gap:8px;font-size:13px;pointer-events:none;transition:opacity .16s var(--ease),transform .16s var(--ease);
+        line-height:1; /* ensure vertical centering across inline elements */
       }
       .save-bubble.show{opacity:1;transform:translate(-50%,-10px) scale(1);pointer-events:auto}
-      .save-bubble .act{border:1px solid var(--border);border-radius:10px;padding:6px 10px;background:#fff;cursor:pointer}
-      .save-bubble .ok{display:none;color:var(--accent)}
-      .save-bubble.saved .ok{display:inline}
-      .save-bubble.saved .label{display:none}
+      .save-bubble .label{display:inline-flex;align-items:center;justify-content:center;height:28px;line-height:1;padding:0}
+      .save-bubble .act{border:1px solid var(--border);border-radius:10px;padding:6px 10px;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;height:28px}
+      /* Left area to keep width stable between states */
+      .save-bubble .left{position:relative;display:inline-flex;align-items:center;justify-content:center;height:28px;line-height:1;padding:0;transform:translateY(var(--save-bubble-label-nudge,1px));transition:min-width .12s var(--ease), width .12s var(--ease)}
+      .save-bubble .left > .label,
+      .save-bubble .left > .ok{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;white-space:nowrap;transition:opacity .10s var(--ease)}
+      .save-bubble .ok{opacity:0;color:var(--accent)}
+      .save-bubble.saved .ok{opacity:1}
+      .save-bubble.saved .label{opacity:0}
 
       /* Prevent horizontal scrollbars inside overlays */
       #advOverlay .lang-sheet, #brandOverlay .lang-sheet{ overflow-x:hidden; box-sizing:border-box }
@@ -5371,10 +5378,45 @@ ${lines.join('\n')}`);
     el.className='save-bubble';
     el.innerHTML=`<span class="ok">Saved ✓</span><span class="label">Save to Phrasebook</span><button class="act">Add</button>`;
     document.body.appendChild(el);
-    el.querySelector('.act').addEventListener('click', onSaveBubbleCommit);
+    el.querySelector('.act').addEventListener('click', onSaveBubbleCommitFast);
+    // Avoid native context menu overlapping our bubble
+    el.addEventListener('contextmenu', (e)=>{ e.preventDefault(); });
+    // Restructure: wrap label + ok inside a fixed-width container to prevent jump
+    try{
+      const ok = el.querySelector('.ok');
+      const lab = el.querySelector('.label');
+      if(ok && lab && !el.querySelector('.left')){
+        try{ ok.textContent = 'Saved ✓'; }catch{}
+        // Measure current label width before moving nodes
+        let w0 = 0; try{ w0 = Math.ceil(lab.getBoundingClientRect().width); }catch{}
+        const left = document.createElement('span');
+        left.className = 'left';
+        el.insertBefore(left, lab);
+        left.appendChild(lab);
+        left.appendChild(ok);
+        // Fix width so bubble doesn't jump when switching to Saved
+        const w = w0 || Math.ceil(lab.getBoundingClientRect().width);
+        left.style.minWidth = w + 'px';
+        left.style.width = w + 'px';
+      }
+    }catch{}
     return (saveBubble=el);
   }
   function clamp(n,lo,hi){ return Math.max(lo, Math.min(hi, n)); }
+  // Measure text width using the font metrics of a reference element
+  function measureTextWidthEl(refEl, text){
+    try{
+      const tmp = document.createElement('span');
+      const cs = window.getComputedStyle(refEl || document.body);
+      tmp.textContent = text || '';
+      tmp.style.position='absolute'; tmp.style.visibility='hidden'; tmp.style.whiteSpace='nowrap';
+      tmp.style.font = cs.font; tmp.style.letterSpacing = cs.letterSpacing; tmp.style.fontWeight = cs.fontWeight;
+      document.body.appendChild(tmp);
+      const w = Math.ceil(tmp.getBoundingClientRect().width);
+      tmp.remove();
+      return w || 0;
+    }catch{ return 0; }
+  }
   function placeBubbleAtRect(r){
     const vpTop = window.scrollY;
     const centerX = window.scrollX + r.left + r.width/2;
@@ -5390,6 +5432,20 @@ ${lines.join('\n')}`);
     saveBubble.style.left = pos.x+'px';
     saveBubble.style.top = pos.y+'px';
     saveBubble.classList.remove('saved');
+    // Ensure correct glyph and widths on each show
+    try{
+      const left = saveBubble.querySelector('.left') || saveBubble;
+      const lab = saveBubble.querySelector('.label');
+      const ok = saveBubble.querySelector('.ok');
+      if(ok) ok.textContent = 'Saved \u2713';
+      if(lab){
+        const wLabel = measureTextWidthEl(lab, lab.textContent||'');
+        const wSaved = measureTextWidthEl(lab, (ok?.textContent)||'Saved \u2713');
+        if(left && wLabel){ left.style.minWidth = wLabel+'px'; left.style.width = wLabel+'px'; }
+        saveBubble.dataset.labelw = String(wLabel);
+        saveBubble.dataset.savedw = String(wSaved||Math.max(40, wLabel*0.5));
+      }
+    }catch{}
     saveBubble.classList.add('show');
     clearTimeout(saveBubbleHideT);
     saveBubbleHideT = setTimeout(()=>{ saveBubble.classList.remove('show'); }, 3000);
@@ -5407,8 +5463,14 @@ ${lines.join('\n')}`);
         createdAt: Date.now()
       });
       saveBubble.classList.add('saved');
-      // Add to local cache immediately for instant UI update
-      if (phrasebookCache) {
+      // Animate compact width for "Saved" state
+      try{
+        const left = saveBubble.querySelector('.left') || saveBubble;
+        const okW = parseInt(saveBubble.dataset.savedw||'0',10);
+        if(left && okW){ left.style.minWidth = okW+'px'; left.style.width = okW+'px'; }
+      }catch{}
+      // [removed] pbAdd() already performs optimistic insert and re-render
+      /* if (phrasebookCache) {
         phrasebookCache.unshift({
           id: 'pb_' + Date.now().toString(36) + Math.random().toString(36).slice(2),
           srcLang: 'Auto',
@@ -5418,13 +5480,45 @@ ${lines.join('\n')}`);
           createdAt: Date.now()
         });
         console.log('📚 Added to local cache for instant display');
-      }
+      } */
       
       // Immediate UI update without waiting for server
       renderSavedPhrasebookAll();
       console.log('📚 Phrasebook UI updated instantly');
     }catch(e){ console.error(e); showToast('Failed to save phrase'); }
   }
+  // Faster, optimistic version used by the bubble button
+  function onSaveBubbleCommitFast(){
+    if(!saveBubble) return;
+    const data = JSON.parse(saveBubble.dataset.payload||'{}');
+    // Optimistic UI: switch to saved state immediately and animate width
+    try{
+      saveBubble.classList.add('saved');
+      const left = saveBubble.querySelector('.left') || saveBubble;
+      const okW = parseInt(saveBubble.dataset.savedw||'0',10);
+      if(left && okW){ left.style.minWidth = okW+'px'; left.style.width = okW+'px'; }
+    }catch{}
+    // Persist in background (pbAdd already updates the list optimistically)
+    pbAdd({
+      id:'pb_'+Date.now().toString(36)+Math.random().toString(36).slice(2),
+      srcLang: 'Auto',
+      tgtLang: data.tgtLang || (targetLanguage || ''),
+      srcText: data.srcText || '',
+      tgtText: data.tgtText || '',
+      createdAt: Date.now()
+    }).catch(e=>{
+      console.error(e);
+      if (typeof showToast==='function') showToast('Failed to save phrase');
+      // Revert UI if save fails
+      try{
+        saveBubble.classList.remove('saved');
+        const left = saveBubble.querySelector('.left') || saveBubble;
+        const labW = parseInt(saveBubble.dataset.labelw||'0',10);
+        if(left && labW){ left.style.minWidth = labW+'px'; left.style.width = labW+'px'; }
+      }catch{}
+    });
+  }
+
   function currentTargetLangLabel(){
     const lang=localStorage.getItem('uiLang')||DEFAULT_LANG;
     const label = langLabel(targetLanguage||'') || targetLanguage || '';
@@ -5573,15 +5667,24 @@ ${lines.join('\n')}`);
     }
 
     // Global capture-level guard to suppress the Chrome context menu
+    // Hardened: also checks the current selection's container
     document.addEventListener('contextmenu', (e)=>{
-      if(
-        e.target.closest('#outputRich') ||
-        e.target.closest('#outputText') ||
-        e.target.closest('#segTgtBox') ||
-        e.target.matches('textarea[data-srt]')
-      ){
-        e.preventDefault();
-      }
+      try{
+        const targetInZones = (
+          e.target.closest('#outputRich') ||
+          e.target.closest('#outputText') ||
+          e.target.closest('#segTgtBox') ||
+          e.target.matches('textarea[data-srt]')
+        );
+        let selectionInZones = false;
+        const sel = window.getSelection && window.getSelection();
+        if(sel && sel.rangeCount){
+          const common = sel.getRangeAt(0).commonAncestorContainer;
+          const el = (common && common.nodeType===1) ? common : common.parentElement;
+          if(el){ selectionInZones = !!el.closest('#outputRich, #outputText, #segTgtBox, textarea[data-srt]'); }
+        }
+        if(targetInZones || selectionInZones){ e.preventDefault(); }
+      }catch{}
     }, { capture:true });
 
     // Hide bubble on scroll or escape
