@@ -149,6 +149,7 @@ const { initTranslationCache, translationCache, cacheMiddleware, cacheAwareTrans
   cacheMiddleware: (req, res, next) => { req.cache = {}; next(); },
   cacheAwareTranslation: async (fn, cacheParams, translationParams) => fn(translationParams)
 });
+const { langCache } = safeRequire('./langcache', { langCache: { isEnabled: () => false } });
 
 const { initTranslationMemory, translationMemory, translationMemoryMiddleware } = safeRequire('./translation-memory', {
   initTranslationMemory: () => Promise.resolve(),
@@ -588,7 +589,7 @@ const corsOptions = {
   credentials: true,
   methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
   allowedHeaders: ['Origin','X-Requested-With','Content-Type','Accept','Authorization','X-API-Key','X-Request-Id','Idempotency-Key','X-Device-ID','X-Guest-ID'],
-  exposedHeaders: ['X-Request-Id','X-RateLimit-Limit','X-RateLimit-Remaining','X-RateLimit-Used','X-Engines-Used','X-Models-Used','X-Router-Reasons','X-Batch-Repair','X-Repair','X-Language-Lock','X-Batch-Input-Hash','X-Batch-Output-Hash']
+  exposedHeaders: ['X-Request-Id','X-RateLimit-Limit','X-RateLimit-Remaining','X-RateLimit-Used','X-Engines-Used','X-Models-Used','X-Router-Reasons','X-Batch-Repair','X-Repair','X-Language-Lock','X-Batch-Input-Hash','X-Batch-Output-Hash','X-LangCache-Enabled','X-LangCache-Search','X-LangCache-Write','X-Cache','X-Cache-Provider']
 };
 app.use(cors(corsOptions));
 // Global preflight handler: CORS headers are added by cors() above
@@ -2849,6 +2850,39 @@ app.post('/api/admin/cache/invalidate', requireAuth, async (req, res) => {
   }
 });
 
+// LangCache management endpoints (semantic cache)
+app.get('/api/admin/langcache', requireAuth, async (req, res) => {
+  try {
+    const stats = translationCache.getStats();
+    const enabled = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+    const cfg = {
+      enabled,
+      threshold: process.env.LANGCACHE_THRESHOLD ? Number(process.env.LANGCACHE_THRESHOLD) : null,
+      serverHost: (() => { try { return new URL(process.env.LANGCACHE_SERVER_URL || process.env.LANGCACHE_URL || '').host || null; } catch { return null; } })(),
+      cacheIdHint: (process.env.LANGCACHE_CACHE_ID || '').slice(0, 6) || null
+    };
+    res.json({ cfg, stats: { langCacheHits: stats.langCacheHits || 0 }, timestamp: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to get LangCache stats' });
+  }
+});
+
+app.post('/api/admin/langcache/invalidate', requireAuth, express.json(), async (req, res) => {
+  try {
+    const { attributes, entryId } = req.body || {};
+    if (entryId) {
+      const r = await langCache.deleteById(entryId);
+      if (!r.ok) return res.status(500).json({ error: r.error || 'Delete by id failed' });
+      return res.json({ success: true, by: 'id' });
+    }
+    const r = await langCache.deleteByAttributes(attributes || {});
+    if (!r.ok) return res.status(500).json({ error: r.error || 'Delete by attributes failed' });
+    res.json({ success: true, by: 'attributes' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to invalidate LangCache' });
+  }
+});
+
 // CDN management endpoints
 app.get('/api/admin/cdn', requireAuth, async (req, res) => {
   try {
@@ -3579,11 +3613,72 @@ app.post('/api/translate',
 
     // Feature headers
     try { res.set('X-Tier', String(req.user?.tier||'free')); } catch {}
+    // LangCache header (config + service)
+    try {
+      const lcConf = !!(translationCache && translationCache.config && translationCache.config.useLangCache);
+      const lcSvc = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+      const lcEnabled = lcConf && lcSvc;
+      res.set('X-LangCache-Enabled', String(lcEnabled));
+      // Default cache miss, may be overwritten later
+      res.set('X-Cache', 'miss');
+      res.set('X-Cache-Provider', '-');
+    } catch {}
+    // LangCache header (config + service)
+    try {
+      const lcConf = !!(translationCache && translationCache.config && translationCache.config.useLangCache);
+      const lcSvc = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+      const lcEnabled = lcConf && lcSvc;
+      res.set('X-LangCache-Enabled', String(lcEnabled));
+    } catch {}
+
+    // LangCache status header (config + service)
+    try {
+      const lcConf = !!(translationCache && translationCache.config && translationCache.config.useLangCache);
+      const lcSvc = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+      const lcEnabled = lcConf && lcSvc;
+      res.set('X-LangCache-Enabled', String(lcEnabled));
+    } catch {}
 
     // Enforce sub-style cap for free (may clear subStyle and mark header)
     const substyleLock = await enforceSubstyleAndMark(req, res);
     // Prepare Max-mode remaining headers (counts applied after success)
     const maxMeta = await prepareMaxModeHeaders(req, res);
+
+    // Fast-path: exact or semantic cache hit (Redis/Memory or Redis LangCache)
+    try {
+      if (translationCache && translationCache.getTranslation) {
+        const cached = await translationCache.getTranslation(text, mode, targetLanguage, subStyle, injections, engine);
+        if (cached && cached.result) {
+          const clean = String(cached.result || '');
+          try {
+            res.set('X-Cache', 'hit');
+            if (cached.provider) res.set('X-Cache-Provider', cached.provider);
+            // Indicate LangCache usage
+            const lcSearch = cached.provider === 'langcache' ? 'hit' : 'miss';
+            res.set('X-LangCache-Search', lcSearch);
+            res.set('X-LangCache-Write', 'skipped');
+          } catch {}
+
+          // Defer usage accounting until response finishes successfully
+          const usedCharsTotal = text.length + clean.length;
+          res.once('finish', async () => {
+            try {
+              if (res.statusCode < 400) {
+                await recordUsage(req, 'translate', 0, usedCharsTotal);
+                try { updateMonthlyUsage({ userId: req.user?.id, requests: 1, inputChars: text.length, outputChars: clean.length }); } catch {}
+                recordMetrics.translation('single', mode, targetLanguage, req.user?.tier || 'anonymous', true, usedCharsTotal);
+                log.translation('single', text.length, clean.length, mode, targetLanguage, req.user?.id, Date.now() - req.startTime, true);
+              }
+            } catch (e) { /* non-fatal */ }
+          });
+
+          if (String(req.headers['x-route-explain'] || '').toLowerCase() === 'true') {
+            return res.json({ result: clean, meta: { engine: 'cache', model: 'cache', reason: 'langcache_or_local', risk: 0 } });
+          }
+          return res.json({ result: clean });
+        }
+      }
+    } catch {}
 
     // Auto-route large inputs via batch to improve reliability
     const MAX_SINGLE_CHARS = parseInt(process.env.MAX_SINGLE_CHARS || '5000', 10);
@@ -3746,9 +3841,30 @@ app.post('/api/translate',
     // Expose routing info via headers
   const modelUsed = engineUsed === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
     try {
+      const hdrModel = first && first.model ? first.model : modelUsed;
       res.set('X-Engine', engineUsed);
-      res.set('X-Model', modelUsed);
+      res.set('X-Model', hdrModel);
       res.set('X-Router-Reason', decision.reason || '');
+      // We reached generation path, so LangCache search was miss (if enabled)
+      const lcConf = !!(translationCache && translationCache.config && translationCache.config.useLangCache);
+      const lcSvc = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+      const lcEnabled = lcConf && lcSvc;
+      if (lcEnabled) res.set('X-LangCache-Search', 'miss');
+      // Explicit cache miss markers for observability
+      res.set('X-Cache', 'miss');
+      res.set('X-Cache-Provider', '-');
+    } catch {}
+
+    // Best-effort: write to cache (exact + semantic)
+    try {
+      if (translationCache && translationCache.setTranslation) {
+        translationCache.setTranslation(text, mode, targetLanguage, clean, subStyle, injections, null, engineUsed);
+      }
+      // Best-effort write indicator
+      const lcConf = !!(translationCache && translationCache.config && translationCache.config.useLangCache);
+      const lcSvc = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+      const lcEnabled = lcConf && lcSvc;
+      if (lcEnabled) try { res.set('X-LangCache-Write', 'attempted'); } catch {}
     } catch {}
     // Language lock QA for single translation
     if (!rephrase && targetLanguage && (process.env.STRICT_LANGUAGE_LOCK ?? 'true') === 'true') {
@@ -4131,6 +4247,7 @@ async function callOpenAIWithRetry({ messages, temperature }) {
 // --- Engine aliases from env or defaults
 const MODEL_GEMINI_2P = process.env.GEMINI_2P_MODEL || 'gemini-2.5-pro';
 const MODEL_GEMINI_FL = process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash';
+const MODEL_GEMINI_FL_LITE = process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-2.5-flash-lite';
 const MODEL_GPT4O     = process.env.OPENAI_MODEL_GPT4O || 'gpt-4o'; // deprecated (mapped to Gemini)
 
 /**
@@ -4147,7 +4264,10 @@ async function runWithEngine(engine, prompt, temperature, { system=null, timeout
 
   // Gemini family
   if (!gemini || !gemini.generateContent) throw new Error('Gemini client not available');
-  const model = engine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
+  const reqPath = (this && this.req && (this.req.originalUrl || this.req.path)) || '';
+  const isBatchRoute = /\/api\/translate-batch/.test(String(reqPath));
+  // Policy: single translate -> Flash-Lite; batch -> Flash
+  const model = engine === 'gemini-2p' ? MODEL_GEMINI_2P : (isBatchRoute ? MODEL_GEMINI_FL : MODEL_GEMINI_FL_LITE);
   // Pass thinkingBudget=0 for flash-lite if ROUTER_THINKING_DISABLED=true
   const thinkingOff = (process.env.ROUTER_THINKING_DISABLED || 'false') === 'true';
   const geminiTimeout = Number.isFinite(timeout) ? Number(timeout) : Number(process.env.GEMINI_TIMEOUT || 300000);
@@ -4162,7 +4282,7 @@ async function runWithEngine(engine, prompt, temperature, { system=null, timeout
     });
     const textOut = String(out?.text || '').trim();
     console.log(`[runWithEngine] Gemini returned: ${textOut.slice(0, 100)}...`);
-    return { text: extractResultTagged(textOut) || textOut, raw: out?.raw, engine: engine };
+    return { text: extractResultTagged(textOut) || textOut, raw: out?.raw, engine: engine, model };
   } catch (e) {
     console.log(`[runWithEngine] Gemini failed with error: ${e.message}`);
     throw e;
@@ -4248,12 +4368,50 @@ app.post('/api/translate-batch',
 
     // Optional cache read-through when Max is OFF (GPT-4o)
     const BATCH_CACHE_ENABLED = (process.env.BATCH_CACHE_ENABLED === 'true');
+    const BATCH_ALL_HIT_FASTPATH = (process.env.BATCH_ALL_HIT_FASTPATH === 'true');
     try {
       const engineForCache = allowPro ? 'gemini-2.5-pro' : 'gemini-fl';
       if (BATCH_CACHE_ENABLED && !allowPro && translationCache && translationCache.getBatchTranslation) {
         const cached = await translationCache.getBatchTranslation(items, mode, targetLanguage, subStyle || '', injections || '', engineForCache);
         if (cached && Array.isArray(cached.results) && cached.results.length === items.length) {
+          try {
+            res.set('X-Cache', 'hit');
+            res.set('X-Cache-Provider', 'batch-cache');
+            const lcConf = !!(translationCache && translationCache.config && translationCache.config.useLangCache);
+            const lcSvc = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+            const lcEnabled = lcConf && lcSvc;
+            if (lcEnabled) {
+              res.set('X-LangCache-Search', 'miss');
+              res.set('X-LangCache-Write', 'skipped');
+            }
+            res.set('X-Engines-Used', 'cache');
+            res.set('X-Models-Used', 'cache');
+            res.set('X-Router-Reasons', 'batch_cache');
+          } catch {}
           return res.json({ items: cached.results, fromCache: true });
+        }
+      }
+
+      // Conservative semantic fast-path: only if ALL items hit via single-item lookups
+      if (!allowPro && BATCH_ALL_HIT_FASTPATH && translationCache && translationCache.getTranslation) {
+        const checks = await Promise.all(items.map(it => translationCache.getTranslation(it, mode, targetLanguage, subStyle || '', injections || '', 'gemini-fl')));
+        if (checks.every(Boolean)) {
+          try {
+            res.set('X-Cache', 'hit');
+            res.set('X-Cache-Provider', 'batch-semantic');
+            const lcConf = !!(translationCache && translationCache.config && translationCache.config.useLangCache);
+            const lcSvc = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+            const lcEnabled = lcConf && lcSvc;
+            if (lcEnabled) {
+              res.set('X-LangCache-Search', 'hit');
+              res.set('X-LangCache-Write', 'skipped');
+            }
+            res.set('X-Engines-Used', 'cache');
+            res.set('X-Models-Used', 'cache');
+            res.set('X-Router-Reasons', 'batch_semantic_all_hit');
+          } catch {}
+          const out = checks.map((c, i) => sanitizeWithSource(String(c.result || ''), String(items[i] || ''), targetLanguage));
+          return res.json({ items: out, fromCache: true });
         }
       }
     } catch {}
@@ -4414,7 +4572,7 @@ app.post('/api/translate-batch',
         // Record engine/model used for this job
         try {
           enginesUsed.add(actualEngine);
-          const modelUsed = actualEngine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL;
+          const modelUsed = (first && first.model) ? first.model : (actualEngine === 'gemini-2p' ? MODEL_GEMINI_2P : MODEL_GEMINI_FL);
           modelsUsed.add(modelUsed);
           reasons.add(decision.reason || '');
         } catch {}
@@ -4554,6 +4712,11 @@ app.post('/api/translate-batch',
     try {
       if (BATCH_CACHE_ENABLED && !allowPro && translationCache && translationCache.setBatchTranslation && Array.isArray(resultsOut) && resultsOut.length === items.length) {
         await translationCache.setBatchTranslation(items, mode, targetLanguage, resultsOut, subStyle || '', injections || '', 300, 'gemini-fl');
+        // Signal semantic write attempt (translation-cache will also write to LangCache per item)
+        const lcConf = !!(translationCache && translationCache.config && translationCache.config.useLangCache);
+        const lcSvc = !!(langCache && langCache.isEnabled && langCache.isEnabled());
+        const lcEnabled = lcConf && lcSvc;
+        if (lcEnabled) try { res.set('X-LangCache-Write', 'attempted'); } catch {}
       }
     } catch {}
 

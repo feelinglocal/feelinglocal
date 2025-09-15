@@ -3,6 +3,7 @@ const NodeCache = require('node-cache');
 const crypto = require('crypto');
 const log = require('./logger');
 const { recordMetrics } = require('./metrics');
+const { langCache } = require('./langcache');
 
 /**
  * Translation Cache Manager with Redis and memory fallback
@@ -27,7 +28,8 @@ class TranslationCacheManager {
       sets: 0,
       errors: 0,
       memoryHits: 0,
-      redisHits: 0
+      redisHits: 0,
+      langCacheHits: 0
     };
 
     // Cache configuration
@@ -36,7 +38,9 @@ class TranslationCacheManager {
       maxKeyLength: Number(process.env.CACHE_MAX_KEY_LENGTH || 250),
       enableTranslationMemory: process.env.TRANSLATION_MEMORY_ENABLED !== 'false',
       enableSemanticMatching: process.env.SEMANTIC_MATCHING_ENABLED === 'true',
-      similarityThreshold: Number(process.env.SIMILARITY_THRESHOLD || 0.85)
+      similarityThreshold: Number(process.env.SIMILARITY_THRESHOLD || 0.85),
+      useLangCache: String(process.env.LANGCACHE_ENABLED || '').toLowerCase() === 'true',
+      useLangCacheRelaxation: String(process.env.LANGCACHE_CASCADE || 'true').toLowerCase() !== 'false'
     };
   }
 
@@ -79,11 +83,40 @@ class TranslationCacheManager {
       log.debug('Memory cache expired', { key: this.sanitizeKey(key) });
     });
 
-    log.info('Translation cache system initialized', {
-      redisAvailable: this.isRedisAvailable,
-      memoryCache: true,
-      defaultTTL: this.config.defaultTTL
-    });
+      log.info('Translation cache system initialized', {
+        redisAvailable: this.isRedisAvailable,
+        memoryCache: true,
+        defaultTTL: this.config.defaultTTL,
+        langCacheEnabled: !!langCache && langCache.isEnabled()
+      });
+  }
+
+  // Compute a conservative similarity threshold by text length
+  _lenAwareThreshold(text) {
+    const envThr = Number(process.env.LANGCACHE_THRESHOLD || 0);
+    if (envThr > 0) return envThr;
+    const L = (text || '').length;
+    if (L <= 80) return 0.84;
+    if (L <= 200) return 0.86;
+    if (L <= 400) return 0.88;
+    return 0.90;
+  }
+
+  // Cascade semantic search: full attrs -> drop engine -> drop engine+subStyle
+  async _searchLangCacheCascade(text, attrs) {
+    const thr = this._lenAwareThreshold(text);
+    // 1) Full attributes
+    let entry = await langCache.search(text, attrs, { threshold: thr });
+    if (entry) return entry;
+    if (!this.config.useLangCacheRelaxation) return null;
+    // 2) Without engine
+    const { engine, ...noEngine } = attrs || {};
+    entry = await langCache.search(text, noEngine, { threshold: thr - 0.01 });
+    if (entry) return entry;
+    // 3) Without engine + subStyle
+    const { subStyle, ...noEngineNoSub } = noEngine;
+    entry = await langCache.search(text, noEngineNoSub, { threshold: thr - 0.02 });
+    return entry || null;
   }
 
   /**
@@ -160,6 +193,46 @@ class TranslationCacheManager {
         });
         
         return memoryResult;
+      }
+
+      // Try Redis LangCache semantic cache (optional, external)
+      if (this.config.useLangCache && langCache && langCache.isEnabled()) {
+        try {
+          const entry = await this._searchLangCacheCascade(text, {
+            mode: String(mode || ''),
+            targetLanguage: String(targetLanguage || ''),
+            subStyle: String(subStyle || ''),
+            engine: String(engine || ''),
+            app: 'localization-app'
+          });
+          if (entry && entry.response) {
+            const cacheData = {
+              text,
+              mode,
+              targetLanguage,
+              subStyle,
+              injections,
+              result: String(entry.response || ''),
+              timestamp: Date.now(),
+              hits: 0,
+              provider: 'langcache',
+              similarity: Number(entry.similarity || 1)
+            };
+            // Populate memory for subsequent exact lookups (cheap)
+            try { this.memoryCache.set(key, cacheData, this.config.defaultTTL); } catch {}
+            this.stats.hits++;
+            this.stats.langCacheHits++;
+            try { recordMetrics.circuitBreakerSuccess('cache:langcache:hit'); } catch {}
+            log.debug('Translation cache hit (LangCache)', {
+              key: this.sanitizeKey(key),
+              textLength: text.length,
+              similarity: cacheData.similarity
+            });
+            return cacheData;
+          }
+        } catch (e) {
+          log.warn('LangCache search failed', { error: e?.message || String(e) });
+        }
       }
 
       // Cache miss
@@ -265,6 +338,21 @@ class TranslationCacheManager {
       this.stats.sets++;
       recordMetrics.circuitBreakerSuccess('cache:set');
       
+      // Best-effort insert into Redis LangCache for semantic reuse
+      if (this.config.useLangCache && langCache && langCache.isEnabled()) {
+        try {
+          await langCache.set(text, result, {
+            mode: String(mode || ''),
+            targetLanguage: String(targetLanguage || ''),
+            subStyle: String(subStyle || ''),
+            engine: String(engine || ''),
+            app: 'localization-app'
+          });
+        } catch (e) {
+          log.warn('LangCache set failed', { error: e?.message || String(e) });
+        }
+      }
+
       log.debug('Translation cached', { 
         key: this.sanitizeKey(key),
         textLength: text.length,
@@ -358,6 +446,30 @@ class TranslationCacheManager {
       this.memoryCache.set(key, cacheData, cacheTTL);
       this.stats.sets++;
       
+      // Best-effort: also insert each item into LangCache for semantic reuse
+      if (this.config.useLangCache && langCache && langCache.isEnabled()) {
+        try {
+          const attrsBase = {
+            mode: String(mode || ''),
+            targetLanguage: String(targetLanguage || ''),
+            subStyle: String(subStyle || ''),
+            engine: String(engine || ''),
+            app: 'localization-app'
+          };
+          const n = Math.min(Array.isArray(items)?items.length:0, Array.isArray(results)?results.length:0);
+          for (let i = 0; i < n; i++) {
+            const prompt = String(items[i] || '');
+            const response = String(results[i] || '');
+            if (prompt && response) {
+              // Fire-and-forget
+              try { langCache.set(prompt, response, attrsBase); } catch {}
+            }
+          }
+        } catch (e) {
+          log.warn('LangCache batch set failed', { error: e?.message || String(e) });
+        }
+      }
+
     } catch (error) {
       this.stats.errors++;
       log.error('Batch cache set error', { error: error.message });

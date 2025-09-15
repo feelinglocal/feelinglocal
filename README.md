@@ -33,8 +33,21 @@ A Node.js/Express application for translating and localizing text and document f
    # Copy the example environment file
    cp .env.example .env
    
-   # Edit .env and add your OpenAI API key:
+   # Edit .env and add your API keys and routing settings:
    OPENAI_API_KEY=sk-your-openai-api-key-here
+   GEMINI_API_KEY=your-gemini-api-key
+   
+   # --- Routing & models ---
+   ROUTER_DEFAULT=auto                   # auto | gpt-4o | gemini-2p | gemini-fl
+   ROUTER_QE_ENABLED=true
+   ROUTER_QE_THRESHOLD=0.72              # 0–1
+   ROUTER_COMMITTEE_ENABLED=true
+   ROUTER_COMMITTEE_MODE=first_pass_review     # first_pass_review | committee2 | off
+   
+   # Model ids (override if vendor updates names)
+   GEMINI_2P_MODEL=gemini-2.5-pro
+   GEMINI_FLASH_LITE_MODEL=gemini-2.5-flash-lite
+   OPENAI_MODEL_GPT4O=gpt-4o
    ```
 
 3. **Environment variables:**
@@ -42,9 +55,34 @@ A Node.js/Express application for translating and localizing text and document f
    Required:
    - `OPENAI_API_KEY` - Your OpenAI API key
 
-   Optional:
-   - `NODE_ENV` - Environment mode (default: development)
-   - `PORT` - Server port (default: 3000)
+Optional:
+- `NODE_ENV` - Environment mode (default: development)
+- `PORT` - Server port (default: 3000)
+
+### Optional: Redis LangCache (semantic caching)
+
+This app can use Redis LangCache for semantic caching of translations (in addition to the existing exact-key Redis/memory cache). To enable it:
+
+1) Create a LangCache Service in Redis Cloud (or Redis Enterprise) and note:
+   - Service base URL ("server URL" in SDK examples)
+   - Cache ID
+   - API key for the service
+
+2) Install the SDK and set env vars:
+   ```bash
+   npm install @redis-ai/langcache
+   ```
+   Add to `.env`:
+   ```bash
+   LANGCACHE_ENABLED=true
+   LANGCACHE_SERVER_URL=https://<your-langcache-endpoint>
+   LANGCACHE_CACHE_ID=<your-cache-id>
+   LANGCACHE_API_KEY=<your-langcache-api-key>
+   # Optional per-request threshold override (0 uses service default)
+   # LANGCACHE_THRESHOLD=0.9
+   ```
+
+When enabled, the translate API will first check LangCache (semantic search) and return a cached response if a match is found. On cache misses, responses are written to LangCache with attributes: `mode`, `targetLanguage`, `subStyle`, and `engine`.
    - `MAX_UPLOAD_MB` - File upload limit in MB (default: 25)
    - `JWT_SECRET` - Secret for JWT tokens (change in production)
    - `SESSION_SECRET` - Secret for sessions (change in production)

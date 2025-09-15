@@ -48,6 +48,7 @@
     "@aws-sdk/s3-request-presigner": "^3.873.0",
     "@google/genai": "^1.17.0",
     "@prisma/client": "^5.18.0",
+    "@redis-ai/langcache": "^0.10.1",
     "@sentry/node": "^10.5.0",
     "@types/node": "^24.3.0",
     "aws-sdk": "^2.1692.0",
