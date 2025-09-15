@@ -91,15 +91,41 @@ class TranslationCacheManager {
       });
   }
 
+  // Decide if a semantic hit is safe to reuse for this input
+  _acceptSemanticHit(input, candidatePrompt) {
+    try {
+      const text = String(input || '');
+      const cand = String(candidatePrompt || '');
+      if (!text || !cand) return false;
+      const L = text.length, H = cand.length;
+      // Reject if lengths differ too much (new content likely added/removed)
+      const lenDiffRatio = Math.abs(L - H) / Math.max(L, H);
+      if (lenDiffRatio > 0.15) return false; // >15% length delta
+      // Jaccard similarity on tokens must be high for short texts
+      const sim = this.calculateSimilarity(text, cand);
+      const thr = this._lenAwareThreshold(text);
+      if (sim < Math.max(thr, 0.90)) return false;
+      // New-token ratio gate: words in input not present in candidate must be limited
+      const toTokens = (s) => new Set(String(s).toLowerCase().split(/\W+/).filter(Boolean));
+      const A = toTokens(text), B = toTokens(cand);
+      let newTokens = 0; for (const w of A) if (!B.has(w)) newTokens++;
+      const newRatio = newTokens / Math.max(1, A.size);
+      if (newRatio > 0.20) return false; // >20% novel tokens => likely different content
+      return true;
+    } catch { return false; }
+  }
+
   // Compute a conservative similarity threshold by text length
   _lenAwareThreshold(text) {
     const envThr = Number(process.env.LANGCACHE_THRESHOLD || 0);
     if (envThr > 0) return envThr;
     const L = (text || '').length;
-    if (L <= 80) return 0.84;
-    if (L <= 200) return 0.86;
-    if (L <= 400) return 0.88;
-    return 0.90;
+    // Stricter for short inputs to avoid false positives
+    if (L <= 60) return 0.93;
+    if (L <= 120) return 0.91;
+    if (L <= 240) return 0.89;
+    if (L <= 480) return 0.88;
+    return 0.87;
   }
 
   // Cascade semantic search: full attrs -> drop engine -> drop engine+subStyle
@@ -205,7 +231,7 @@ class TranslationCacheManager {
             engine: String(engine || ''),
             app: 'localization-app'
           });
-          if (entry && entry.response) {
+          if (entry && entry.response && this._acceptSemanticHit(text, entry.prompt)) {
             const cacheData = {
               text,
               mode,
@@ -229,6 +255,16 @@ class TranslationCacheManager {
               similarity: cacheData.similarity
             });
             return cacheData;
+          }
+          // Near miss: found candidate but rejected by gating
+          if (entry && entry.response) {
+            try { recordMetrics.circuitBreakerFailure('cache:langcache:near_miss'); } catch {}
+            log.debug('LangCache near-miss rejected by gating', {
+              key: this.sanitizeKey(key),
+              inputLength: String(text||'').length,
+              candidateLength: String(entry.prompt||'').length,
+              similarity: Number(entry.similarity || 0)
+            });
           }
         } catch (e) {
           log.warn('LangCache search failed', { error: e?.message || String(e) });
