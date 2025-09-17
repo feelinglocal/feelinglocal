@@ -8,10 +8,12 @@ class EnhancedDragDropManager {
   constructor() {
     this.isInitialized = false;
     this.dragCounter = 0;
-    this.allowedTypes = ['.txt', '.docx', '.pdf', '.srt'];
-    this.maxFileSize = 26214400; // 25MB in bytes
+    this.allowedTypes = ['.txt', '.docx', '.pdf', '.srt', '.pptx'];
+    this.maxFileSize = 52428800; // 50MB in bytes  
     this.uploadQueue = [];
     this.uploadInProgress = false;
+    this.currentFileJob = null;
+    this.progressSource = null;
   }
 
   /**
@@ -85,6 +87,478 @@ class EnhancedDragDropManager {
         this.handleMultipleFiles(files);
       }
     });
+  }
+
+  /**
+   * Handle multiple file uploads - enhanced for file translation
+   */
+  async handleMultipleFiles(files) {
+    if (files.length === 0) return;
+    
+    // Validate files first
+    const { validFiles, invalidFiles } = this.validateFiles(files);
+    
+    if (invalidFiles.length > 0) {
+      this.showValidationErrors(invalidFiles);
+    }
+    
+    if (validFiles.length === 0) return;
+    
+    // Check for file types that support advanced translation
+    const fileTranslationTypes = ['.pdf', '.docx', '.pptx'];
+    const advancedFiles = validFiles.filter(file => 
+      fileTranslationTypes.includes(this.getFileExtension(file.name))
+    );
+    
+    // If there are advanced files, use file translation system
+    if (advancedFiles.length > 0) {
+      for (const file of advancedFiles) {
+        await this.handleFileTranslation(file);
+      }
+    }
+    
+    // Handle remaining files with legacy system
+    const legacyFiles = validFiles.filter(file => 
+      !fileTranslationTypes.includes(this.getFileExtension(file.name))
+    );
+    
+    if (legacyFiles.length > 0) {
+      // Add to upload queue for text extraction
+      for (const file of legacyFiles) {
+        this.uploadQueue.push({
+          file,
+          id: Date.now() + Math.random(),
+          status: 'queued', 
+          progress: 0
+        });
+      }
+      
+      // Start processing queue
+      this.processFiles(legacyFiles);
+    }
+  }
+
+  /**
+   * Handle file translation for PDF, DOCX, PPTX files
+   */
+  async handleFileTranslation(file) {
+    try {
+      // Check if user has selected target language and style
+      const targetLanguage = this.getCurrentTargetLanguage();
+      const mode = this.getCurrentTranslationMode();
+      const subStyle = this.getCurrentSubStyle();
+      
+      if (!targetLanguage) {
+        this.showToast('Please select a target language first');
+        this.pulseElement(document.getElementById('langButtonsRow'));
+        return;
+      }
+      
+      if (!mode) {
+        this.showToast('Please select a translation style first');
+        this.pulseElement(document.getElementById('styleButtonsRow'));
+        return;
+      }
+      
+      // Show progress bar
+      const progressBar = this.showFileTranslationProgress(file.name);
+      
+      // Create form data
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('srcLang', ''); // Auto-detect
+      formData.append('tgtLang', targetLanguage);
+      formData.append('mode', mode);
+      formData.append('subStyle', subStyle || 'general');
+      formData.append('injections', this.getCurrentInjections());
+      
+      // Get auth headers
+      const headers = await this.getAuthHeaders();
+      
+      // Start translation job
+      const response = await fetch('/api/file-jobs', {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to start translation');
+      }
+      
+      const result = await response.json();
+      this.currentFileJob = result.jobId;
+      
+      // Start progress tracking
+      this.trackFileTranslationProgress(result.jobId, file.name);
+      
+    } catch (error) {
+      console.error('File translation failed:', error);
+      this.showToast('Failed to start file translation: ' + error.message);
+      this.hideFileTranslationProgress();
+    }
+  }
+
+  /**
+   * Get current target language from UI
+   */
+  getCurrentTargetLanguage() {
+    const activeBtn = document.querySelector('.lang-btn.active');
+    return activeBtn ? activeBtn.dataset.lang : null;
+  }
+
+  /**
+   * Get current translation mode from UI  
+   */
+  getCurrentTranslationMode() {
+    const activeBtn = document.querySelector('.style-btn.active');
+    return activeBtn ? activeBtn.dataset.mode : null;
+  }
+
+  /**
+   * Get current substyle from UI
+   */
+  getCurrentSubStyle() {
+    const subPanel = document.getElementById('substylePanel');
+    const activeChip = subPanel?.querySelector('.substyle-chip.active');
+    return activeChip ? activeChip.dataset.sub : null;
+  }
+
+  /**
+   * Get current brand injections
+   */
+  getCurrentInjections() {
+    // This would integrate with the brand kit system if active
+    return '';
+  }
+
+  /**
+   * Show file translation progress
+   */
+  showFileTranslationProgress(filename) {
+    const progressBar = document.querySelector('.upload-progress-bar');
+    if (!progressBar) return null;
+    
+    // Set up progress bar for file translation
+    progressBar.classList.add('show', 'is-busy');
+    const progressContent = progressBar.querySelector('.progress-content');
+    if (progressContent) {
+      progressContent.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-weight:600;font-size:14px;">Translating ${filename}</div>
+            <div style="color:var(--muted);font-size:12px;" id="fileProgressStatus">Initializing...</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span id="fileProgressPercent" style="font-size:13px;font-weight:600;">0%</span>
+            <button class="btn" id="fileProgressCancelBtn" style="font-size:12px;padding:4px 8px;border-color:var(--border);">Cancel</button>
+          </div>
+        </div>
+        <div style="background:#f0f0f3;border-radius:4px;height:6px;overflow:hidden;margin-top:8px;">
+          <div id="fileProgressBar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s ease;"></div>
+        </div>
+      `;
+      
+      // Show file progress details
+      const fileProgressDetails = document.getElementById('fileProgressDetails');
+      if (fileProgressDetails) {
+        fileProgressDetails.classList.add('show');
+      }
+    }
+    
+    return progressBar;
+  }
+
+  /**
+   * Track file translation progress via SSE
+   */
+  trackFileTranslationProgress(jobId, filename) {
+    // Close existing connection
+    if (this.progressSource) {
+      this.progressSource.close();
+    }
+    
+    // Create SSE connection
+    this.progressSource = new EventSource(`/api/file-jobs/${jobId}/events`);
+    
+    this.progressSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        this.handleProgressUpdate(data);
+      } catch (error) {
+        console.error('Progress event parse error:', error);
+      }
+    };
+    
+    this.progressSource.onerror = (error) => {
+      console.error('Progress source error:', error);
+      // Fallback to polling
+      setTimeout(() => this.pollJobStatus(jobId), 2000);
+    };
+    
+    // Set up cancel button
+    const cancelBtn = document.getElementById('fileProgressCancelBtn');
+    if (cancelBtn) {
+      cancelBtn.onclick = () => this.cancelFileTranslation(jobId);
+    }
+  }
+
+  /**
+   * Handle progress updates
+   */
+  handleProgressUpdate(data) {
+    if (data.type === 'progress') {
+      this.updateFileProgress(data.pct, data.label, data.meta);
+      
+      // Update details if available
+      if (data.meta) {
+        this.updateFileProgressDetails(data.meta);
+      }
+    } else if (data.type === 'complete') {
+      // Job completed, get final results
+      if (this.currentFileJob) {
+        this.fetchTranslationResult(this.currentFileJob);
+      }
+    }
+  }
+
+  /**
+   * Update file progress display
+   */
+  updateFileProgress(percent, label, meta = {}) {
+    const progressBar = document.getElementById('fileProgressBar');
+    const progressStatus = document.getElementById('fileProgressStatus');
+    const progressPercent = document.getElementById('fileProgressPercent');
+    
+    if (progressBar) progressBar.style.width = percent + '%';
+    if (progressStatus) progressStatus.textContent = label;
+    if (progressPercent) progressPercent.textContent = percent + '%';
+  }
+
+  /**
+   * Update file progress details
+   */
+  updateFileProgressDetails(meta) {
+    if (meta.pages) {
+      const pagesEl = document.getElementById('fileProgressPages');
+      if (pagesEl) pagesEl.textContent = meta.pages;
+    }
+    if (meta.segments) {
+      const segmentsEl = document.getElementById('fileProgressSegments');
+      if (segmentsEl) segmentsEl.textContent = meta.segments;
+    }
+    if (meta.charCount) {
+      const charsEl = document.getElementById('fileProgressChars'); 
+      if (charsEl) charsEl.textContent = meta.charCount.toLocaleString();
+    }
+  }
+
+  /**
+   * Fetch translation result and show download
+   */
+  async fetchTranslationResult(jobId) {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`/api/file-jobs/${jobId}`, { headers });
+      
+      if (!response.ok) throw new Error('Failed to fetch result');
+      
+      const job = await response.json();
+      
+      if (job.status === 'done') {
+        this.showTranslationComplete(job);
+      } else if (job.status === 'error') {
+        this.showToast('Translation failed: ' + (job.error?.message || 'Unknown error'));
+        this.hideFileTranslationProgress();
+      }
+    } catch (error) {
+      console.error('Failed to fetch translation result:', error);
+      this.showToast('Failed to get translation result');
+      this.hideFileTranslationProgress();
+    }
+  }
+
+  /**
+   * Show translation complete with download option
+   */
+  showTranslationComplete(job) {
+    const progressBar = document.querySelector('.upload-progress-bar');
+    if (!progressBar) return;
+    
+    progressBar.classList.remove('is-busy');
+    const progressContent = progressBar.querySelector('.progress-content');
+    if (progressContent) {
+      progressContent.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-weight:600;font-size:14px;color:green;">✓ Translation Complete</div>
+            <div style="color:var(--muted);font-size:12px;">${job.original_filename}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn" id="fileDownloadBtn" style="font-size:12px;padding:4px 12px;background:var(--accent);color:white;border-color:var(--accent);">Download</button>
+            <button class="btn" style="font-size:12px;padding:4px 8px;border-color:var(--border);" onclick="this.closest('.upload-progress-bar').classList.remove('show')">Close</button>
+          </div>
+        </div>
+      `;
+      
+      // Set up download button
+      const downloadBtn = document.getElementById('fileDownloadBtn');
+      if (downloadBtn) {
+        downloadBtn.onclick = () => this.downloadTranslatedFile(job.id);
+      }
+      
+      // Auto-hide progress bar after a delay
+      setTimeout(() => {
+        progressBar.classList.remove('show');
+      }, 10000); // Hide after 10 seconds
+      
+      // Show quality summary in progress details
+      if (job.fit_report) {
+        const qualityEl = document.getElementById('fileProgressQuality');
+        if (qualityEl) {
+          const quality = job.fit_report.passesThreshold ? 'Good' : 'Needs Review';
+          const fitPercent = (job.fit_report.overallFitRatio * 100).toFixed(1);
+          qualityEl.innerHTML = `${quality} (${fitPercent}% fit)`;
+          qualityEl.style.color = job.fit_report.passesThreshold ? 'green' : 'orange';
+        }
+      }
+    }
+  }
+
+  /**
+   * Download translated file
+   */
+  async downloadTranslatedFile(jobId) {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`/api/file-jobs/${jobId}/result`, { headers });
+      
+      if (!response.ok) throw new Error('Failed to get download URL');
+      
+      const result = await response.json();
+      
+      // Create download link
+      const a = document.createElement('a');
+      a.href = result.downloadUrl;
+      a.download = result.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      this.showToast('Download started');
+      
+    } catch (error) {
+      console.error('Download failed:', error);
+      this.showToast('Failed to download file');
+    }
+  }
+
+  /**
+   * Cancel file translation
+   */
+  async cancelFileTranslation(jobId) {
+    try {
+      const headers = await this.getAuthHeaders();
+      await fetch(`/api/file-jobs/${jobId}`, {
+        method: 'DELETE',
+        headers
+      });
+      
+      if (this.progressSource) {
+        this.progressSource.close();
+        this.progressSource = null;
+      }
+      
+      this.hideFileTranslationProgress();
+      this.showToast('Translation cancelled');
+      
+    } catch (error) {
+      console.error('Cancel failed:', error);
+      this.showToast('Failed to cancel translation');
+    }
+  }
+
+  /**
+   * Hide file translation progress
+   */
+  hideFileTranslationProgress() {
+    const progressBar = document.querySelector('.upload-progress-bar');
+    if (progressBar) {
+      progressBar.classList.remove('show', 'is-busy');
+    }
+    
+    const fileProgressDetails = document.getElementById('fileProgressDetails');
+    if (fileProgressDetails) {
+      fileProgressDetails.classList.remove('show');
+    }
+    
+    this.currentFileJob = null;
+  }
+
+  /**
+   * Get file extension
+   */
+  getFileExtension(filename) {
+    return '.' + filename.split('.').pop().toLowerCase();
+  }
+
+  /**
+   * Get authentication headers
+   */
+  async getAuthHeaders() {
+    const headers = {};
+    
+    try {
+      // Try to get user from localStorage first
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      
+      if (user.isGuest) {
+        headers['X-Guest-ID'] = localStorage.getItem('guestId');
+      } else {
+        // Try to get Supabase session token
+        const authToken = localStorage.getItem('authToken');
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        } else if (window.supabase) {
+          // Try to get current Supabase session
+          const supabaseSession = await window.supabase.auth.getSession();
+          if (supabaseSession?.data?.session?.access_token) {
+            headers['Authorization'] = `Bearer ${supabaseSession.data.session.access_token}`;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to get auth headers:', e);
+    }
+    
+    return headers;
+  }
+
+  /**
+   * Show toast notification
+   */
+  showToast(message, type = 'info') {
+    // Use existing toast system
+    if (window.showToast) {
+      window.showToast(message);
+    } else {
+      console.log('Toast:', message);
+    }
+  }
+
+  /**
+   * Pulse element for attention
+   */
+  pulseElement(element) {
+    if (window.pulse) {
+      window.pulse(element);
+    } else if (element) {
+      element.style.animation = 'pulse 0.5s ease-in-out';
+      setTimeout(() => {
+        element.style.animation = '';
+      }, 500);
+    }
   }
 
   /**
@@ -491,6 +965,9 @@ class EnhancedDragDropManager {
       // Add to file tabs if successful
       if (result.fileId) {
         this.addFileTab(uploadItem.file.name, result.fileId, result);
+      } else if (result.text) {
+        // Legacy text extraction result
+        this.addTextTab(uploadItem.file.name, result.text, result);
       }
 
     } catch (error) {
@@ -608,87 +1085,26 @@ class EnhancedDragDropManager {
    * Show toast notification
    */
   showToast(title, message, type = 'info') {
-    // Create toast notification system
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.innerHTML = `
-      <div class="toast-content">
-        <div class="toast-title">${title}</div>
-        <div class="toast-message">${message}</div>
-      </div>
-      <button class="toast-close">×</button>
-    `;
+    const tone = type || 'info';
+    const hasMessage = arguments.length > 1;
+    const resolvedTitle = hasMessage ? (title != null ? String(title) : '') : '';
+    const resolvedMessage = hasMessage ? (message != null ? String(message) : '') : (title != null ? String(title) : '');
 
-    // Add CSS if not already added
-    if (!document.getElementById('toast-styles')) {
-      const style = document.createElement('style');
-      style.id = 'toast-styles';
-      style.textContent = `
-        .toast {
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          background: white;
-          border-radius: 8px;
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-          border-left: 4px solid #3b82f6;
-          display: flex;
-          align-items: flex-start;
-          padding: 16px;
-          margin-bottom: 8px;
-          max-width: 400px;
-          z-index: 10001;
-          animation: slideInToast 0.3s ease-out;
-        }
-        
-        .toast-success { border-left-color: #10b981; }
-        .toast-error { border-left-color: #ef4444; }
-        .toast-warning { border-left-color: #f59e0b; }
-        
-        @keyframes slideInToast {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        
-        .toast-content {
-          flex: 1;
-        }
-        
-        .toast-title {
-          font-weight: 600;
-          margin-bottom: 4px;
-        }
-        
-        .toast-message {
-          font-size: 14px;
-          color: #6b7280;
-          white-space: pre-line;
-        }
-        
-        .toast-close {
-          background: none;
-          border: none;
-          font-size: 18px;
-          cursor: pointer;
-          color: #6b7280;
-          margin-left: 12px;
-        }
-      `;
-      document.head.appendChild(style);
+    if (typeof window.showNotification === 'function') {
+      window.showNotification(resolvedTitle, resolvedMessage, tone);
+      return;
     }
 
-    document.body.appendChild(toast);
+    if (typeof window.showToast === 'function' && window.showToast !== this.showToast) {
+      window.showToast(resolvedMessage, { title: resolvedTitle, tone });
+      return;
+    }
 
-    // Auto-remove toast
-    setTimeout(() => {
-      toast.style.animation = 'slideInToast 0.3s ease-out reverse';
-      setTimeout(() => toast.remove(), 300);
-    }, 5000);
+    console.log(`[${tone}] ${resolvedTitle || resolvedMessage}`);
+  }
 
-    // Close button
-    toast.querySelector('.toast-close').addEventListener('click', () => {
-      toast.remove();
-    });
+  /**
+   * Format file size for display
   }
 
   /**
@@ -1033,3 +1449,5 @@ if (document.readyState === 'loading') {
 // Export for global access
 window.enhancedDragDrop = enhancedDragDrop;
 window.jobProgressTracker = jobProgressTracker;
+
+

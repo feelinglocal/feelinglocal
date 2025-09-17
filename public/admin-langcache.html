@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LangCache Admin</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+      h1 { margin-top: 0; }
+      fieldset { margin: 1rem 0; padding: 1rem; }
+      label { display: block; margin: .25rem 0; }
+      input[type="text"], input[type="password"], textarea { width: 100%; padding: .5rem; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+      button { padding: .5rem .8rem; }
+      code { background: #f6f8fa; padding: .2rem .35rem; border-radius: 4px; }
+      .ok { color: #0a7; }
+      .err { color: #b00; }
+      pre { background: #0b1020; color: #d5e4f3; padding: 1rem; overflow: auto; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Redis LangCache Admin</h1>
+    <p>Use an API key or run with <code>DEV_AUTH_BYPASS=true</code>. This page validates semantic caching end-to-end.</p>
+
+    <fieldset>
+      <legend>Auth</legend>
+      <label>API Key (optional)
+        <input id="apiKey" type="password" placeholder="x-api-key for this app" />
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Status</legend>
+      <button id="btnStatus">Load Status</button>
+      <div id="status"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Warm + Semantic Hit Test</legend>
+      <div class="row">
+        <label>Mode<input id="mode" type="text" value="formal" /></label>
+        <label>Target Language<input id="tlang" type="text" value="French" /></label>
+      </div>
+      <div class="row">
+        <label>Substyle<input id="substyle" type="text" value="general" /></label>
+        <label>Engine<input id="engine" type="text" value="gemini-fl" /></label>
+      </div>
+      <label>Warm Text
+        <textarea id="warmText" rows="3">What is Redis semantic caching?</textarea>
+      </label>
+      <label>Similar Text (should hit)
+        <textarea id="hitText" rows="3">Explain Redis LangCache semantic cache benefits</textarea>
+      </label>
+      <button id="btnWarm">Warm Cache</button>
+      <button id="btnHit">Query Similar (expect hit)</button>
+      <div id="hitHeaders"></div>
+      <pre id="hitBody" hidden></pre>
+    </fieldset>
+
+    <fieldset>
+      <legend>Invalidate LangCache</legend>
+      <div class="row">
+        <label>mode<input id="amode" type="text" placeholder="formal" /></label>
+        <label>targetLanguage<input id="alang" type="text" placeholder="French" /></label>
+      </div>
+      <div class="row">
+        <label>subStyle<input id="asub" type="text" placeholder="general" /></label>
+        <label>engine<input id="aeng" type="text" placeholder="gemini-fl" /></label>
+      </div>
+      <div class="row">
+        <label>entryId (optional)<input id="entryId" type="text" placeholder="specific cache entry id" /></label>
+      </div>
+      <button id="btnInvalidate">Invalidate</button>
+      <div id="invOut"></div>
+    </fieldset>
+
+    <script>
+      const H = () => {
+        const h = { 'Content-Type': 'application/json' };
+        const k = document.getElementById('apiKey').value.trim();
+        if (k) h['x-api-key'] = k;
+        return h;
+      };
+
+      function show(el, obj) {
+        el.innerHTML = '';
+        const pre = document.createElement('pre');
+        pre.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+        el.appendChild(pre);
+      }
+
+      async function post(url, body) {
+        const res = await fetch(url, { method: 'POST', headers: H(), body: JSON.stringify(body || {}) });
+        const text = await res.text();
+        let json;
+        try { json = JSON.parse(text); } catch { json = text; }
+        return { res, json };
+      }
+
+      document.getElementById('btnStatus').onclick = async () => {
+        const res = await fetch('/api/admin/langcache', { headers: H() });
+        const data = await res.json().catch(() => ({}));
+        const s = document.getElementById('status');
+        s.innerHTML = `<div>Enabled: <b class="${data?.cfg?.enabled?'ok':'err'}">${data?.cfg?.enabled}</b></div>` +
+          `<div>Server: ${data?.cfg?.serverHost || '-'}</div>` +
+          `<div>CacheId: ${data?.cfg?.cacheIdHint || '-'}</div>` +
+          `<div>LangCache hits: ${data?.stats?.langCacheHits ?? 0}</div>`;
+      };
+
+      document.getElementById('btnWarm').onclick = async () => {
+        const payload = {
+          text: document.getElementById('warmText').value.trim(),
+          mode: document.getElementById('mode').value.trim(),
+          targetLanguage: document.getElementById('tlang').value.trim(),
+          subStyle: document.getElementById('substyle').value.trim(),
+          engine: document.getElementById('engine').value.trim()
+        };
+        const { json } = await post('/api/translate', payload);
+        alert('Warm request done.');
+      };
+
+      document.getElementById('btnHit').onclick = async () => {
+        const payload = {
+          text: document.getElementById('hitText').value.trim(),
+          mode: document.getElementById('mode').value.trim(),
+          targetLanguage: document.getElementById('tlang').value.trim(),
+          subStyle: document.getElementById('substyle').value.trim(),
+          engine: document.getElementById('engine').value.trim()
+        };
+        const { res, json } = await post('/api/translate', payload);
+        const h = document.getElementById('hitHeaders');
+        const xc = res.headers.get('x-cache') || 'miss';
+        const xcp = res.headers.get('x-cache-provider') || '-';
+        const lce = res.headers.get('x-langcache-enabled') || '-';
+        const lcs = res.headers.get('x-langcache-search') || '-';
+        const lcw = res.headers.get('x-langcache-write') || '-';
+        h.innerHTML = `X-Cache: <b>${xc}</b> | X-Cache-Provider: <b>${xcp}</b> | X-LangCache-Enabled: <b>${lce}</b> | X-LangCache-Search: <b>${lcs}</b> | X-LangCache-Write: <b>${lcw}</b>`;
+        const body = document.getElementById('hitBody');
+        body.hidden = false;
+        body.textContent = typeof json === 'string' ? json : JSON.stringify(json, null, 2);
+      };
+
+      document.getElementById('btnInvalidate').onclick = async () => {
+        const entryId = document.getElementById('entryId').value.trim();
+        const attrs = {};
+        const m = document.getElementById('amode').value.trim(); if (m) attrs.mode = m;
+        const l = document.getElementById('alang').value.trim(); if (l) attrs.targetLanguage = l;
+        const s = document.getElementById('asub').value.trim(); if (s) attrs.subStyle = s;
+        const e = document.getElementById('aeng').value.trim(); if (e) attrs.engine = e;
+        const body = entryId ? { entryId } : { attributes: attrs };
+        const { json } = await post('/api/admin/langcache/invalidate', body);
+        show(document.getElementById('invOut'), json);
+      };
+    </script>
+  </body>
+  </html>
