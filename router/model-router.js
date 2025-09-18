@@ -1,15 +1,17 @@
-// router/model-router.js
+﻿// router/model-router.js
 /**
  * Decide which engine to use (Gemini 2.5 Flash-Lite / Gemini 2.5 Pro / GPT-4o)
  * Policy requested:
- * - Simple text → Gemini 2.5 Flash-Lite
- * - Long/complex or batch → GPT-4o
- * - "Max localization" (allowPro) → Gemini 2.5 Pro for domain styles
+ * - Simple text â†’ Gemini 2.5 Flash-Lite
+ * - Long/complex or batch â†’ GPT-4o
+ * - "Max localization" (allowPro) â†’ Gemini 2.5 Pro for domain styles
  */
 
 const HARD_MODES = new Set(['legal', 'technical', 'medical', 'corporate', 'journalistic']);
 const HIGH_CONTEXT = new Set(['dubbing', 'dialogue', 'subtitling']);
 const CREATIVE = new Set(['marketing', 'creative', 'entertainment']);
+const TERMINOLOGY_MODES = new Set(['legal', 'medical']);
+const TERMINOLOGY_SUB_HINTS = ['contracts', 'terms', 'privacy', 'compliance', 'constitutional', 'clinical', 'patient', 'research'];
 
 function countDigits(s = '') { return (String(s).match(/\d/g) || []).length; }
 function countEllipses(s = '') { return (String(s).match(/\.\.\./g) || []).length; }
@@ -31,6 +33,8 @@ function riskScore({ text, mode, subStyle, injections, targetLanguage }) {
   if (multiline) score += 0.12;
   if (HARD_MODES.has(m)) score += 0.28;
   if (HIGH_CONTEXT.has(m) || HIGH_CONTEXT.has(s)) score += 0.22;
+  const isTerminologyHeavy = TERMINOLOGY_MODES.has(m) || TERMINOLOGY_SUB_HINTS.some(h => s.includes(h));
+  if (isTerminologyHeavy) score += 0.3;
   if (CREATIVE.has(m)) score += 0.10;
   if (injections && String(injections).trim().length > 0) score += 0.10; // brand/glossary present
   if (/zh|ja|ar|ru/.test(String(targetLanguage || '').toLowerCase())) score += 0.05; // tougher pairs
@@ -63,13 +67,13 @@ function decideEngine({ text, mode, subStyle, targetLanguage, rephrase, injectio
     return { engine: 'gemini-fl', reason: reason.concat('pro_disabled').join('+'), risk: rs };
   }
 
-  // Long/complex text → still use Gemini Flash (GPT disabled)
+  // Long/complex text â†’ still use Gemini Flash (GPT disabled)
   if (rs >= 0.55) {
     reason.push('long_or_complex');
     return { engine: 'gemini-fl', reason: reason.join('+'), risk: rs };
   }
 
-  // Creative English tasks → Gemini Flash (GPT disabled)
+  // Creative English tasks â†’ Gemini Flash (GPT disabled)
   if (CREATIVE.has(m) && String(targetLanguage || '').toLowerCase().startsWith('en')) {
     reason.push('creative_en');
     return { engine: 'gemini-fl', reason: reason.join('+'), risk: rs };
@@ -89,3 +93,7 @@ function shouldCollaborate({ risk, mode }) {
 }
 
 module.exports = { decideEngine, shouldCollaborate, riskScore };
+
+
+
+

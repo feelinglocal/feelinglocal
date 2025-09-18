@@ -754,9 +754,7 @@ Maintain logical flow, coherent argumentation, and clear paragraphing.
 Ensure phrasing reads naturally and professionally in {TARGET_LANG} academic writing while preserving meaning and scholarly intent.
 Do not carry over source sentence structures that feel unnatural."\n\nText:\n{TEXT}`,
     business: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to the cultural and linguistic norms of formal business communication.
-
 Act as a professional bilingual translator with expertise in corporate and industry-specific writing. Produce output that is accurate, polished, and credible for professional stakeholders.
-
 Context Details:
 Style: Formal
 Substyle: Business
@@ -768,9 +766,7 @@ Employ terminology consistent with business and industry contexts.
 Avoid slang, colloquial expressions, or overly casual terms.
 Structure content logically with clear sections or points.
 Follow the official grammar and spelling rules of {TARGET_LANG}.
-
 Localization Goal: Adapt phrasing, references, and sentence structures so the content reads naturally, persuasively, and credibly in formal business contexts while preserving the original intent.
-
 Instructions:
 Accurately convey the original meaning and intent with clarity and professionalism, without adding or omitting information.
 Ensure that terminology is consistent with corporate and industry norms.
@@ -787,9 +783,7 @@ Ensure logical flow, coherent argumentation, and factual accuracy.
 Adapt phrasing and references so the output reads naturally and professionally in {TARGET_LANG} scientific writing while preserving meaning and technical accuracy.
 Do not carry over source structures that sound unnatural."\n\nText:\n{TEXT}`,
     financial: `"Translate and localize the following text into {TARGET_LANG}, preserving its meaning while adapting it to the cultural and linguistic norms of formal financial communication.
-
 Act as a professional bilingual translator with expertise in {TARGET_LANG} financial and economic writing. Produce output that is precise, professional, and compliant with financial terminology standards.
-
 Context Details:
 * Style: Formal
 * Substyle: Financial
@@ -894,16 +888,6 @@ Follow street speech patterns, not formal grammar; avoid polished or academic ph
 Keep references culturally relevant to {TARGET_LANG} urban contexts.
 Match the source tone and attitude; use slang naturally, not forced.
 Avoid literal translation if it weakens cultural authenticity."\n\nText:\n{TEXT}`,
-    comedy: `"Translate and localize the following text into {TARGET_LANG} as comedy. Act as a {TARGET_LANG} comedy writer. Deliver funny, culturally natural lines for stand-up, captions, or scripts.
-Rules
-Prioritize laugh effect over literal wording; preserve intent.
-Use native humor styles (wordplay, exaggeration, situational).
-Punchlines/wordplay: if a pun does not transfer, replace with a short local gag that keeps the beat.
-Idioms/proverbs: use the accepted {TARGET_LANG} saying; if none, a close analogue or concise paraphrase. No calques.
-Keep lines short and punchy; maintain setup → beat → punch timing.
-Respect register: {clean | PG-13 | edgy}; avoid offense unless the brief requires it.
-Keep names/brands/placeholders/hashtags/emojis as in source unless adaptation improves the joke.
-Follow official {TARGET_LANG} grammar/spelling."\n\nText:\n{TEXT}`,
   },
 
   marketing: {
@@ -1168,14 +1152,12 @@ Hard rules:
 
   creative: {
     general: `Translate and localize the following text into {TARGET_LANG}, preserving emotional impact and creative style. Act as a {TARGET_LANG} creative-literary translator. Deliver engaging, imaginative, culturally resonant copy.
-
 Guidelines
 Rich yet natural diction; varied syntax.
 Follow official grammar/spelling; allow tasteful artistic license.
 Adapt onomatopoeia to natural, expressive {TARGET_LANG} forms.
 Maintain tone, imagery, and narrative flow; honor cultural nuance.
 Avoid stiff or literal calques.
-
 Idioms/Proverbs
 Use the accepted {TARGET_LANG} proverb if it exists.
 If none, choose a close analogue or a concise paraphrase with the same intent, tone, and rhythm.
@@ -1271,6 +1253,7 @@ Preserve legal effect; no additions or omissions.
 Use standard {TARGET_LANG} legal terminology; avoid colloquial or vague wording.
 Keep defined terms, capitalization, references, numbering, clauses, and structure intact.
 Maintain official grammar/spelling.
+Maintain a clear, direct, neutral tone.
 Prefer natural legal phrasing over literal mappings that could create ambiguity.
 If the content concerns tax or transfer pricing, apply OECD-aligned terminology and map local paraphrases to recognized TP terms in {TARGET_LANG} (e.g., "prinsip kewajaran dan kelaziman usaha" → "arm's length principle"). Keep method names and acronyms consistent (CUP, RPM, CPM, TNMM, PSM, APA, MAP)."\n\nText:\n{TEXT}`,
     contracts: `"Translate and localize the following text into {TARGET_LANG}, for a contract/agreement. Act as a {TARGET_LANG} contract-law translator. Deliver formal, precise, enforceable copy aligned with local drafting conventions.
@@ -1599,7 +1582,6 @@ const TEMP_BY_SUB = {
 
   // style/voice
   'brand-storytelling': +0.05,
-  comedy: +0.05,
   'street-talk': +0.05,
   'screenwriting': +0.05,
   'script-adaptation': +0.05,
@@ -1978,6 +1960,111 @@ function sanitizeWithSource(txt = '', srcText = '', targetLanguage = '') {
   
   return out;
 }
+
+const TERMINOLOGY_QA_MODES = new Set(['legal', 'medical']);
+const TERMINOLOGY_QA_HINTS = ['contracts', 'terms', 'privacy', 'compliance', 'constitutional', 'clinical', 'patient', 'research'];
+const TERMINOLOGY_QA_TOKEN_LIMIT = 8;
+
+function shouldRunTerminologyQA(mode = '', subStyle = '') {
+  const m = String(mode || '').toLowerCase();
+  const s = String(subStyle || '').toLowerCase();
+  if (TERMINOLOGY_QA_MODES.has(m)) return true;
+  return TERMINOLOGY_QA_HINTS.some((h) => s.includes(h));
+}
+
+function collectTerminologyTokens(text = '') {
+  const tokens = new Set();
+  const raw = String(text || '');
+  const upper = raw.match(/\b[A-Z]{2,}[A-Z0-9-]*\b/g);
+  if (upper) upper.forEach((t) => tokens.add(t));
+  const numeric = raw.match(/\b\d+(?:[A-Z0-9-]+)?\b/g);
+  if (numeric) numeric.forEach((t) => tokens.add(t));
+  return tokens;
+}
+
+function findMissingTerminologyTokens(srcText = '', outText = '') {
+  const srcTokens = collectTerminologyTokens(srcText);
+  if (!srcTokens.size) return [];
+  const outTokens = collectTerminologyTokens(outText);
+  const normalizedOut = new Set(Array.from(outTokens).map((t) => String(t || '').toLowerCase()));
+  return Array.from(srcTokens).filter((t) => !normalizedOut.has(String(t || '').toLowerCase()));
+}
+
+async function enforceTerminologyGuard({
+  run,
+  source,
+  current,
+  mode,
+  subStyle,
+  targetLanguage,
+  temperature,
+  allowPro,
+  preferEngine,
+  sanitizer,
+  rephrase = false
+}) {
+  if (rephrase || !shouldRunTerminologyQA(mode, subStyle) || !source || !current) {
+    return { text: current, checked: false, repaired: false, missing: [] };
+  }
+
+  const missing = findMissingTerminologyTokens(source, current);
+  if (!missing.length) {
+    return { text: current, checked: true, repaired: false, missing: [] };
+  }
+
+  const limited = missing.slice(0, TERMINOLOGY_QA_TOKEN_LIMIT);
+  const termsList = limited.map((t) => `- ${t}`).join('\n');
+  const domainLabel = TERMINOLOGY_QA_MODES.has(String(mode || '').toLowerCase()) ? String(mode || '').toLowerCase() : 'terminology-sensitive';
+  const engineForQA = preferEngine === 'gemini-2p' ? 'gemini-2p' : (allowPro ? 'gemini-2p' : 'gemini-fl');
+  const fixPrompt = [
+    `You are an expert ${domainLabel} translator ensuring terminology fidelity.`,
+    'Preserve each of the following terms exactly as written:',
+    termsList,
+    '',
+    'SOURCE TEXT:',
+    source,
+    '',
+    'CURRENT TRANSLATION:',
+    current,
+    '',
+    'Return only the corrected translation between <result> and </result>.'
+  ].join('\n');
+  const fixTemp = Math.max(0.15, (Number(temperature) || 0.3) - 0.05);
+
+  let fixRun;
+  try {
+    fixRun = await run(engineForQA, fixPrompt, fixTemp);
+  } catch (err) {
+    if (engineForQA !== 'gemini-fl') {
+      try {
+        fixRun = await run('gemini-fl', fixPrompt, fixTemp);
+      } catch (err2) {
+        return { text: current, checked: true, repaired: false, missing: limited };
+      }
+    } else {
+      return { text: current, checked: true, repaired: false, missing: limited };
+    }
+  }
+
+  let candidate = (fixRun && fixRun.text) ? fixRun.text : current;
+  if (typeof sanitizer === 'function') {
+    candidate = sanitizer(candidate, source, targetLanguage);
+  }
+
+  const stillMissing = findMissingTerminologyTokens(source, candidate);
+  if (stillMissing.length >= missing.length) {
+    return { text: current, checked: true, repaired: false, missing: limited };
+  }
+
+  return {
+    text: candidate,
+    checked: true,
+    repaired: true,
+    missing: limited,
+    engineUsed: fixRun && fixRun.engine ? fixRun.engine : engineForQA
+  };
+}
+
 
 /** Censored/profanity handling helpers */
 const PROFANITY = {
@@ -3717,6 +3804,7 @@ app.post('/api/translate',
         const ctx = makeEngineCtx(req);
         const run = runWithEngine.bind(ctx);
         let first;
+        let engineForChunk = decision.engine;
         try {
           const tmo = String(decision.engine).startsWith('gemini') ? Number(process.env.GEMINI_TIMEOUT || 300000) : undefined;
           first = await run(decision.engine, prompt, temperature, { timeout: tmo });
@@ -3725,10 +3813,14 @@ app.post('/api/translate',
       const status = e?.status;
       const retryable = isAbort || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
       if (retryable && decision.engine !== 'gemini-fl') {
+        engineForChunk = 'gemini-fl';
         first = await run('gemini-fl', prompt, temperature, {});
       } else {
         throw e;
       }
+        }
+        if (first && first.engine) {
+          engineForChunk = first.engine;
         }
         
         // For auto-batch, treat as single response and split back to array
@@ -3766,6 +3858,27 @@ app.post('/api/translate',
                 try { res.set('X-Language-Lock', 'repaired'); } catch {}
               } catch {}
             }
+          }
+
+          const termQA = await enforceTerminologyGuard({
+            run,
+            source: chunk[i] || '',
+            current: arr[i],
+            mode,
+            subStyle,
+            targetLanguage,
+            temperature,
+            allowPro,
+            preferEngine: engineForChunk,
+            sanitizer: (val, src, lang) => sanitizeWithSource(val, src, lang),
+            rephrase
+          });
+          if (termQA.checked) {
+            try { res.set('X-Terminology-QA', termQA.repaired ? 'repaired' : 'passed'); } catch {}
+          }
+          if (termQA.repaired) {
+            arr[i] = termQA.text;
+            try { metrics.escalationsTotal.inc({ from: engineForChunk, to: termQA.engineUsed || engineForChunk, reason: 'terminology_guard' }); } catch {}
           }
         }
         results.push(...arr);
@@ -3892,6 +4005,27 @@ app.post('/api/translate',
           try { res.set('X-Language-Lock', 'repaired'); } catch {}
         } catch {}
       }
+    }
+    
+    const termQA = await enforceTerminologyGuard({
+      run,
+      source: text,
+      current: clean,
+      mode,
+      subStyle,
+      targetLanguage,
+      temperature,
+      allowPro,
+      preferEngine: engineUsed,
+      sanitizer: (val, src, lang) => sanitizeWithSource(val, src, lang),
+      rephrase
+    });
+    if (termQA.checked) {
+      try { res.set('X-Terminology-QA', termQA.repaired ? 'repaired' : 'passed'); } catch {}
+    }
+    if (termQA.repaired) {
+      clean = termQA.text;
+      try { metrics.escalationsTotal.inc({ from: engineUsed, to: termQA.engineUsed || engineUsed, reason: 'terminology_guard' }); } catch {}
     }
     
     // Defer usage accounting until response finishes successfully
@@ -4564,7 +4698,7 @@ app.post('/api/translate-batch',
             throw e;
           }
         }
-        
+
         console.log(`[Batch Worker] Raw response preview: ${String(first.text || '').slice(0, 100)}...`);
         let raw = first.text;
         // Ensure we record the actual engine used by runWithEngine
@@ -4653,6 +4787,26 @@ app.post('/api/translate-batch',
                 try { res.set('X-Language-Lock', 'repaired'); } catch {}
               } catch {}
             }
+          }
+          const termQA = await enforceTerminologyGuard({
+            run,
+            source: job.items[i] || '',
+            current: sanitized,
+            mode,
+            subStyle,
+            targetLanguage,
+            temperature,
+            allowPro,
+            preferEngine: actualEngine,
+            sanitizer: (val, src, lang) => sanitizeWithSource(val, src, lang),
+            rephrase
+          });
+          if (termQA.checked) {
+            try { res.set('X-Terminology-QA', termQA.repaired ? 'repaired' : 'passed'); } catch {}
+          }
+          if (termQA.repaired) {
+            sanitized = termQA.text;
+            try { metrics.escalationsTotal.inc({ from: actualEngine, to: termQA.engineUsed || actualEngine, reason: 'terminology_guard' }); } catch {}
           }
           out[job.start + i] = sanitized;
         }
