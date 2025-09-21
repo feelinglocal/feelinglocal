@@ -568,6 +568,7 @@
     .toggle-btn.active,.style-btn.active{border-color:var(--accent);background:var(--accent-weak);box-shadow:0 0 0 2px var(--accent-weak)}
     .primary{background:var(--accent);color:#fff;border-color:var(--accent);padding:10px 16px;border-radius:12px;box-shadow:0 6px 16px rgba(0,122,255,.25)}
     .card{position:relative;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;overflow:hidden}
+    .card.export-open{overflow:visible}
     .section{margin-top:18px}
     .label{display:block;font-size:13px;color:var(--muted);margin:0 0 8px;letter-spacing:.2px}
     .hr{height:1px;background:var(--border);margin:14px 0}
@@ -753,6 +754,99 @@
     .ctl-btn svg{width:16px;height:16px}
     .ctl-btn.copy-btn{min-width:110px}
     .split-footer .ctl-btn{white-space:nowrap}
+    .ctl-btn[disabled],
+    .ctl-btn.is-disabled{
+      cursor:not-allowed;
+      opacity:.55;
+      box-shadow:none;
+      pointer-events:none;
+    }
+
+    .export-menu{
+      position:relative;
+    }
+    .export-toggle{
+      padding:0 16px;
+      gap:6px;
+    }
+    .export-caret{
+      width:12px;
+      height:12px;
+      pointer-events:none;
+      transition:transform .18s var(--ease);
+      margin-left:auto;
+    }
+    .export-menu[data-open="true"] .export-caret{
+      transform:rotate(180deg);
+    }
+    .export-dropdown{
+      position:absolute;
+      right:0;
+      top:calc(100% + 8px);
+      min-width:210px;
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:12px;
+      box-shadow:var(--shadow);
+      padding:8px;
+      display:grid;
+      gap:6px;
+      opacity:0;
+      pointer-events:none;
+      transform:translateY(-6px);
+      transition:opacity .18s var(--ease), transform .18s var(--ease);
+      z-index:1030;
+    }
+    .export-menu[data-open="true"] .export-dropdown{
+      opacity:1;
+      pointer-events:auto;
+      transform:translateY(0);
+    }
+    .export-menu[data-placement="top"] .export-dropdown{
+      top:auto;
+      bottom:calc(100% + 8px);
+      transform:translateY(6px);
+    }
+    .export-menu[data-placement="top"][data-open="true"] .export-dropdown{
+      transform:translateY(0);
+    }
+    .export-menu[data-placement="top"] .export-dropdown{
+      top:auto;
+      bottom:calc(100% + 8px);
+      transform:translateY(6px);
+    }
+    .export-menu[data-placement="top"][data-open="true"] .export-dropdown{
+      transform:translateY(0);
+    }
+    .export-option{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      width:100%;
+      border:none;
+      background:transparent;
+      border-radius:8px;
+      padding:10px 12px;
+      font-size:14px;
+      color:var(--text);
+      text-align:left;
+      cursor:pointer;
+      transition:background .18s var(--ease), color .18s var(--ease);
+      white-space:nowrap;
+    }
+    .export-option:hover,
+    .export-option:focus{
+      background:var(--accent-weak);
+      color:var(--accent);
+      outline:none;
+    }
+    .export-option-suffix{
+      font-size:12px;
+      font-weight:600;
+      letter-spacing:.04em;
+      color:var(--muted, #6b7280);
+    }
+
     .ctl-btn:hover{ background:inherit; border-color:var(--accent); color:inherit; transform:none; box-shadow:none }
     .copy-btn.copied{background:var(--accent-weak);border-color:var(--accent);color:var(--accent);transform:translateY(-1px);backdrop-filter:blur(3px) saturate(1.12);-webkit-backdrop-filter:blur(3px) saturate(1.12)}
 
@@ -1112,6 +1206,28 @@
               </button>
               <button id="downloadInlineBtn" class="ctl-btn" type="button" title="Download localized" data-i18n="download_localized">Download</button>
               <button id="downloadAllInlineBtn" class="ctl-btn" type="button" title="Download all (.zip)" data-i18n="download_all_zip">Download all (.zip)</button>
+              <div id="exportInlineMenu" class="export-menu" data-menu="export" data-placement="top">
+                <button id="exportInlineToggle" class="ctl-btn export-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="exportInlineDropdown">
+                  <span data-i18n="export">Export</span>
+                  <svg class="export-caret" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M3 4.5 6 7.5 9 4.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+                <div id="exportInlineDropdown" class="export-dropdown" role="menu" aria-hidden="true">
+                  <button class="export-option" type="button" data-format="pdf">
+                    <span data-i18n="export_pdf">Export as PDF</span>
+                    <span class="export-option-suffix">PDF</span>
+                  </button>
+                  <button class="export-option" type="button" data-format="docx">
+                    <span data-i18n="export_docx">Export as DOCX</span>
+                    <span class="export-option-suffix">DOCX</span>
+                  </button>
+                  <button class="export-option" type="button" data-format="txt">
+                    <span data-i18n="export_txt">Export as TXT</span>
+                    <span class="export-option-suffix">TXT</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1143,6 +1259,28 @@
                 </button>
                 <button id="downloadSplitBtn" class="ctl-btn" type="button" title="Download localized" data-i18n="download_localized">Download</button>
                 <button id="downloadAllSplitBtn" class="ctl-btn" type="button" title="Download all (.zip)" data-i18n="download_all_zip">Download all (.zip)</button>
+                <div id="exportSplitMenu" class="export-menu" data-menu="export" data-placement="top">
+                  <button id="exportSplitToggle" class="ctl-btn export-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="exportSplitDropdown">
+                    <span data-i18n="export">Export</span>
+                    <svg class="export-caret" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                      <path d="M3 4.5 6 7.5 9 4.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                  </button>
+                  <div id="exportSplitDropdown" class="export-dropdown" role="menu" aria-hidden="true">
+                    <button class="export-option" type="button" data-format="pdf">
+                      <span data-i18n="export_pdf">Export as PDF</span>
+                      <span class="export-option-suffix">PDF</span>
+                    </button>
+                    <button class="export-option" type="button" data-format="docx">
+                      <span data-i18n="export_docx">Export as DOCX</span>
+                      <span class="export-option-suffix">DOCX</span>
+                    </button>
+                    <button class="export-option" type="button" data-format="txt">
+                      <span data-i18n="export_txt">Export as TXT</span>
+                      <span class="export-option-suffix">TXT</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2246,11 +2384,11 @@ window.STYLE_MICROCOPY = {
 
     /* ---------- UI Strings ---------- */
     const LOCALES={
-      en:{title:"AI Localization Prototype",input_label:"Input Text",input_ph:"Paste or write your text here…",target_lang:"Target Language",loc_style:"Localization Style",substyle:"Sub-style",substyle_for:"Sub-style for",no_substyle:"No sub-style",submit:"Submit",result_label:"Result",split_view:"Split View",back:"Back",copy:"Copy",copied:"Copied!",pane_input:"Input",pane_result:"Result",clear_highlights:"Clear Highlights",rephrase:"Rephrase",choose_lang:"Select your language",toast_enter_text:"Please enter some text first.",toast_choose_target:"Choose a target language or Rephrase.",toast_choose_style:"Please choose a localization style.",toast_error_generic:"Something went wrong. Please try again.",or:"Or",upload_hint:"Drag & drop a .txt, .docx, .pdf, or .srt here",upload_sub:"…or click to browse",download_localized:"Download localized",download_all_zip:"Download all (.zip)",new_tab:"New Tab",open_files:"Open files",translate_all:"Translate all"},
-      id:{title:"Prototipe Lokalisasi AI",input_label:"Teks Masukan",input_ph:"Tempel atau tulis teks di sini…",target_lang:"Bahasa Tujuan",loc_style:"Gaya Lokalisasi",substyle:"Sub-gaya",substyle_for:"Sub-gaya untuk",no_substyle:"Tanpa sub-gaya",submit:"Kirim",result_label:"Hasil",split_view:"Tampilan Terpisah",back:"Kembali",copy:"Salin",copied:"Tersalin!",pane_input:"Masukan",pane_result:"Hasil",clear_highlights:"Hapus Sorotan",rephrase:"Parafrase",choose_lang:"Pilih bahasa antarmuka",toast_enter_text:"Mohon isi teks terlebih dahulu.",toast_choose_target:"Pilih bahasa tujuan atau Parafrase.",toast_choose_style:"Pilih gaya lokalisasi.",toast_error_generic:"Terjadi kesalahan. Coba lagi.",or:"Atau",upload_hint:"Seret & lepas berkas .txt, .docx, .pdf, atau .srt",upload_sub:"…atau klik untuk memilih",download_localized:"Unduh hasil",download_all_zip:"Unduh semua (.zip)",new_tab:"Tab Baru",open_files:"Buka berkas",translate_all:"Terjemahkan semua"},
-      zh:{title:"AI 本地化原型",input_label:"输入文本",input_ph:"在此粘贴或输入文本…",target_lang:"目标语言",loc_style:"本地化风格",substyle:"子风格",substyle_for:"子风格：",no_substyle:"无子风格",submit:"提交",result_label:"结果",split_view:"分屏视图",back:"返回",copy:"复制",copied:"已复制！",pane_input:"输入",pane_result:"结果",clear_highlights:"清除高亮",rephrase:"改写",choose_lang:"选择界面语言",toast_enter_text:"请先输入文本。",toast_choose_target:"请选择目标语言或改写。",toast_choose_style:"请选择本地化风格。",toast_error_generic:"出错了，请重试。",or:"或",upload_hint:"拖拽 .txt、.docx、.pdf 或 .srt 到此处",upload_sub:"…或点击选择",download_localized:"下载本地化文件",download_all_zip:"全部下载 (.zip)",new_tab:"新建标签",open_files:"打开文件",translate_all:"全部翻译"},
-      fr:{title:"Prototype de Localisation IA",input_label:"Texte d'entrée",input_ph:"Collez ou saisissez votre texte ici…",target_lang:"Langue cible",loc_style:"Style de localisation",substyle:"Sous-style",substyle_for:"Sous-style pour",no_substyle:"Aucun sous-style",submit:"Envoyer",result_label:"Résultat",split_view:"Vue scindée",back:"Retour",copy:"Copier",copied:"Copié !",pane_input:"Entrée",pane_result:"Résultat",clear_highlights:"Effacer les surlignages",rephrase:"Reformuler",choose_lang:"Choisissez votre langue",toast_enter_text:"Veuillez d'abord saisir du texte.",toast_choose_target:"Choisissez une langue cible ou Reformuler.",toast_choose_style:"Choisissez un style de localisation.",toast_error_generic:"Un problème est survenu. Réessayez.",or:"Ou",upload_hint:"Glissez-déposez un .txt, .docx, .pdf ou .srt",upload_sub:"…ou cliquez pour parcourir",download_localized:"Télécharger la version localisée",download_all_zip:"Tout télécharger (.zip)",new_tab:"Nouvel onglet",open_files:"Ouvrir des fichiers",translate_all:"Tout traduire"},
-      es:{title:"Prototipo de Localización IA",input_label:"Texto de entrada",input_ph:"Pega o escribe tu texto aquí…",target_lang:"Idioma de destino",loc_style:"Estilo de localización",substyle:"Subestilo",substyle_for:"Subestilo para",no_substyle:"Sin subestilo",submit:"Enviar",result_label:"Resultado",split_view:"Vista dividida",back:"Volver",copy:"Copiar",copied:"¡Copiado!",pane_input:"Entrada",pane_result:"Resultado",clear_highlights:"Borrar resaltados",rephrase:"Reformular",choose_lang:"Selecciona tu idioma",toast_enter_text:"Primero escribe algún texto.",toast_choose_target:"Elige un idioma objetivo o Reformular.",toast_choose_style:"Elige un estilo de localización.",toast_error_generic:"Algo salió mal. Inténtalo de nuevo.",or:"O",upload_hint:"Arrastra y suelta un .txt, .docx, .pdf o .srt",upload_sub:"…o haz clic para elegir",download_localized:"Descargar localizado",download_all_zip:"Descargar todo (.zip)",new_tab:"Nueva pestaña",open_files:"Abrir archivos",translate_all:"Traducir todo"}
+      en:{title:"AI Localization Prototype",input_label:"Input Text",input_ph:"Paste or write your text here…",target_lang:"Target Language",loc_style:"Localization Style",substyle:"Sub-style",substyle_for:"Sub-style for",no_substyle:"No sub-style",submit:"Submit",result_label:"Result",split_view:"Split View",back:"Back",copy:"Copy",copied:"Copied!",pane_input:"Input",pane_result:"Result",clear_highlights:"Clear Highlights",rephrase:"Rephrase",choose_lang:"Select your language",toast_enter_text:"Please enter some text first.",toast_choose_target:"Choose a target language or Rephrase.",toast_choose_style:"Please choose a localization style.",toast_error_generic:"Something went wrong. Please try again.",or:"Or",upload_hint:"Drag & drop a .txt, .docx, .pdf, or .srt here",upload_sub:"…or click to browse",download_localized:"Download localized",download_all_zip:"Download all (.zip)",new_tab:"New Tab",open_files:"Open files",translate_all:"Translate all",export:"Export",export_pdf:"Export as PDF",export_docx:"Export as DOCX",export_txt:"Export as TXT"},
+      id:{title:"Prototipe Lokalisasi AI",input_label:"Teks Masukan",input_ph:"Tempel atau tulis teks di sini…",target_lang:"Bahasa Tujuan",loc_style:"Gaya Lokalisasi",substyle:"Sub-gaya",substyle_for:"Sub-gaya untuk",no_substyle:"Tanpa sub-gaya",submit:"Kirim",result_label:"Hasil",split_view:"Tampilan Terpisah",back:"Kembali",copy:"Salin",copied:"Tersalin!",pane_input:"Masukan",pane_result:"Hasil",clear_highlights:"Hapus Sorotan",rephrase:"Parafrase",choose_lang:"Pilih bahasa antarmuka",toast_enter_text:"Mohon isi teks terlebih dahulu.",toast_choose_target:"Pilih bahasa tujuan atau Parafrase.",toast_choose_style:"Pilih gaya lokalisasi.",toast_error_generic:"Terjadi kesalahan. Coba lagi.",or:"Atau",upload_hint:"Seret & lepas berkas .txt, .docx, .pdf, atau .srt",upload_sub:"…atau klik untuk memilih",download_localized:"Unduh hasil",download_all_zip:"Unduh semua (.zip)",new_tab:"Tab Baru",open_files:"Buka berkas",translate_all:"Terjemahkan semua",export:"Ekspor",export_pdf:"Ekspor ke PDF",export_docx:"Ekspor ke DOCX",export_txt:"Ekspor ke TXT"},
+      zh:{title:"AI 本地化原型",input_label:"输入文本",input_ph:"在此粘贴或输入文本…",target_lang:"目标语言",loc_style:"本地化风格",substyle:"子风格",substyle_for:"子风格：",no_substyle:"无子风格",submit:"提交",result_label:"结果",split_view:"分屏视图",back:"返回",copy:"复制",copied:"已复制！",pane_input:"输入",pane_result:"结果",clear_highlights:"清除高亮",rephrase:"改写",choose_lang:"选择界面语言",toast_enter_text:"请先输入文本。",toast_choose_target:"请选择目标语言或改写。",toast_choose_style:"请选择本地化风格。",toast_error_generic:"出错了，请重试。",or:"或",upload_hint:"拖拽 .txt、.docx、.pdf 或 .srt 到此处",upload_sub:"…或点击选择",download_localized:"下载本地化文件",download_all_zip:"全部下载 (.zip)",new_tab:"新建标签",open_files:"打开文件",translate_all:"全部翻译",export:"导出",export_pdf:"导出为 PDF",export_docx:"导出为 DOCX",export_txt:"导出为 TXT"},
+      fr:{title:"Prototype de Localisation IA",input_label:"Texte d'entrée",input_ph:"Collez ou saisissez votre texte ici…",target_lang:"Langue cible",loc_style:"Style de localisation",substyle:"Sous-style",substyle_for:"Sous-style pour",no_substyle:"Aucun sous-style",submit:"Envoyer",result_label:"Résultat",split_view:"Vue scindée",back:"Retour",copy:"Copier",copied:"Copié !",pane_input:"Entrée",pane_result:"Résultat",clear_highlights:"Effacer les surlignages",rephrase:"Reformuler",choose_lang:"Choisissez votre langue",toast_enter_text:"Veuillez d'abord saisir du texte.",toast_choose_target:"Choisissez une langue cible ou Reformuler.",toast_choose_style:"Choisissez un style de localisation.",toast_error_generic:"Un problème est survenu. Réessayez.",or:"Ou",upload_hint:"Glissez-déposez un .txt, .docx, .pdf ou .srt",upload_sub:"…ou cliquez pour parcourir",download_localized:"Télécharger la version localisée",download_all_zip:"Tout télécharger (.zip)",new_tab:"Nouvel onglet",open_files:"Ouvrir des fichiers",translate_all:"Tout traduire",export:"Exporter",export_pdf:"Exporter en PDF",export_docx:"Exporter en DOCX",export_txt:"Exporter en TXT"},
+      es:{title:"Prototipo de Localización IA",input_label:"Texto de entrada",input_ph:"Pega o escribe tu texto aquí…",target_lang:"Idioma de destino",loc_style:"Estilo de localización",substyle:"Subestilo",substyle_for:"Subestilo para",no_substyle:"Sin subestilo",submit:"Enviar",result_label:"Resultado",split_view:"Vista dividida",back:"Volver",copy:"Copiar",copied:"¡Copiado!",pane_input:"Entrada",pane_result:"Resultado",clear_highlights:"Borrar resaltados",rephrase:"Reformular",choose_lang:"Selecciona tu idioma",toast_enter_text:"Primero escribe algún texto.",toast_choose_target:"Elige un idioma objetivo o Reformular.",toast_choose_style:"Elige un estilo de localización.",toast_error_generic:"Algo salió mal. Inténtalo de nuevo.",or:"O",upload_hint:"Arrastra y suelta un .txt, .docx, .pdf o .srt",upload_sub:"…o haz clic para elegir",download_localized:"Descargar localizado",download_all_zip:"Descargar todo (.zip)",new_tab:"Nueva pestaña",open_files:"Abrir archivos",translate_all:"Traducir todo",export:"Exportar",export_pdf:"Exportar a PDF",export_docx:"Exportar a DOCX",export_txt:"Exportar a TXT"}
     };
     const DEFAULT_LANG='en';
     const UI_LANGS=[{code:'en',label:'English'},{code:'id',label:'Bahasa Indonesia'},{code:'zh',label:'中文'},{code:'fr',label:'Français'},{code:'es',label:'Español'}];
@@ -2305,6 +2443,7 @@ window.STYLE_MICROCOPY = {
 
     // === Tabs/documents state ===
     const docs=[]; // {id,name,ext,size,mime,text,cues,srtTranslations,lastAlignedTgt,output,isSrt}
+    const exportMenus=[];
     let activeId=null;
     let seq=1; // for Untitled counters
 
@@ -2473,11 +2612,30 @@ window.STYLE_MICROCOPY = {
       return !!((d.output||'').trim());
     }
     function updateActionButtonsEnabled(){
-      const can=docs.some(d => d.isSrt ? (d.srtTranslations||[]).some(x=>x && x.trim()) : (d.output||'').trim().length);
-      ['#downloadInlineBtn','#downloadAllInlineBtn','#downloadSplitBtn','#downloadAllSplitBtn','#toggleSplit'].forEach(sel=>{
+      const hasOutput = docs.some(d=>{
+        if(!d) return false;
+        if(d.isSrt) return (d.srtTranslations||[]).some(x=>x && x.trim());
+        return (d.output||'').trim().length>0;
+      });
+      ['#downloadInlineBtn','#downloadAllInlineBtn','#downloadSplitBtn','#downloadAllSplitBtn'].forEach(sel=>{
         const el=$(sel); if(!el) return;
-        if(sel==='#toggleSplit'){ el.disabled=!hasAnyResult(); return; }
-        el.toggleAttribute('disabled', !can);
+        el.toggleAttribute('disabled', !hasOutput);
+      });
+      const splitToggle=$('#toggleSplit');
+      if(splitToggle) splitToggle.disabled=!hasAnyResult();
+      const activeDoc=currentDoc();
+      const hasInput = activeDoc ? buildSourceExportText(activeDoc).trim().length>0 : false;
+      ['#exportInlineToggle','#exportSplitToggle'].forEach(sel=>{
+        const toggle=$(sel); if(!toggle) return;
+        if(hasInput){
+          toggle.removeAttribute('disabled');
+          toggle.classList.remove('is-disabled');
+        }else{
+          toggle.setAttribute('disabled','true');
+          toggle.classList.add('is-disabled');
+          const root = toggle.closest('.export-menu');
+          if(root) closeExportMenu(root);
+        }
       });
     }
     function updateSplitButton(){
@@ -2947,7 +3105,16 @@ window.STYLE_MICROCOPY = {
     }
     function setUiLang(lang){localStorage.setItem('uiLang',lang); document.documentElement.dir=['ar','he','fa','ur'].includes(lang)?'rtl':'ltr'; applyI18n()}
 
-    document.addEventListener('DOMContentLoaded',()=>{
+    document.addEventListener('click', event=>{
+      if(!exportMenus.length) return;
+      exportMenus.forEach(menu=>{
+        if(menu.root?.dataset?.open==='true' && !menu.root.contains(event.target)){
+          menu.close();
+        }
+      });
+    });
+
+  document.addEventListener('DOMContentLoaded',()=>{
       document.body.classList.remove('no-js');
       const saved=localStorage.getItem('uiLang')||DEFAULT_LANG; setUiLang(saved);
       buildLangButtons(); buildStyleButtons();
@@ -2971,6 +3138,9 @@ window.STYLE_MICROCOPY = {
       $('#downloadAllInlineBtn')?.addEventListener('click',downloadAllZip);
       $('#downloadSplitBtn')?.addEventListener('click',()=>downloadLocalized(currentDoc()));
       $('#downloadAllSplitBtn')?.addEventListener('click',downloadAllZip);
+
+      wireExportMenu('exportInlineMenu');
+      wireExportMenu('exportSplitMenu');
       
       // (removed Edit Mode toggle)
 
@@ -2979,7 +3149,8 @@ window.STYLE_MICROCOPY = {
         const d=currentDoc(); if(!d) return;
         d.lastAlignedTgt=[]; d.text=$('#inputText').value;
         autosizeTextarea($('#inputText'));
-        if(splitView && !d.isSrt) renderSegmentBoxes(d); adjustWrapHeight(); applyContentDirection()
+        if(splitView && !d.isSrt) renderSegmentBoxes(d); adjustWrapHeight(); applyContentDirection();
+        updateActionButtonsEnabled();
       });
       $('#outputText')?.addEventListener('input',()=>{
         const d=currentDoc(); if(!d) return;
@@ -3915,6 +4086,7 @@ window.STYLE_MICROCOPY = {
       }
       // Split view state
       if(splitView){ if(doc.isSrt) renderSrtBoxes(doc); else { renderSegmentBoxes(doc); wireSplitEditHandlers(); } }
+      closeAllExportMenus();
       updateSplitButton();
       adjustWrapHeight();
       renderTabs();
@@ -4163,11 +4335,173 @@ window.STYLE_MICROCOPY = {
       }catch(e){ console.error(e); showToast(t('toast_error_generic')) }
     }
 
+    function buildSourceExportText(doc){
+      if(!doc) return '';
+      if(doc.isSrt){
+        const cues = Array.isArray(doc.cues) ? doc.cues : [];
+        if(cues.length){
+          return cues.map((cue, idx)=>{
+            const seq = String(idx+1);
+            const start = (cue.start || '').trim();
+            const end = (cue.end || '').trim();
+            const text = (cue.text || '').toString();
+            const timing = (start || end) ? `${start || ''} --> ${end || ''}`.trim() : '';
+            const lines = [seq];
+            if(timing) lines.push(timing);
+            lines.push(text);
+            return lines.join('\n').replace(/[ 	]+$/,'');
+          }).join('\n\n');
+        }
+        return String(doc.text || '');
+      }
+      return String(doc.text || '');
+    }
+
+    function closeExportMenu(root, focusToggle){
+      if(!root) return;
+      const entry = exportMenus.find(menu=>menu.root===root);
+      if(entry){
+        entry.close(!!focusToggle);
+        return;
+      }
+      if(root.dataset && root.dataset.open) delete root.dataset.open;
+      const toggle = root.querySelector('.export-toggle');
+      const dropdown = root.querySelector('.export-dropdown');
+      if(toggle) toggle.setAttribute('aria-expanded','false');
+      if(dropdown){
+        dropdown.setAttribute('aria-hidden','true');
+      }
+      const card = root.closest('.card');
+      if(card){
+        card.classList.remove('export-open');
+      }
+      if(focusToggle && toggle){
+        requestAnimationFrame(()=>toggle.focus());
+      }
+    }
+
+    function closeAllExportMenus(except){
+      exportMenus.forEach(menu=>{
+        if(except && menu.root===except) return;
+        menu.close();
+      });
+    }
+
+    function wireExportMenu(id){
+      const root=document.getElementById(id);
+      if(!root) return;
+      const toggle=root.querySelector('.export-toggle');
+      const dropdown=root.querySelector('.export-dropdown');
+      if(!toggle || !dropdown) return;
+      const options=Array.from(dropdown.querySelectorAll('.export-option'));
+      toggle.setAttribute('aria-expanded','false');
+      dropdown.setAttribute('aria-hidden','true');
+      const menu={
+        root,
+        toggle,
+        dropdown,
+        options,
+        open(){
+          if(toggle.disabled || toggle.classList.contains('is-disabled')) return;
+          closeAllExportMenus(root);
+          root.dataset.open='true';
+          toggle.setAttribute('aria-expanded','true');
+          dropdown.setAttribute('aria-hidden','false');
+          const card = root.closest('.card');
+          if(card){ card.classList.add('export-open'); }
+        },
+        close(focus){
+          if(root.dataset.open) delete root.dataset.open;
+          toggle.setAttribute('aria-expanded','false');
+          dropdown.setAttribute('aria-hidden','true');
+          const card = root.closest('.card');
+          if(card){ card.classList.remove('export-open'); }
+          if(focus){ requestAnimationFrame(()=>toggle.focus()); }
+        },
+        focusFirst(){
+          const first=options.find(btn=>!btn.disabled);
+          if(first) first.focus();
+        }
+      };
+      toggle.addEventListener('click',e=>{
+        e.preventDefault();
+        if(toggle.disabled || toggle.classList.contains('is-disabled')) return;
+        const isOpen=root.dataset.open==='true';
+        if(isOpen){ menu.close(); } else { menu.open(); }
+      });
+      toggle.addEventListener('keydown',e=>{
+        if(toggle.disabled || toggle.classList.contains('is-disabled')) return;
+        if(e.key==='Enter' || e.key===' ' || e.key==='ArrowDown'){
+          e.preventDefault();
+          if(root.dataset.open!=='true'){ menu.open(); }
+          menu.focusFirst();
+        }else if(e.key==='Escape'){
+          e.preventDefault();
+          menu.close();
+        }
+      });
+      options.forEach(btn=>{
+        btn.addEventListener('click',async e=>{
+          e.preventDefault();
+          if(toggle.disabled || toggle.classList.contains('is-disabled')) return;
+          menu.close();
+          const fmt=(btn.dataset.format||'').toLowerCase();
+          await exportSourceAs(fmt);
+        });
+        btn.addEventListener('keydown',e=>{
+          if(e.key==='Escape'){
+            e.preventDefault();
+            menu.close(true);
+          }
+        });
+      });
+      exportMenus.push(menu);
+    }
+
+    async function exportSourceAs(format, doc){
+      const allowed=['pdf','docx','txt'];
+      const fmt=(format||'').toLowerCase();
+      if(!allowed.includes(fmt)) return;
+      const active=doc||currentDoc();
+      if(!active) return;
+      const text=buildSourceExportText(active).trim();
+      if(!text){
+        showToast(t('toast_enter_text'));
+        return;
+      }
+      const rawName=(active.name||'input').toString().trim()||'input';
+      const base=rawName.replace(/\.[^.]+$/, '')||'input';
+      const safeBase=base.replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,'-').trim()||'input';
+      const filenameBase=`${safeBase}.source`;
+      const headers={'Content-Type':'application/json'};
+      const token=localStorage.getItem('authToken');
+      const guestId=localStorage.getItem('guestId');
+      if(token) headers['Authorization']=`Bearer ${token}`;
+      else if(guestId) headers['X-Guest-ID']=guestId;
+      try{
+        const res=await fetch('/api/download',{method:'POST',headers,body:JSON.stringify({ text, filename:filenameBase, format:fmt })});
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const blob=await res.blob();
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=`${filenameBase}.${fmt}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }catch(e){
+        console.error('Export failed', e);
+        showToast('Unable to export right now.', { tone:'error' });
+      }
+    }
+
     /* ---------- Split view ---------- */
     function toggleSplitView(){
       const has = hasAnyResult();
       const d=currentDoc();
       if(!splitView && !has) return;
+      closeAllExportMenus();
       if(!splitView){
         if(d?.isSrt) renderSrtBoxes(d); else renderSegmentBoxes(d);
         splitView=true; updateSplitButton();
